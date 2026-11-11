@@ -1,0 +1,27 @@
+[package]
+name = "trader-testkit"
+description = "Deterministic mock Solana JSON-RPC chain (with fault injection) and mock DEX adapter. Test/mock-mode only: never reaches a real network."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+trader-domain = { workspace = true }
+trader-market-data = { workspace = true }
+trader-execution = { workspace = true }
+solana-pubkey = { workspace = true }
+solana-instruction = { workspace = true }
+solana-message = { workspace = true }
+solana-transaction = { workspace = true }
+solana-hash = { workspace = true }
+solana-signature = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+base64 = { workspace = true }
+bincode = { workspace = true }
+async-trait = { workspace = true }
+parking_lot = { workspace = true }
+sha2 = { workspace = true }
+tracing = { workspace = true }

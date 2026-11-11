@@ -1,0 +1,38 @@
+[package]
+name = "trader-tests"
+description = "Workspace-level integration and fault-injection tests (mock chain; no real network)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+path = "common/mod.rs"
+
+[[test]]
+name = "integration"
+path = "integration/main.rs"
+
+[[test]]
+name = "fault_injection"
+path = "fault-injection/main.rs"
+
+[dependencies]
+trader-domain = { workspace = true }
+trader-market-data = { workspace = true }
+trader-wallets = { workspace = true }
+trader-execution = { workspace = true }
+trader-router = { workspace = true }
+trader-sender-rpc = { workspace = true }
+trader-orders = { workspace = true }
+trader-testkit = { workspace = true }
+solana-pubkey = { workspace = true }
+solana-signer = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+parking_lot = { workspace = true }
+futures = { workspace = true }
+serde_json = { workspace = true }
+base64 = { workspace = true }

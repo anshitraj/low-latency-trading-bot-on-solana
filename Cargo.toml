@@ -10,6 +10,9 @@ members = [
     "crates/sender-jito",
     "crates/sender-tpu",
     "crates/protocol-pump",
+    "crates/orders",
+    "crates/testkit",
+    "tests",
 ]
 
 [workspace.package]
@@ -79,6 +82,7 @@ trader-protocol-jupiter = { path = "crates/protocol-jupiter" }
 trader-orders = { path = "crates/orders" }
 trader-observability = { path = "crates/observability" }
 trader-api = { path = "crates/api" }
+trader-testkit = { path = "crates/testkit" }
 
 [profile.release]
 lto = "thin"

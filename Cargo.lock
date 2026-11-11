@@ -4071,6 +4071,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "trader-orders"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "base64 0.22.1",
+ "chrono",
+ "futures",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "solana-hash",
+ "solana-instruction",
+ "solana-pubkey",
+ "solana-signature",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "trader-domain",
+ "trader-execution",
+ "trader-market-data",
+ "trader-router",
+ "trader-wallets",
+ "uuid",
+]
+
+[[package]]
 name = "trader-protocol-pump"
 version = "0.1.0"
 dependencies = [
@@ -4147,6 +4173,54 @@ dependencies = [
  "tokio",
  "trader-domain",
  "trader-router",
+]
+
+[[package]]
+name = "trader-testkit"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "base64 0.22.1",
+ "bincode",
+ "parking_lot",
+ "serde_json",
+ "sha2 0.10.9",
+ "solana-hash",
+ "solana-instruction",
+ "solana-message",
+ "solana-pubkey",
+ "solana-signature",
+ "solana-transaction",
+ "tokio",
+ "tracing",
+ "trader-domain",
+ "trader-execution",
+ "trader-market-data",
+]
+
+[[package]]
+name = "trader-tests"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "base64 0.22.1",
+ "chrono",
+ "futures",
+ "parking_lot",
+ "serde_json",
+ "solana-pubkey",
+ "solana-signer",
+ "tokio",
+ "trader-domain",
+ "trader-execution",
+ "trader-market-data",
+ "trader-orders",
+ "trader-router",
+ "trader-sender-rpc",
+ "trader-testkit",
+ "trader-wallets",
+ "uuid",
 ]
 
 [[package]]
