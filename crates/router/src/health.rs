@@ -109,7 +109,12 @@ impl HealthTracker {
 
     pub fn snapshot(&self) -> SenderHealth {
         let g = self.inner.lock();
-        let mut lat: Vec<u64> = g.window.iter().filter(|(ok, _)| *ok).map(|(_, l)| *l).collect();
+        let mut lat: Vec<u64> = g
+            .window
+            .iter()
+            .filter(|(ok, _)| *ok)
+            .map(|(_, l)| *l)
+            .collect();
         lat.sort_unstable();
         let n = g.window.len();
         let oks = g.window.iter().filter(|(ok, _)| *ok).count();
@@ -120,7 +125,11 @@ impl HealthTracker {
             configured: true,
             breaker: Some(state),
             samples: n,
-            success_rate_bps: if n == 0 { None } else { Some((oks * 10_000 / n) as u32) },
+            success_rate_bps: if n == 0 {
+                None
+            } else {
+                Some((oks * 10_000 / n) as u32)
+            },
             p50_ack_us: percentile(&lat, 50.0),
             p95_ack_us: percentile(&lat, 95.0),
             p99_ack_us: percentile(&lat, 99.0),

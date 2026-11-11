@@ -56,7 +56,9 @@ pub struct MockSigner {
 
 impl MockSigner {
     pub fn from_seed(seed: [u8; 32]) -> Self {
-        Self { kp: keypair_from_seed(&seed) }
+        Self {
+            kp: keypair_from_seed(&seed),
+        }
     }
     pub fn keypair(&self) -> &Keypair {
         &self.kp
@@ -96,7 +98,10 @@ pub struct ManagedLocalSigner {
 
 impl ManagedLocalSigner {
     pub fn new(kp: Keypair, network: Network) -> Self {
-        Self { kp, networks: vec![network] }
+        Self {
+            kp,
+            networks: vec![network],
+        }
     }
 }
 
@@ -149,7 +154,10 @@ mod tests {
         assert!(s.sign_message(Network::Localnet, b"m").await.is_ok());
         assert_eq!(
             s.sign_message(Network::Mainnet, b"m").await,
-            Err(SignError::WrongNetwork { kind: SignerKind::Mock, network: Network::Mainnet })
+            Err(SignError::WrongNetwork {
+                kind: SignerKind::Mock,
+                network: Network::Mainnet
+            })
         );
         assert!(s.sign_message(Network::Devnet, b"m").await.is_err());
     }
@@ -163,13 +171,24 @@ mod tests {
 
     #[test]
     fn deterministic_seed() {
-        assert_eq!(MockSigner::from_seed([7; 32]).pubkey(), MockSigner::from_seed([7; 32]).pubkey());
-        assert_ne!(MockSigner::from_seed([7; 32]).pubkey(), MockSigner::from_seed([8; 32]).pubkey());
+        assert_eq!(
+            MockSigner::from_seed([7; 32]).pubkey(),
+            MockSigner::from_seed([7; 32]).pubkey()
+        );
+        assert_ne!(
+            MockSigner::from_seed([7; 32]).pubkey(),
+            MockSigner::from_seed([8; 32]).pubkey()
+        );
     }
 
     #[tokio::test]
     async fn external_never_signs() {
-        let s = ExternalWalletSigner { pubkey: Pubkey::new_unique() };
-        assert_eq!(s.sign_message(Network::Localnet, b"m").await, Err(SignError::ExternalRequired));
+        let s = ExternalWalletSigner {
+            pubkey: Pubkey::new_unique(),
+        };
+        assert_eq!(
+            s.sign_message(Network::Localnet, b"m").await,
+            Err(SignError::ExternalRequired)
+        );
     }
 }

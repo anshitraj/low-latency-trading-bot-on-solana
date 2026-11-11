@@ -13,7 +13,10 @@ use trader_domain::{DexKind, Lamports, MarketRef, Side};
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ProtocolError {
     #[error("market not supported by {adapter}: {reason}")]
-    Unsupported { adapter: &'static str, reason: String },
+    Unsupported {
+        adapter: &'static str,
+        reason: String,
+    },
     #[error("market state unavailable: {0}")]
     StateUnavailable(String),
     #[error("market state stale: {0}")]
@@ -59,6 +62,9 @@ pub struct ProtocolQuote {
     pub warnings: Vec<String>,
 }
 
+/// (program id, name, optional instruction rule) the guard must allow.
+pub type ProgramRuleSpec = (Pubkey, &'static str, Option<Arc<dyn ProgramRule>>);
+
 #[derive(Clone, Debug)]
 pub struct SwapBuild {
     pub instructions: Vec<Instruction>,
@@ -70,7 +76,7 @@ pub trait ProtocolAdapter: Send + Sync {
     fn name(&self) -> &'static str;
 
     /// Program IDs (and per-program rules) the guard must allow for this adapter.
-    fn program_rules(&self) -> Vec<(Pubkey, &'static str, Option<Arc<dyn ProgramRule>>)>;
+    fn program_rules(&self) -> Vec<ProgramRuleSpec>;
 
     /// Resolve which market (if any) this adapter can trade for `mint`, fetching
     /// and caching its state. `Ok(None)` = not this adapter's market.
@@ -84,14 +90,22 @@ pub trait ProtocolAdapter: Send + Sync {
 
     /// Exact-out is optional; default unsupported.
     fn quote_exact_out(&self, _req: &QuoteRequest) -> Result<ProtocolQuote, ProtocolError> {
-        Err(ProtocolError::Unsupported { adapter: self.name(), reason: "exact-out not supported".into() })
+        Err(ProtocolError::Unsupported {
+            adapter: self.name(),
+            reason: "exact-out not supported".into(),
+        })
     }
 
     /// Accounts this protocol may create *at the user's expense* when trading
     /// `mint` (e.g. Pump's per-user volume accumulator), with their rent. The
     /// engine checks existence in the same RPC round trip as balances and adds
     /// the rent of missing ones to the quoted max spend.
-    fn user_rent_candidates(&self, _user: &Pubkey, _mint: &Pubkey, _side: Side) -> Vec<(Pubkey, Lamports)> {
+    fn user_rent_candidates(
+        &self,
+        _user: &Pubkey,
+        _mint: &Pubkey,
+        _side: Side,
+    ) -> Vec<(Pubkey, Lamports)> {
         vec![]
     }
 

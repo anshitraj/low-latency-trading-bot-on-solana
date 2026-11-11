@@ -30,7 +30,9 @@ impl WalletLocks {
     pub async fn lock(&self, wallet: &Pubkey) -> OwnedMutexGuard<()> {
         let m = {
             let mut g = self.locks.lock();
-            g.entry(*wallet).or_insert_with(|| Arc::new(AsyncMutex::new(()))).clone()
+            g.entry(*wallet)
+                .or_insert_with(|| Arc::new(AsyncMutex::new(())))
+                .clone()
         };
         m.lock_owned().await
     }
@@ -51,14 +53,22 @@ impl WalletLocks {
     }
 
     pub fn reserved_lamports(&self, wallet: &Pubkey) -> u64 {
-        self.reservations.lock().get(wallet).map(|v| v.iter().map(|r| r.lamports).sum()).unwrap_or(0)
+        self.reservations
+            .lock()
+            .get(wallet)
+            .map(|v| v.iter().map(|r| r.lamports).sum())
+            .unwrap_or(0)
     }
 
     pub fn reserved_tokens(&self, wallet: &Pubkey, mint: &Pubkey) -> u64 {
         self.reservations
             .lock()
             .get(wallet)
-            .map(|v| v.iter().filter_map(|r| r.token.filter(|(m, _)| m == mint).map(|(_, a)| a)).sum())
+            .map(|v| {
+                v.iter()
+                    .filter_map(|r| r.token.filter(|(m, _)| m == mint).map(|(_, a)| a))
+                    .sum()
+            })
             .unwrap_or(0)
     }
 }
@@ -97,9 +107,30 @@ mod tests {
         let w = Pubkey::new_unique();
         let mint = Pubkey::new_unique();
         let a = Uuid::new_v4();
-        l.reserve(&w, Reservation { order_id: a, lamports: 100, token: None });
-        l.reserve(&w, Reservation { order_id: a, lamports: 100, token: None }); // idempotent
-        l.reserve(&w, Reservation { order_id: Uuid::new_v4(), lamports: 5, token: Some((mint, 7)) });
+        l.reserve(
+            &w,
+            Reservation {
+                order_id: a,
+                lamports: 100,
+                token: None,
+            },
+        );
+        l.reserve(
+            &w,
+            Reservation {
+                order_id: a,
+                lamports: 100,
+                token: None,
+            },
+        ); // idempotent
+        l.reserve(
+            &w,
+            Reservation {
+                order_id: Uuid::new_v4(),
+                lamports: 5,
+                token: Some((mint, 7)),
+            },
+        );
         assert_eq!(l.reserved_lamports(&w), 105);
         assert_eq!(l.reserved_tokens(&w, &mint), 7);
         l.release(&w, a);

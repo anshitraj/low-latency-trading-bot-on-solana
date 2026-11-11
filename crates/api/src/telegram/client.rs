@@ -23,30 +23,63 @@ pub enum TgError {
 }
 
 pub fn esc(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 impl TelegramClient {
     pub fn new(base: &str, token: &str) -> Self {
-        let http = reqwest::Client::builder().timeout(Duration::from_secs(10)).tcp_nodelay(true).build().expect("client");
-        Self { http, base: base.trim_end_matches('/').to_string(), token: token.to_string() }
+        let http = reqwest::Client::builder()
+            .timeout(Duration::from_secs(10))
+            .tcp_nodelay(true)
+            .build()
+            .expect("client");
+        Self {
+            http,
+            base: base.trim_end_matches('/').to_string(),
+            token: token.to_string(),
+        }
     }
 
     async fn call(&self, method: &str, body: Value) -> Result<Value, TgError> {
         // URL contains the token: never log it (TgError carries no URL).
         let url = format!("{}/bot{}/{}", self.base, self.token, method);
-        let resp = self.http.post(url).json(&body).send().await.map_err(|_| TgError::Transport)?;
+        let resp = self
+            .http
+            .post(url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|_| TgError::Transport)?;
         let v: Value = resp.json().await.map_err(|_| TgError::Transport)?;
         if v["ok"].as_bool() == Some(true) {
             return Ok(v["result"].clone());
         }
-        if let Some(r) = v.pointer("/parameters/retry_after").and_then(|r| r.as_u64()) {
+        if let Some(r) = v
+            .pointer("/parameters/retry_after")
+            .and_then(|r| r.as_u64())
+        {
             return Err(TgError::RetryAfter(r));
         }
-        Err(TgError::Api { code: v["error_code"].as_i64().unwrap_or(0), description: v["description"].as_str().unwrap_or("").chars().take(200).collect() })
+        Err(TgError::Api {
+            code: v["error_code"].as_i64().unwrap_or(0),
+            description: v["description"]
+                .as_str()
+                .unwrap_or("")
+                .chars()
+                .take(200)
+                .collect(),
+        })
     }
 
-    pub async fn send_message(&self, chat_id: i64, html: &str, markup: Option<Value>) -> Result<i64, TgError> {
+    pub async fn send_message(
+        &self,
+        chat_id: i64,
+        html: &str,
+        markup: Option<Value>,
+    ) -> Result<i64, TgError> {
         let mut b = json!({"chat_id": chat_id, "text": html, "parse_mode": "HTML", "link_preview_options": {"is_disabled": true}});
         if let Some(m) = markup {
             b["reply_markup"] = m;
@@ -55,7 +88,13 @@ impl TelegramClient {
         Ok(r["message_id"].as_i64().unwrap_or(0))
     }
 
-    pub async fn edit_message(&self, chat_id: i64, message_id: i64, html: &str, markup: Option<Value>) -> Result<(), TgError> {
+    pub async fn edit_message(
+        &self,
+        chat_id: i64,
+        message_id: i64,
+        html: &str,
+        markup: Option<Value>,
+    ) -> Result<(), TgError> {
         let mut b = json!({"chat_id": chat_id, "message_id": message_id, "text": html, "parse_mode": "HTML", "link_preview_options": {"is_disabled": true}});
         if let Some(m) = markup {
             b["reply_markup"] = m;
@@ -63,7 +102,11 @@ impl TelegramClient {
         match self.call("editMessageText", b).await {
             Ok(_) => Ok(()),
             // Editing to identical content is not an error for us.
-            Err(TgError::Api { description, .. }) if description.contains("message is not modified") => Ok(()),
+            Err(TgError::Api { description, .. })
+                if description.contains("message is not modified") =>
+            {
+                Ok(())
+            }
             Err(e) => Err(e),
         }
     }

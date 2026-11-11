@@ -43,37 +43,74 @@ impl RpcSender {
     /// per-protocol policy explicitly allows it (see docs/EXECUTION_ENGINE.md).
     pub fn standard(rpc: RpcClient, skip_preflight: bool) -> Self {
         let label = format!("rpc:{}", rpc.host());
-        Self { kind: SenderKind::Rpc, rpc, skip_preflight, tip: TipPolicy::None, label }
+        Self {
+            kind: SenderKind::Rpc,
+            rpc,
+            skip_preflight,
+            tip: TipPolicy::None,
+            label,
+        }
     }
 
     pub fn helius_sender(rpc: RpcClient, swqos_only: bool) -> Self {
-        let accounts = HELIUS_TIP_ACCOUNTS.iter().map(|s| Pubkey::from_str(s).expect("valid tip account")).collect();
-        let min = if swqos_only { HELIUS_SWQOS_MIN_TIP } else { HELIUS_MAX_MIN_TIP };
+        let accounts = HELIUS_TIP_ACCOUNTS
+            .iter()
+            .map(|s| Pubkey::from_str(s).expect("valid tip account"))
+            .collect();
+        let min = if swqos_only {
+            HELIUS_SWQOS_MIN_TIP
+        } else {
+            HELIUS_MAX_MIN_TIP
+        };
         let label = format!("helius-sender:{}", rpc.host());
-        Self { kind: SenderKind::Helius, rpc, skip_preflight: true, tip: TipPolicy::Required { min_lamports: min, accounts }, label }
+        Self {
+            kind: SenderKind::Helius,
+            rpc,
+            skip_preflight: true,
+            tip: TipPolicy::Required {
+                min_lamports: min,
+                accounts,
+            },
+            label,
+        }
     }
 }
 
 /// Map an RPC error from `sendTransaction` to a send outcome.
 pub fn classify(e: &RpcError) -> SendOutcome {
     match e {
-        RpcError::Rpc { code, message, data } => {
-            let text = format!("{message} {}", data.as_ref().map(|d| d.to_string()).unwrap_or_default());
+        RpcError::Rpc {
+            code,
+            message,
+            data,
+        } => {
+            let text = format!(
+                "{message} {}",
+                data.as_ref().map(|d| d.to_string()).unwrap_or_default()
+            );
             if text.contains("AlreadyProcessed") || text.contains("already been processed") {
                 return SendOutcome::AlreadyProcessed;
             }
             match *code {
                 // -32002 preflight simulation failed; -32003 signature verification failed;
                 // -32602 invalid params (malformed tx). The node did not forward.
-                -32002 | -32003 | -32602 => SendOutcome::Rejected { reason: truncate(&text) },
+                -32002 | -32003 | -32602 => SendOutcome::Rejected {
+                    reason: truncate(&text),
+                },
                 429 => SendOutcome::RateLimited,
                 // -32005 node unhealthy/behind; unknown codes: treat as ambiguous.
-                _ => SendOutcome::Ambiguous { reason: truncate(&text) },
+                _ => SendOutcome::Ambiguous {
+                    reason: truncate(&text),
+                },
             }
         }
         e if e.is_rate_limited() => SendOutcome::RateLimited,
-        RpcError::Decode(m) => SendOutcome::Ambiguous { reason: truncate(m) },
-        e => SendOutcome::Ambiguous { reason: truncate(&e.to_string()) },
+        RpcError::Decode(m) => SendOutcome::Ambiguous {
+            reason: truncate(m),
+        },
+        e => SendOutcome::Ambiguous {
+            reason: truncate(&e.to_string()),
+        },
     }
 }
 
@@ -93,8 +130,14 @@ impl TransactionSender for RpcSender {
         self.tip.clone()
     }
     async fn submit(&self, wire: &[u8], _ctx: &SendContext) -> SendOutcome {
-        match self.rpc.send_transaction(wire, self.skip_preflight, Some(0), Commitment::Confirmed).await {
-            Ok(sig) => SendOutcome::Accepted { returned_signature: Some(sig) },
+        match self
+            .rpc
+            .send_transaction(wire, self.skip_preflight, Some(0), Commitment::Confirmed)
+            .await
+        {
+            Ok(sig) => SendOutcome::Accepted {
+                returned_signature: Some(sig),
+            },
             Err(e) => classify(&e),
         }
     }
@@ -103,7 +146,11 @@ impl TransactionSender for RpcSender {
             Ok(s) => Some(s),
             Err(e) => Some(format!("unhealthy: {e}")),
         };
-        SenderHealth { configured: true, note, ..Default::default() }
+        SenderHealth {
+            configured: true,
+            note,
+            ..Default::default()
+        }
     }
 }
 
@@ -123,15 +170,42 @@ mod tests {
 
     #[test]
     fn classification() {
-        let rej = RpcError::Rpc { code: -32002, message: "Transaction simulation failed: insufficient funds".into(), data: None };
+        let rej = RpcError::Rpc {
+            code: -32002,
+            message: "Transaction simulation failed: insufficient funds".into(),
+            data: None,
+        };
         assert!(matches!(classify(&rej), SendOutcome::Rejected { .. }));
-        let ap = RpcError::Rpc { code: -32002, message: "x".into(), data: Some(json!({"err":"AlreadyProcessed"})) };
+        let ap = RpcError::Rpc {
+            code: -32002,
+            message: "x".into(),
+            data: Some(json!({"err":"AlreadyProcessed"})),
+        };
         assert_eq!(classify(&ap), SendOutcome::AlreadyProcessed);
-        let behind = RpcError::Rpc { code: -32005, message: "Node is behind".into(), data: None };
+        let behind = RpcError::Rpc {
+            code: -32005,
+            message: "Node is behind".into(),
+            data: None,
+        };
         assert!(matches!(classify(&behind), SendOutcome::Ambiguous { .. }));
-        assert!(matches!(classify(&RpcError::Timeout(std::time::Duration::from_secs(1))), SendOutcome::Ambiguous { .. }));
-        assert_eq!(classify(&RpcError::Http { status: 429, body: "".into() }), SendOutcome::RateLimited);
-        assert!(matches!(classify(&RpcError::Http { status: 503, body: "".into() }), SendOutcome::Ambiguous { .. }));
+        assert!(matches!(
+            classify(&RpcError::Timeout(std::time::Duration::from_secs(1))),
+            SendOutcome::Ambiguous { .. }
+        ));
+        assert_eq!(
+            classify(&RpcError::Http {
+                status: 429,
+                body: "".into()
+            }),
+            SendOutcome::RateLimited
+        );
+        assert!(matches!(
+            classify(&RpcError::Http {
+                status: 503,
+                body: "".into()
+            }),
+            SendOutcome::Ambiguous { .. }
+        ));
     }
 
     #[tokio::test]
@@ -151,8 +225,25 @@ mod tests {
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         let s = RpcSender::helius_sender(RpcClient::new(RpcConfig::new(url)).unwrap(), true);
-        let ctx = SendContext { order_id: Default::default(), signature: "SIG".into(), last_valid_block_height: 1, attempt: 0, rebroadcast: false };
-        assert_eq!(s.submit(&[1, 2, 3], &ctx).await, SendOutcome::Accepted { returned_signature: Some("SIG".into()) });
-        assert!(matches!(s.tip_policy(), TipPolicy::Required { min_lamports: HELIUS_SWQOS_MIN_TIP, .. }));
+        let ctx = SendContext {
+            order_id: Default::default(),
+            signature: "SIG".into(),
+            last_valid_block_height: 1,
+            attempt: 0,
+            rebroadcast: false,
+        };
+        assert_eq!(
+            s.submit(&[1, 2, 3], &ctx).await,
+            SendOutcome::Accepted {
+                returned_signature: Some("SIG".into())
+            }
+        );
+        assert!(matches!(
+            s.tip_policy(),
+            TipPolicy::Required {
+                min_lamports: HELIUS_SWQOS_MIN_TIP,
+                ..
+            }
+        ));
     }
 }

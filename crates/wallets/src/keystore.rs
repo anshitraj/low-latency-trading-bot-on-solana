@@ -43,7 +43,10 @@ pub struct Kek {
 impl Kek {
     pub fn new(id: impl Into<String>, bytes: &[u8]) -> Result<Self, KeystoreError> {
         let arr: [u8; 32] = bytes.try_into().map_err(|_| KeystoreError::BadKek)?;
-        Ok(Self { id: id.into(), key: Zeroizing::new(arr) })
+        Ok(Self {
+            id: id.into(),
+            key: Zeroizing::new(arr),
+        })
     }
     pub fn id(&self) -> &str {
         &self.id
@@ -55,7 +58,13 @@ fn seal(key: &[u8; 32], plaintext: &[u8], aad: &[u8]) -> Vec<u8> {
     let mut nonce = [0u8; 12];
     rand::rngs::OsRng.fill_bytes(&mut nonce);
     let ct = cipher
-        .encrypt(Nonce::from_slice(&nonce), Payload { msg: plaintext, aad })
+        .encrypt(
+            Nonce::from_slice(&nonce),
+            Payload {
+                msg: plaintext,
+                aad,
+            },
+        )
         .expect("aes-gcm encrypt");
     let mut out = Vec::with_capacity(12 + ct.len());
     out.extend_from_slice(&nonce);
@@ -82,19 +91,34 @@ pub fn seal_seed(kek: &Kek, wallet_id: &str, seed: &[u8; 32]) -> SealedKey {
     let sealed_seed = seal(&dek, seed, aad.as_bytes());
     let wrapped_dek = seal(&kek.key, &dek, aad.as_bytes());
     dek.zeroize();
-    SealedKey { version: 1, kek_id: kek.id.clone(), wrapped_dek, sealed_seed }
+    SealedKey {
+        version: 1,
+        kek_id: kek.id.clone(),
+        wrapped_dek,
+        sealed_seed,
+    }
 }
 
-pub fn open_seed(kek: &Kek, wallet_id: &str, sealed: &SealedKey) -> Result<Zeroizing<[u8; 32]>, KeystoreError> {
+pub fn open_seed(
+    kek: &Kek,
+    wallet_id: &str,
+    sealed: &SealedKey,
+) -> Result<Zeroizing<[u8; 32]>, KeystoreError> {
     if sealed.version != 1 || sealed.kek_id != kek.id {
         return Err(KeystoreError::Malformed);
     }
     let aad = format!("wallet:{wallet_id}");
     let dek = open(&kek.key, &sealed.wrapped_dek, aad.as_bytes())?;
-    let dek: [u8; 32] = dek.as_slice().try_into().map_err(|_| KeystoreError::Malformed)?;
+    let dek: [u8; 32] = dek
+        .as_slice()
+        .try_into()
+        .map_err(|_| KeystoreError::Malformed)?;
     let dek = Zeroizing::new(dek);
     let seed = open(&dek, &sealed.sealed_seed, aad.as_bytes())?;
-    let arr: [u8; 32] = seed.as_slice().try_into().map_err(|_| KeystoreError::Malformed)?;
+    let arr: [u8; 32] = seed
+        .as_slice()
+        .try_into()
+        .map_err(|_| KeystoreError::Malformed)?;
     Ok(Zeroizing::new(arr))
 }
 
@@ -115,15 +139,24 @@ mod tests {
         let sealed = seal_seed(&kek, "w1", &seed);
         assert_eq!(*open_seed(&kek, "w1", &sealed).unwrap(), seed);
         // swapped wallet binding fails
-        assert_eq!(open_seed(&kek, "w2", &sealed).unwrap_err(), KeystoreError::Decrypt);
+        assert_eq!(
+            open_seed(&kek, "w2", &sealed).unwrap_err(),
+            KeystoreError::Decrypt
+        );
         // wrong kek fails
         let other = Kek::new("local-1", &[8u8; 32]).unwrap();
-        assert_eq!(open_seed(&other, "w1", &sealed).unwrap_err(), KeystoreError::Decrypt);
+        assert_eq!(
+            open_seed(&other, "w1", &sealed).unwrap_err(),
+            KeystoreError::Decrypt
+        );
         // tamper fails
         let mut t = sealed.clone();
         let n = t.sealed_seed.len();
         t.sealed_seed[n - 1] ^= 1;
-        assert_eq!(open_seed(&kek, "w1", &t).unwrap_err(), KeystoreError::Decrypt);
+        assert_eq!(
+            open_seed(&kek, "w1", &t).unwrap_err(),
+            KeystoreError::Decrypt
+        );
         // ciphertext never contains the seed bytes
         assert!(!sealed.sealed_seed.windows(32).any(|w| w == seed));
         assert!(Kek::new("x", &[0u8; 16]).is_err());

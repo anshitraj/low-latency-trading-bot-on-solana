@@ -10,8 +10,10 @@ use std::sync::Arc;
 use trader_domain::Lamports;
 
 pub const SYSTEM_PROGRAM: Pubkey = solana_pubkey::pubkey!("11111111111111111111111111111111");
-pub const COMPUTE_BUDGET_PROGRAM: Pubkey = solana_pubkey::pubkey!("ComputeBudget111111111111111111111111111111");
-pub const ATA_PROGRAM: Pubkey = solana_pubkey::pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+pub const COMPUTE_BUDGET_PROGRAM: Pubkey =
+    solana_pubkey::pubkey!("ComputeBudget111111111111111111111111111111");
+pub const ATA_PROGRAM: Pubkey =
+    solana_pubkey::pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum GuardError {
@@ -30,7 +32,11 @@ pub enum GuardError {
     #[error("priority fee {fee} exceeds cap {cap}")]
     PriorityFee { fee: Lamports, cap: Lamports },
     #[error("tip {amount} to {to} not allowed (cap {cap})")]
-    Tip { to: Pubkey, amount: Lamports, cap: Lamports },
+    Tip {
+        to: Pubkey,
+        amount: Lamports,
+        cap: Lamports,
+    },
     #[error("ATA instruction not allowed: {0}")]
     Ata(String),
     #[error("program {program} rejected instruction: {reason}")]
@@ -58,23 +64,36 @@ pub struct GuardConfig {
     pub tip_accounts: Vec<Pubkey>,
 }
 
+/// (program name, optional program-specific rule)
+pub type ProgramEntry = (&'static str, Option<Arc<dyn ProgramRule>>);
+
 #[derive(Clone, Default)]
 pub struct TxGuard {
-    programs: HashMap<Pubkey, (&'static str, Option<Arc<dyn ProgramRule>>)>,
+    programs: HashMap<Pubkey, ProgramEntry>,
 }
 
 impl TxGuard {
     pub fn allow_program(&mut self, id: Pubkey, name: &'static str) {
         self.programs.insert(id, (name, None));
     }
-    pub fn allow_program_with_rule(&mut self, id: Pubkey, name: &'static str, rule: Arc<dyn ProgramRule>) {
+    pub fn allow_program_with_rule(
+        &mut self,
+        id: Pubkey,
+        name: &'static str,
+        rule: Arc<dyn ProgramRule>,
+    ) {
         self.programs.insert(id, (name, Some(rule)));
     }
     pub fn allowed(&self) -> Vec<(Pubkey, &'static str)> {
         self.programs.iter().map(|(k, v)| (*k, v.0)).collect()
     }
 
-    pub fn validate(&self, msg: &VersionedMessage, wallet: &Pubkey, cfg: &GuardConfig) -> Result<(), GuardError> {
+    pub fn validate(
+        &self,
+        msg: &VersionedMessage,
+        wallet: &Pubkey,
+        cfg: &GuardConfig,
+    ) -> Result<(), GuardError> {
         let keys = msg.static_account_keys();
         if keys.first() != Some(wallet) {
             return Err(GuardError::WrongPayer);
@@ -97,9 +116,17 @@ impl TxGuard {
             let accounts = cix
                 .accounts
                 .iter()
-                .map(|i| keys.get(*i as usize).copied().ok_or_else(|| GuardError::Malformed("account index".into())))
+                .map(|i| {
+                    keys.get(*i as usize)
+                        .copied()
+                        .ok_or_else(|| GuardError::Malformed("account index".into()))
+                })
                 .collect::<Result<Vec<_>, _>>()?;
-            let ix = IxView { program, accounts, data: &cix.data };
+            let ix = IxView {
+                program,
+                accounts,
+                data: &cix.data,
+            };
             if program == COMPUTE_BUDGET_PROGRAM {
                 check_compute_budget(&ix, &mut cu_limit, &mut cu_price)?;
             } else if program == SYSTEM_PROGRAM {
@@ -119,13 +146,20 @@ impl TxGuard {
         let limit = cu_limit.unwrap_or(200_000) as u128;
         let fee = Lamports(((limit * cu_price.unwrap_or(0) as u128).div_ceil(1_000_000)) as u64);
         if fee > cfg.max_priority_fee {
-            return Err(GuardError::PriorityFee { fee, cap: cfg.max_priority_fee });
+            return Err(GuardError::PriorityFee {
+                fee,
+                cap: cfg.max_priority_fee,
+            });
         }
         Ok(())
     }
 }
 
-fn check_compute_budget(ix: &IxView<'_>, limit: &mut Option<u32>, price: &mut Option<u64>) -> Result<(), GuardError> {
+fn check_compute_budget(
+    ix: &IxView<'_>,
+    limit: &mut Option<u32>,
+    price: &mut Option<u64>,
+) -> Result<(), GuardError> {
     match ix.data.first() {
         Some(2) if ix.data.len() == 5 && limit.is_none() => {
             *limit = Some(u32::from_le_bytes(ix.data[1..5].try_into().unwrap()));
@@ -135,14 +169,18 @@ fn check_compute_budget(ix: &IxView<'_>, limit: &mut Option<u32>, price: &mut Op
             *price = Some(u64::from_le_bytes(ix.data[1..9].try_into().unwrap()));
             Ok(())
         }
-        other => Err(GuardError::ComputeBudget(format!("discriminator {other:?} / duplicate"))),
+        other => Err(GuardError::ComputeBudget(format!(
+            "discriminator {other:?} / duplicate"
+        ))),
     }
 }
 
 fn check_system(ix: &IxView<'_>, wallet: &Pubkey, cfg: &GuardConfig) -> Result<(), GuardError> {
     // SystemInstruction is bincode: u32 LE discriminant. Transfer = 2 { lamports: u64 }.
     if ix.data.len() != 12 || u32::from_le_bytes(ix.data[0..4].try_into().unwrap()) != 2 {
-        return Err(GuardError::SystemInstruction("only tip transfers are allowed at top level".into()));
+        return Err(GuardError::SystemInstruction(
+            "only tip transfers are allowed at top level".into(),
+        ));
     }
     let lamports = Lamports(u64::from_le_bytes(ix.data[4..12].try_into().unwrap()));
     let (from, to) = match ix.accounts.as_slice() {
@@ -150,10 +188,16 @@ fn check_system(ix: &IxView<'_>, wallet: &Pubkey, cfg: &GuardConfig) -> Result<(
         _ => return Err(GuardError::SystemInstruction("transfer accounts".into())),
     };
     if from != *wallet {
-        return Err(GuardError::SystemInstruction("transfer source must be the wallet".into()));
+        return Err(GuardError::SystemInstruction(
+            "transfer source must be the wallet".into(),
+        ));
     }
     if !cfg.tip_accounts.contains(&to) || lamports > cfg.max_tip {
-        return Err(GuardError::Tip { to, amount: lamports, cap: cfg.max_tip });
+        return Err(GuardError::Tip {
+            to,
+            amount: lamports,
+            cap: cfg.max_tip,
+        });
     }
     Ok(())
 }
@@ -166,8 +210,14 @@ fn check_ata(ix: &IxView<'_>, wallet: &Pubkey) -> Result<(), GuardError> {
         _ => return Err(GuardError::Ata("only create/create_idempotent".into())),
     }
     match ix.accounts.as_slice() {
-        [payer, _ata, owner, _mint, system, _tp] if payer == wallet && owner == wallet && *system == SYSTEM_PROGRAM => Ok(()),
-        _ => Err(GuardError::Ata("ATA must be created for and paid by the wallet".into())),
+        [payer, _ata, owner, _mint, system, _tp]
+            if payer == wallet && owner == wallet && *system == SYSTEM_PROGRAM =>
+        {
+            Ok(())
+        }
+        _ => Err(GuardError::Ata(
+            "ATA must be created for and paid by the wallet".into(),
+        )),
     }
 }
 
@@ -179,12 +229,20 @@ mod tests {
     use solana_instruction::{AccountMeta, Instruction};
     use trader_domain::{ComputeBudget, Network};
 
-    fn params(payer: Pubkey, ixs: Vec<Instruction>, price: u64, tip: Option<TipInstruction>) -> BuildParams {
+    fn params(
+        payer: Pubkey,
+        ixs: Vec<Instruction>,
+        price: u64,
+        tip: Option<TipInstruction>,
+    ) -> BuildParams {
         BuildParams {
             network: Network::Localnet,
             payer,
             instructions: ixs,
-            compute: ComputeBudget { unit_limit: 100_000, unit_price_micro_lamports: price },
+            compute: ComputeBudget {
+                unit_limit: 100_000,
+                unit_price_micro_lamports: price,
+            },
             tip,
             blockhash: Hash::new_from_array([1; 32]),
             last_valid_block_height: 1,
@@ -192,7 +250,11 @@ mod tests {
     }
 
     fn cfg(tip_acct: Pubkey) -> GuardConfig {
-        GuardConfig { max_priority_fee: Lamports(10_000), max_tip: Lamports(5_000), tip_accounts: vec![tip_acct] }
+        GuardConfig {
+            max_priority_fee: Lamports(10_000),
+            max_tip: Lamports(5_000),
+            tip_accounts: vec![tip_acct],
+        }
     }
 
     struct DenyAll;
@@ -213,39 +275,82 @@ mod tests {
         let ix = |p: Pubkey| Instruction::new_with_bytes(p, &[1], vec![AccountMeta::new(w, true)]);
 
         // allowlisted program, tip in range
-        let m = compile(&params(w, vec![ix(good)], 1000, Some(TipInstruction { account: tip, lamports: Lamports(1000) }))).unwrap();
+        let m = compile(&params(
+            w,
+            vec![ix(good)],
+            1000,
+            Some(TipInstruction {
+                account: tip,
+                lamports: Lamports(1000),
+            }),
+        ))
+        .unwrap();
         assert_eq!(g.validate(&m, &w, &cfg(tip)), Ok(()));
 
         // unknown program
         let m = compile(&params(w, vec![ix(bad)], 1000, None)).unwrap();
-        assert_eq!(g.validate(&m, &w, &cfg(tip)), Err(GuardError::ProgramNotAllowed(bad)));
+        assert_eq!(
+            g.validate(&m, &w, &cfg(tip)),
+            Err(GuardError::ProgramNotAllowed(bad))
+        );
 
         // tip too large
-        let m = compile(&params(w, vec![ix(good)], 0, Some(TipInstruction { account: tip, lamports: Lamports(6000) }))).unwrap();
-        assert!(matches!(g.validate(&m, &w, &cfg(tip)), Err(GuardError::Tip { .. })));
+        let m = compile(&params(
+            w,
+            vec![ix(good)],
+            0,
+            Some(TipInstruction {
+                account: tip,
+                lamports: Lamports(6000),
+            }),
+        ))
+        .unwrap();
+        assert!(matches!(
+            g.validate(&m, &w, &cfg(tip)),
+            Err(GuardError::Tip { .. })
+        ));
 
         // transfer to a non-tip account (drain attempt)
         let drain = solana_system_interface::instruction::transfer(&w, &bad, 1);
         let m = compile(&params(w, vec![drain], 0, None)).unwrap();
-        assert!(matches!(g.validate(&m, &w, &cfg(tip)), Err(GuardError::Tip { .. })));
+        assert!(matches!(
+            g.validate(&m, &w, &cfg(tip)),
+            Err(GuardError::Tip { .. })
+        ));
 
         // priority fee over cap: 100k CU * 200_000 µL = 20_000 lamports
         let m = compile(&params(w, vec![ix(good)], 200_000, None)).unwrap();
-        assert!(matches!(g.validate(&m, &w, &cfg(tip)), Err(GuardError::PriorityFee { .. })));
+        assert!(matches!(
+            g.validate(&m, &w, &cfg(tip)),
+            Err(GuardError::PriorityFee { .. })
+        ));
 
         // wrong wallet
         let other = Pubkey::new_unique();
-        assert_eq!(g.validate(&m, &other, &cfg(tip)), Err(GuardError::WrongPayer));
+        assert_eq!(
+            g.validate(&m, &other, &cfg(tip)),
+            Err(GuardError::WrongPayer)
+        );
 
         // extra signer
-        let two_sig = Instruction::new_with_bytes(good, &[1], vec![AccountMeta::new(w, true), AccountMeta::new(other, true)]);
+        let two_sig = Instruction::new_with_bytes(
+            good,
+            &[1],
+            vec![AccountMeta::new(w, true), AccountMeta::new(other, true)],
+        );
         let m = compile(&params(w, vec![two_sig], 0, None)).unwrap();
-        assert_eq!(g.validate(&m, &w, &cfg(tip)), Err(GuardError::ExtraSigners(2)));
+        assert_eq!(
+            g.validate(&m, &w, &cfg(tip)),
+            Err(GuardError::ExtraSigners(2))
+        );
 
         // program rule rejection
         g.allow_program_with_rule(good, "good", Arc::new(DenyAll));
         let m = compile(&params(w, vec![ix(good)], 0, None)).unwrap();
-        assert!(matches!(g.validate(&m, &w, &cfg(tip)), Err(GuardError::ProgramRule { .. })));
+        assert!(matches!(
+            g.validate(&m, &w, &cfg(tip)),
+            Err(GuardError::ProgramRule { .. })
+        ));
 
         // ATA create for someone else
         let mint = Pubkey::new_unique();
@@ -262,6 +367,9 @@ mod tests {
             ],
         );
         let m = compile(&params(w, vec![ata_for_other], 0, None)).unwrap();
-        assert!(matches!(g.validate(&m, &w, &cfg(tip)), Err(GuardError::Ata(_))));
+        assert!(matches!(
+            g.validate(&m, &w, &cfg(tip)),
+            Err(GuardError::Ata(_))
+        ));
     }
 }

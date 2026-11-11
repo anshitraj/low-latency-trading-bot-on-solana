@@ -63,7 +63,10 @@ impl Position {
             return Err(PnlError::ZeroQty);
         }
         if f.qty_raw > self.qty_raw {
-            return Err(PnlError::Oversell { sell: f.qty_raw, have: self.qty_raw });
+            return Err(PnlError::Oversell {
+                sell: f.qty_raw,
+                have: self.qty_raw,
+            });
         }
         let cost_removed = if f.qty_raw == self.qty_raw {
             self.cost_basis_lamports
@@ -102,7 +105,12 @@ mod tests {
     use proptest::prelude::*;
 
     fn fill(q: u128, l: u128) -> Fill {
-        Fill { qty_raw: q, lamports: l, fees_lamports: 5_000, rent_lamports: 0 }
+        Fill {
+            qty_raw: q,
+            lamports: l,
+            fees_lamports: 5_000,
+            rent_lamports: 0,
+        }
     }
 
     #[test]

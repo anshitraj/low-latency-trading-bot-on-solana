@@ -42,7 +42,10 @@ impl Default for BlockhashService {
 
 impl BlockhashService {
     pub fn new() -> Self {
-        Self { inner: Arc::new(RwLock::new(None)), block_height: Arc::new(RwLock::new(None)) }
+        Self {
+            inner: Arc::new(RwLock::new(None)),
+            block_height: Arc::new(RwLock::new(None)),
+        }
     }
 
     /// Manually set (tests / benchmarks).
@@ -63,9 +66,17 @@ impl BlockhashService {
         *self.block_height.read()
     }
 
-    pub async fn refresh_once(&self, rpc: &RpcClient) -> Result<BlockhashEntry, trader_market_data::RpcError> {
+    pub async fn refresh_once(
+        &self,
+        rpc: &RpcClient,
+    ) -> Result<BlockhashEntry, trader_market_data::RpcError> {
         let (hash, lvbh, slot) = rpc.get_latest_blockhash(Commitment::Confirmed).await?;
-        let e = BlockhashEntry { hash, last_valid_block_height: lvbh, context_slot: slot, fetched_at: Instant::now() };
+        let e = BlockhashEntry {
+            hash,
+            last_valid_block_height: lvbh,
+            context_slot: slot,
+            fetched_at: Instant::now(),
+        };
         let mut w = self.inner.write();
         // Never regress to an older context slot from a lagging response.
         if w.map(|old| old.context_slot <= slot).unwrap_or(true) {
@@ -87,7 +98,7 @@ impl BlockhashService {
                 if let Err(e) = this.refresh_once(&rpc).await {
                     tracing::warn!(error = %e, "blockhash refresh failed");
                 }
-                if n % 4 == 0 {
+                if n.is_multiple_of(4) {
                     if let Ok(h) = rpc.get_block_height(Commitment::Confirmed).await {
                         *this.block_height.write() = Some((h, Instant::now()));
                     }
@@ -104,14 +115,20 @@ mod tests {
     #[test]
     fn stale_fails_closed() {
         let s = BlockhashService::new();
-        assert_eq!(s.get(Duration::from_secs(1)).unwrap_err(), BlockhashError::Missing);
+        assert_eq!(
+            s.get(Duration::from_secs(1)).unwrap_err(),
+            BlockhashError::Missing
+        );
         s.set(BlockhashEntry {
             hash: Hash::default(),
             last_valid_block_height: 10,
             context_slot: 1,
             fetched_at: Instant::now() - Duration::from_secs(5),
         });
-        assert!(matches!(s.get(Duration::from_secs(2)), Err(BlockhashError::Stale(_))));
+        assert!(matches!(
+            s.get(Duration::from_secs(2)),
+            Err(BlockhashError::Stale(_))
+        ));
         assert!(s.get(Duration::from_secs(10)).is_ok());
     }
 }

@@ -1,7 +1,7 @@
 //! Base58 pubkey helpers for JSON (solana-pubkey's serde impl is a byte array).
 
-pub use solana_pubkey::Pubkey;
 use serde::{Deserialize, Deserializer, Serializer};
+pub use solana_pubkey::Pubkey;
 use std::str::FromStr;
 
 pub fn parse(s: &str) -> Result<Pubkey, String> {
@@ -33,7 +33,8 @@ pub mod b58_opt {
     }
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Pubkey>, D::Error> {
         let s: Option<String> = Option::deserialize(d)?;
-        s.map(|s| parse(&s).map_err(serde::de::Error::custom)).transpose()
+        s.map(|s| parse(&s).map_err(serde::de::Error::custom))
+            .transpose()
     }
 }
 

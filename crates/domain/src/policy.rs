@@ -34,12 +34,12 @@ pub struct WalletPolicy {
 impl Default for WalletPolicy {
     fn default() -> Self {
         Self {
-            max_order: Lamports(250_000_000),             // 0.25 SOL
-            max_daily_turnover: Lamports(1_000_000_000),  // 1 SOL
-            min_sol_reserve: Lamports(10_000_000),        // 0.01 SOL
-            max_slippage: Bps::new(1_500).unwrap(),       // 15%
-            max_priority_fee: Lamports(200_000),          // 0.0002 SOL
-            max_tip: Lamports(100_000),                   // 0.0001 SOL
+            max_order: Lamports(250_000_000),            // 0.25 SOL
+            max_daily_turnover: Lamports(1_000_000_000), // 1 SOL
+            min_sol_reserve: Lamports(10_000_000),       // 0.01 SOL
+            max_slippage: Bps::new(1_500).unwrap(),      // 15%
+            max_priority_fee: Lamports(200_000),         // 0.0002 SOL
+            max_tip: Lamports(100_000),                  // 0.0001 SOL
             max_trades_per_day: 50,
             daily_loss_limit: Lamports(500_000_000),
             paused: false,
@@ -70,7 +70,11 @@ pub enum PolicyViolation {
     #[error("order {requested} exceeds per-order max {max}")]
     OrderTooLarge { requested: Lamports, max: Lamports },
     #[error("daily turnover limit reached ({used} + {requested} > {max})")]
-    DailyTurnover { used: Lamports, requested: Lamports, max: Lamports },
+    DailyTurnover {
+        used: Lamports,
+        requested: Lamports,
+        max: Lamports,
+    },
     #[error("daily trade count limit reached ({max})")]
     DailyTradeCount { max: u32 },
     #[error("daily loss limit reached")]
@@ -84,7 +88,10 @@ pub enum PolicyViolation {
     #[error("sender {sender:?} is not allowed for this wallet")]
     Sender { sender: SenderKind },
     #[error("insufficient SOL: need {needed} (incl. reserve), have {available}")]
-    InsufficientSol { needed: Lamports, available: Lamports },
+    InsufficientSol {
+        needed: Lamports,
+        available: Lamports,
+    },
     #[error("price impact {impact_bps} bps exceeds max {max_bps} bps")]
     PriceImpact { impact_bps: u32, max_bps: u16 },
     #[error("quote expired")]
@@ -95,7 +102,11 @@ pub enum PolicyViolation {
 
 impl WalletPolicy {
     /// Checks that only depend on the intent (run before quoting).
-    pub fn check_intent(&self, intent: &TradeIntent, usage: &UsageSnapshot) -> Result<(), PolicyViolation> {
+    pub fn check_intent(
+        &self,
+        intent: &TradeIntent,
+        usage: &UsageSnapshot,
+    ) -> Result<(), PolicyViolation> {
         if self.locked {
             return Err(PolicyViolation::Locked);
         }
@@ -118,7 +129,10 @@ impl WalletPolicy {
             });
         }
         if intent.fees.tip > self.max_tip {
-            return Err(PolicyViolation::Tip { requested: intent.fees.tip, max: self.max_tip });
+            return Err(PolicyViolation::Tip {
+                requested: intent.fees.tip,
+                max: self.max_tip,
+            });
         }
         for s in &intent.senders {
             if !self.allowed_senders.contains(s) {
@@ -126,20 +140,31 @@ impl WalletPolicy {
             }
         }
         if usage.trades_today >= self.max_trades_per_day {
-            return Err(PolicyViolation::DailyTradeCount { max: self.max_trades_per_day });
+            return Err(PolicyViolation::DailyTradeCount {
+                max: self.max_trades_per_day,
+            });
         }
         if usage.realized_loss_today >= self.daily_loss_limit {
             return Err(PolicyViolation::DailyLoss);
         }
-        if let (Side::Buy, crate::intent::AmountSpec::ExactSolIn { lamports }) = (intent.side, &intent.amount) {
+        if let (Side::Buy, crate::intent::AmountSpec::ExactSolIn { lamports }) =
+            (intent.side, &intent.amount)
+        {
             self.check_buy_size(*lamports, usage)?;
         }
         Ok(())
     }
 
-    fn check_buy_size(&self, amount: Lamports, usage: &UsageSnapshot) -> Result<(), PolicyViolation> {
+    fn check_buy_size(
+        &self,
+        amount: Lamports,
+        usage: &UsageSnapshot,
+    ) -> Result<(), PolicyViolation> {
         if amount > self.max_order {
-            return Err(PolicyViolation::OrderTooLarge { requested: amount, max: self.max_order });
+            return Err(PolicyViolation::OrderTooLarge {
+                requested: amount,
+                max: self.max_order,
+            });
         }
         let after = usage.turnover_today.0.saturating_add(amount.0);
         if after > self.max_daily_turnover.0 {
@@ -164,30 +189,55 @@ impl WalletPolicy {
         if quote.is_expired(now) {
             return Err(PolicyViolation::QuoteExpired);
         }
-        if quote.side != intent.side || quote.market.base_mint != intent.mint || quote.network != intent.network {
-            return Err(PolicyViolation::QuoteMismatch { reason: "side/mint/network differ".into() });
+        if quote.side != intent.side
+            || quote.market.base_mint != intent.mint
+            || quote.network != intent.network
+        {
+            return Err(PolicyViolation::QuoteMismatch {
+                reason: "side/mint/network differ".into(),
+            });
         }
         if let Some(impact) = quote.price_impact_bps {
             if impact > self.max_price_impact.get() as u32 {
-                return Err(PolicyViolation::PriceImpact { impact_bps: impact, max_bps: self.max_price_impact.get() });
+                return Err(PolicyViolation::PriceImpact {
+                    impact_bps: impact,
+                    max_bps: self.max_price_impact.get(),
+                });
             }
         }
-        if quote.costs.priority_fee > intent.fees.max_priority_fee || quote.costs.priority_fee > self.max_priority_fee {
-            return Err(PolicyViolation::PriorityFee { requested: quote.costs.priority_fee, max: self.max_priority_fee });
+        if quote.costs.priority_fee > intent.fees.max_priority_fee
+            || quote.costs.priority_fee > self.max_priority_fee
+        {
+            return Err(PolicyViolation::PriorityFee {
+                requested: quote.costs.priority_fee,
+                max: self.max_priority_fee,
+            });
         }
         if quote.costs.tip > self.max_tip {
-            return Err(PolicyViolation::Tip { requested: quote.costs.tip, max: self.max_tip });
+            return Err(PolicyViolation::Tip {
+                requested: quote.costs.tip,
+                max: self.max_tip,
+            });
         }
         if intent.side == Side::Buy {
             // max_in is what the program may take (slippage-inclusive); policy
             // caps apply to that worst case, not to the nominal amount.
             if quote.max_in > self.max_order.0 {
-                return Err(PolicyViolation::OrderTooLarge { requested: Lamports(quote.max_in), max: self.max_order });
+                return Err(PolicyViolation::OrderTooLarge {
+                    requested: Lamports(quote.max_in),
+                    max: self.max_order,
+                });
             }
         }
-        let needed = quote.max_total_debit.0.saturating_add(self.min_sol_reserve.0);
+        let needed = quote
+            .max_total_debit
+            .0
+            .saturating_add(self.min_sol_reserve.0);
         if sol_balance.0 < needed {
-            return Err(PolicyViolation::InsufficientSol { needed: Lamports(needed), available: sol_balance });
+            return Err(PolicyViolation::InsufficientSol {
+                needed: Lamports(needed),
+                available: sol_balance,
+            });
         }
         Ok(())
     }
@@ -212,9 +262,15 @@ mod tests {
             network: Network::Localnet,
             side: Side::Buy,
             mint: Pubkey::new_from_array([7; 32]),
-            amount: AmountSpec::ExactSolIn { lamports: Lamports(amount) },
+            amount: AmountSpec::ExactSolIn {
+                lamports: Lamports(amount),
+            },
             slippage: Bps::new(100).unwrap(),
-            fees: FeePreference { compute_unit_price_micro_lamports: 1000, max_priority_fee: Lamports(50_000), tip: Lamports(0) },
+            fees: FeePreference {
+                compute_unit_price_micro_lamports: 1000,
+                max_priority_fee: Lamports(50_000),
+                tip: Lamports(0),
+            },
             senders: vec![SenderKind::Rpc],
             idempotency_key: "k".into(),
             requires_approval: false,
@@ -226,7 +282,12 @@ mod tests {
         Quote {
             id: Uuid::nil(),
             network: i.network,
-            market: MarketRef { dex: DexKind::Mock, market: Pubkey::new_from_array([1; 32]), base_mint: i.mint, quote_mint: Pubkey::default() },
+            market: MarketRef {
+                dex: DexKind::Mock,
+                market: Pubkey::new_from_array([1; 32]),
+                base_mint: i.mint,
+                quote_mint: Pubkey::default(),
+            },
             side: i.side,
             in_amount: max_in,
             in_decimals: 9,
@@ -235,7 +296,10 @@ mod tests {
             min_out: 990,
             max_in,
             price_impact_bps: Some(50),
-            costs: CostEstimate { priority_fee: Lamports(20_000), ..Default::default() },
+            costs: CostEstimate {
+                priority_fee: Lamports(20_000),
+                ..Default::default()
+            },
             max_total_debit: Lamports(max_in + 2_100_000),
             context_slot: 1,
             state_age_ms: 10,
@@ -251,25 +315,58 @@ mod tests {
         let p = WalletPolicy::default();
         let u = UsageSnapshot::default();
         assert!(p.check_intent(&intent(100_000_000), &u).is_ok());
-        assert!(matches!(p.check_intent(&intent(300_000_000), &u), Err(PolicyViolation::OrderTooLarge { .. })));
-        let u2 = UsageSnapshot { turnover_today: Lamports(900_000_000), ..Default::default() };
-        assert!(matches!(p.check_intent(&intent(200_000_000), &u2), Err(PolicyViolation::DailyTurnover { .. })));
-        let paused = WalletPolicy { paused: true, ..p.clone() };
-        assert_eq!(paused.check_intent(&intent(1), &u), Err(PolicyViolation::Paused));
+        assert!(matches!(
+            p.check_intent(&intent(300_000_000), &u),
+            Err(PolicyViolation::OrderTooLarge { .. })
+        ));
+        let u2 = UsageSnapshot {
+            turnover_today: Lamports(900_000_000),
+            ..Default::default()
+        };
+        assert!(matches!(
+            p.check_intent(&intent(200_000_000), &u2),
+            Err(PolicyViolation::DailyTurnover { .. })
+        ));
+        let paused = WalletPolicy {
+            paused: true,
+            ..p.clone()
+        };
+        assert_eq!(
+            paused.check_intent(&intent(1), &u),
+            Err(PolicyViolation::Paused)
+        );
         let mut m = intent(1);
         m.network = Network::Mainnet;
-        assert_eq!(p.check_intent(&m, &u), Err(PolicyViolation::MainnetDisabled));
+        assert_eq!(
+            p.check_intent(&m, &u),
+            Err(PolicyViolation::MainnetDisabled)
+        );
         let mut s = intent(1);
         s.slippage = Bps::new(5_000).unwrap();
-        assert!(matches!(p.check_intent(&s, &u), Err(PolicyViolation::Slippage { .. })));
+        assert!(matches!(
+            p.check_intent(&s, &u),
+            Err(PolicyViolation::Slippage { .. })
+        ));
         let mut j = intent(1);
         j.senders = vec![SenderKind::Jito];
-        assert!(matches!(p.check_intent(&j, &u), Err(PolicyViolation::Sender { .. })));
+        assert!(matches!(
+            p.check_intent(&j, &u),
+            Err(PolicyViolation::Sender { .. })
+        ));
         let mut t = intent(1);
         t.fees.tip = Lamports(1_000_000);
-        assert!(matches!(p.check_intent(&t, &u), Err(PolicyViolation::Tip { .. })));
-        let busy = UsageSnapshot { trades_today: 50, ..Default::default() };
-        assert!(matches!(p.check_intent(&intent(1), &busy), Err(PolicyViolation::DailyTradeCount { .. })));
+        assert!(matches!(
+            p.check_intent(&t, &u),
+            Err(PolicyViolation::Tip { .. })
+        ));
+        let busy = UsageSnapshot {
+            trades_today: 50,
+            ..Default::default()
+        };
+        assert!(matches!(
+            p.check_intent(&intent(1), &busy),
+            Err(PolicyViolation::DailyTradeCount { .. })
+        ));
     }
 
     #[test]
@@ -280,23 +377,41 @@ mod tests {
         let now = Utc::now();
         assert!(p.check_quote(&i, &q, Lamports(1_000_000_000), now).is_ok());
         // reserve enforced
-        assert!(matches!(p.check_quote(&i, &q, Lamports(110_000_000), now), Err(PolicyViolation::InsufficientSol { .. })));
+        assert!(matches!(
+            p.check_quote(&i, &q, Lamports(110_000_000), now),
+            Err(PolicyViolation::InsufficientSol { .. })
+        ));
         // slippage-inclusive max_in over cap
         let q2 = quote(&i, 260_000_000);
-        assert!(matches!(p.check_quote(&i, &q2, Lamports(10_000_000_000), now), Err(PolicyViolation::OrderTooLarge { .. })));
+        assert!(matches!(
+            p.check_quote(&i, &q2, Lamports(10_000_000_000), now),
+            Err(PolicyViolation::OrderTooLarge { .. })
+        ));
         // expired
-        assert_eq!(p.check_quote(&i, &q, Lamports(1_000_000_000), now + Duration::seconds(11)), Err(PolicyViolation::QuoteExpired));
+        assert_eq!(
+            p.check_quote(&i, &q, Lamports(1_000_000_000), now + Duration::seconds(11)),
+            Err(PolicyViolation::QuoteExpired)
+        );
         // impact
         let mut q3 = quote(&i, 101_000_000);
         q3.price_impact_bps = Some(3_000);
-        assert!(matches!(p.check_quote(&i, &q3, Lamports(1_000_000_000), now), Err(PolicyViolation::PriceImpact { .. })));
+        assert!(matches!(
+            p.check_quote(&i, &q3, Lamports(1_000_000_000), now),
+            Err(PolicyViolation::PriceImpact { .. })
+        ));
         // mismatch
         let mut q4 = quote(&i, 101_000_000);
         q4.market.base_mint = Pubkey::new_from_array([9; 32]);
-        assert!(matches!(p.check_quote(&i, &q4, Lamports(1_000_000_000), now), Err(PolicyViolation::QuoteMismatch { .. })));
+        assert!(matches!(
+            p.check_quote(&i, &q4, Lamports(1_000_000_000), now),
+            Err(PolicyViolation::QuoteMismatch { .. })
+        ));
         // priority fee above user cap
         let mut q5 = quote(&i, 101_000_000);
         q5.costs.priority_fee = Lamports(60_000);
-        assert!(matches!(p.check_quote(&i, &q5, Lamports(1_000_000_000), now), Err(PolicyViolation::PriorityFee { .. })));
+        assert!(matches!(
+            p.check_quote(&i, &q5, Lamports(1_000_000_000), now),
+            Err(PolicyViolation::PriorityFee { .. })
+        ));
     }
 }

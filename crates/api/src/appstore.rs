@@ -58,7 +58,16 @@ pub struct UserSettings {
 impl UserSettings {
     pub fn defaults_for(mode_senders: Vec<SenderKind>) -> Self {
         Self {
-            buy_presets: [50_000_000u64, 100_000_000, 250_000_000, 500_000_000, 1_000_000_000].into_iter().map(Lamports).collect(),
+            buy_presets: [
+                50_000_000u64,
+                100_000_000,
+                250_000_000,
+                500_000_000,
+                1_000_000_000,
+            ]
+            .into_iter()
+            .map(Lamports)
+            .collect(),
             sell_presets_bps: vec![2_500, 5_000, 7_500, 10_000],
             slippage: Bps::new(500).unwrap(),
             compute_unit_price_micro_lamports: 10_000,
@@ -75,7 +84,10 @@ impl UserSettings {
         if self.buy_presets.iter().any(|l| l.0 == 0) {
             return Err("buy presets must be > 0".into());
         }
-        if self.sell_presets_bps.is_empty() || self.sell_presets_bps.len() > 6 || self.sell_presets_bps.iter().any(|b| *b == 0 || *b > 10_000) {
+        if self.sell_presets_bps.is_empty()
+            || self.sell_presets_bps.len() > 6
+            || self.sell_presets_bps.iter().any(|b| *b == 0 || *b > 10_000)
+        {
             return Err("sell presets must be 1..=10000 bps (1..=6 of them)".into());
         }
         if self.senders.is_empty() {
@@ -102,7 +114,15 @@ pub enum CallbackAction {
 impl CallbackAction {
     /// Spending actions are single-use; navigation may be reused.
     pub fn single_use(&self) -> bool {
-        matches!(self, CallbackAction::Buy { .. } | CallbackAction::Sell { .. } | CallbackAction::Approve { .. } | CallbackAction::Cancel { .. } | CallbackAction::CreateWallet | CallbackAction::MockAirdrop)
+        matches!(
+            self,
+            CallbackAction::Buy { .. }
+                | CallbackAction::Sell { .. }
+                | CallbackAction::Approve { .. }
+                | CallbackAction::Cancel { .. }
+                | CallbackAction::CreateWallet
+                | CallbackAction::MockAirdrop
+        )
     }
 }
 
@@ -151,11 +171,20 @@ pub struct TrackedWallet {
 
 #[async_trait]
 pub trait AppStore: Send + Sync {
-    async fn upsert_telegram_user(&self, telegram_id: i64, username: Option<String>, beta_allowed: bool) -> Result<User, AppStoreError>;
+    async fn upsert_telegram_user(
+        &self,
+        telegram_id: i64,
+        username: Option<String>,
+        beta_allowed: bool,
+    ) -> Result<User, AppStoreError>;
     async fn get_user(&self, id: Uuid) -> Result<User, AppStoreError>;
     async fn user_by_telegram(&self, telegram_id: i64) -> Result<Option<User>, AppStoreError>;
 
-    async fn create_wallet(&self, w: &Wallet, sealed: Option<&SealedKey>) -> Result<(), AppStoreError>;
+    async fn create_wallet(
+        &self,
+        w: &Wallet,
+        sealed: Option<&SealedKey>,
+    ) -> Result<(), AppStoreError>;
     async fn list_wallets(&self, user_id: Uuid) -> Result<Vec<Wallet>, AppStoreError>;
     async fn get_wallet(&self, id: Uuid) -> Result<Wallet, AppStoreError>;
     async fn sealed_key(&self, wallet_id: Uuid) -> Result<Option<SealedKey>, AppStoreError>;
@@ -166,14 +195,28 @@ pub trait AppStore: Send + Sync {
     async fn get_settings(&self, user_id: Uuid) -> Result<Option<UserSettings>, AppStoreError>;
     async fn set_settings(&self, user_id: Uuid, s: &UserSettings) -> Result<(), AppStoreError>;
 
-    async fn create_session(&self, token_hash: &str, user_id: Uuid, expires_at: DateTime<Utc>) -> Result<(), AppStoreError>;
+    async fn create_session(
+        &self,
+        token_hash: &str,
+        user_id: Uuid,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), AppStoreError>;
     async fn session_user(&self, token_hash: &str) -> Result<Option<Uuid>, AppStoreError>;
     /// Remember a Mini App initData hash so the same signed payload cannot mint
     /// a second session (replay mitigation). Returns false if already seen.
-    async fn remember_init_data(&self, hash: &str, expires_at: DateTime<Utc>) -> Result<bool, AppStoreError>;
+    async fn remember_init_data(
+        &self,
+        hash: &str,
+        expires_at: DateTime<Utc>,
+    ) -> Result<bool, AppStoreError>;
 
     async fn create_callback(&self, t: &CallbackToken) -> Result<(), AppStoreError>;
-    async fn check_callback(&self, token: &str, telegram_id: i64, chat_id: i64) -> Result<CallbackCheck, AppStoreError>;
+    async fn check_callback(
+        &self,
+        token: &str,
+        telegram_id: i64,
+        chat_id: i64,
+    ) -> Result<CallbackCheck, AppStoreError>;
 
     /// Returns true the first time an update_id is seen.
     async fn mark_update(&self, update_id: i64) -> Result<bool, AppStoreError>;
@@ -184,13 +227,28 @@ pub trait AppStore: Send + Sync {
 
     async fn enqueue(&self, m: &OutboxMessage) -> Result<bool, AppStoreError>;
     async fn due_messages(&self, limit: usize) -> Result<Vec<OutboxMessage>, AppStoreError>;
-    async fn mark_sent(&self, id: Uuid, telegram_message_id: Option<i64>) -> Result<(), AppStoreError>;
-    async fn mark_retry(&self, id: Uuid, at: DateTime<Utc>, err: &str) -> Result<(), AppStoreError>;
+    async fn mark_sent(
+        &self,
+        id: Uuid,
+        telegram_message_id: Option<i64>,
+    ) -> Result<(), AppStoreError>;
+    async fn mark_retry(&self, id: Uuid, at: DateTime<Utc>, err: &str)
+        -> Result<(), AppStoreError>;
 
-    async fn set_order_message(&self, order_id: Uuid, chat_id: i64, message_id: i64) -> Result<(), AppStoreError>;
+    async fn set_order_message(
+        &self,
+        order_id: Uuid,
+        chat_id: i64,
+        message_id: i64,
+    ) -> Result<(), AppStoreError>;
     async fn order_message(&self, order_id: Uuid) -> Result<Option<(i64, i64)>, AppStoreError>;
 
-    async fn audit(&self, user_id: Option<Uuid>, kind: &str, detail: serde_json::Value) -> Result<(), AppStoreError>;
+    async fn audit(
+        &self,
+        user_id: Option<Uuid>,
+        kind: &str,
+        detail: serde_json::Value,
+    ) -> Result<(), AppStoreError>;
 }
 
 #[derive(Default)]
@@ -221,16 +279,32 @@ impl MemAppStore {
         self.inner.lock().audit.len()
     }
     pub fn sent_texts(&self) -> Vec<(i64, String)> {
-        self.inner.lock().outbox.iter().filter(|(_, s)| *s).map(|(m, _)| (m.chat_id, m.text.clone())).collect()
+        self.inner
+            .lock()
+            .outbox
+            .iter()
+            .filter(|(_, s)| *s)
+            .map(|(m, _)| (m.chat_id, m.text.clone()))
+            .collect()
     }
     pub fn all_outbox(&self) -> Vec<OutboxMessage> {
-        self.inner.lock().outbox.iter().map(|(m, _)| m.clone()).collect()
+        self.inner
+            .lock()
+            .outbox
+            .iter()
+            .map(|(m, _)| m.clone())
+            .collect()
     }
 }
 
 #[async_trait]
 impl AppStore for MemAppStore {
-    async fn upsert_telegram_user(&self, telegram_id: i64, username: Option<String>, beta_allowed: bool) -> Result<User, AppStoreError> {
+    async fn upsert_telegram_user(
+        &self,
+        telegram_id: i64,
+        username: Option<String>,
+        beta_allowed: bool,
+    ) -> Result<User, AppStoreError> {
         let mut g = self.inner.lock();
         if let Some(id) = g.by_tg.get(&telegram_id).copied() {
             let u = g.users.get_mut(&id).unwrap();
@@ -238,36 +312,74 @@ impl AppStore for MemAppStore {
             u.beta_allowed = beta_allowed;
             return Ok(u.clone());
         }
-        let u = User { id: Uuid::new_v4(), telegram_id, username, created_at: Utc::now(), beta_allowed };
+        let u = User {
+            id: Uuid::new_v4(),
+            telegram_id,
+            username,
+            created_at: Utc::now(),
+            beta_allowed,
+        };
         g.by_tg.insert(telegram_id, u.id);
         g.users.insert(u.id, u.clone());
         Ok(u)
     }
     async fn get_user(&self, id: Uuid) -> Result<User, AppStoreError> {
-        self.inner.lock().users.get(&id).cloned().ok_or(AppStoreError::NotFound)
+        self.inner
+            .lock()
+            .users
+            .get(&id)
+            .cloned()
+            .ok_or(AppStoreError::NotFound)
     }
     async fn user_by_telegram(&self, telegram_id: i64) -> Result<Option<User>, AppStoreError> {
         let g = self.inner.lock();
-        Ok(g.by_tg.get(&telegram_id).and_then(|id| g.users.get(id)).cloned())
+        Ok(g.by_tg
+            .get(&telegram_id)
+            .and_then(|id| g.users.get(id))
+            .cloned())
     }
-    async fn create_wallet(&self, w: &Wallet, sealed: Option<&SealedKey>) -> Result<(), AppStoreError> {
+    async fn create_wallet(
+        &self,
+        w: &Wallet,
+        sealed: Option<&SealedKey>,
+    ) -> Result<(), AppStoreError> {
         let mut g = self.inner.lock();
-        if g.wallets.values().any(|(x, _)| x.pubkey == w.pubkey && x.network == w.network) {
+        if g.wallets
+            .values()
+            .any(|(x, _)| x.pubkey == w.pubkey && x.network == w.network)
+        {
             return Err(AppStoreError::Conflict("wallet exists".into()));
         }
         g.wallets.insert(w.id, (w.clone(), sealed.cloned()));
         Ok(())
     }
     async fn list_wallets(&self, user_id: Uuid) -> Result<Vec<Wallet>, AppStoreError> {
-        let mut v: Vec<Wallet> = self.inner.lock().wallets.values().filter(|(w, _)| w.user_id == user_id).map(|(w, _)| w.clone()).collect();
+        let mut v: Vec<Wallet> = self
+            .inner
+            .lock()
+            .wallets
+            .values()
+            .filter(|(w, _)| w.user_id == user_id)
+            .map(|(w, _)| w.clone())
+            .collect();
         v.sort_by_key(|w| w.created_at);
         Ok(v)
     }
     async fn get_wallet(&self, id: Uuid) -> Result<Wallet, AppStoreError> {
-        self.inner.lock().wallets.get(&id).map(|(w, _)| w.clone()).ok_or(AppStoreError::NotFound)
+        self.inner
+            .lock()
+            .wallets
+            .get(&id)
+            .map(|(w, _)| w.clone())
+            .ok_or(AppStoreError::NotFound)
     }
     async fn sealed_key(&self, wallet_id: Uuid) -> Result<Option<SealedKey>, AppStoreError> {
-        Ok(self.inner.lock().wallets.get(&wallet_id).and_then(|(_, s)| s.clone()))
+        Ok(self
+            .inner
+            .lock()
+            .wallets
+            .get(&wallet_id)
+            .and_then(|(_, s)| s.clone()))
     }
     async fn get_policy(&self, wallet_id: Uuid) -> Result<Option<WalletPolicy>, AppStoreError> {
         Ok(self.inner.lock().policies.get(&wallet_id).cloned())
@@ -283,14 +395,32 @@ impl AppStore for MemAppStore {
         self.inner.lock().settings.insert(user_id, s.clone());
         Ok(())
     }
-    async fn create_session(&self, token_hash: &str, user_id: Uuid, expires_at: DateTime<Utc>) -> Result<(), AppStoreError> {
-        self.inner.lock().sessions.insert(token_hash.to_string(), (user_id, expires_at));
+    async fn create_session(
+        &self,
+        token_hash: &str,
+        user_id: Uuid,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), AppStoreError> {
+        self.inner
+            .lock()
+            .sessions
+            .insert(token_hash.to_string(), (user_id, expires_at));
         Ok(())
     }
     async fn session_user(&self, token_hash: &str) -> Result<Option<Uuid>, AppStoreError> {
-        Ok(self.inner.lock().sessions.get(token_hash).filter(|(_, e)| *e > Utc::now()).map(|(u, _)| *u))
+        Ok(self
+            .inner
+            .lock()
+            .sessions
+            .get(token_hash)
+            .filter(|(_, e)| *e > Utc::now())
+            .map(|(u, _)| *u))
     }
-    async fn remember_init_data(&self, hash: &str, expires_at: DateTime<Utc>) -> Result<bool, AppStoreError> {
+    async fn remember_init_data(
+        &self,
+        hash: &str,
+        expires_at: DateTime<Utc>,
+    ) -> Result<bool, AppStoreError> {
         let mut g = self.inner.lock();
         let now = Utc::now();
         g.init_hashes.retain(|_, e| *e > now);
@@ -301,12 +431,22 @@ impl AppStore for MemAppStore {
         Ok(true)
     }
     async fn create_callback(&self, t: &CallbackToken) -> Result<(), AppStoreError> {
-        self.inner.lock().callbacks.insert(t.token.clone(), t.clone());
+        self.inner
+            .lock()
+            .callbacks
+            .insert(t.token.clone(), t.clone());
         Ok(())
     }
-    async fn check_callback(&self, token: &str, telegram_id: i64, chat_id: i64) -> Result<CallbackCheck, AppStoreError> {
+    async fn check_callback(
+        &self,
+        token: &str,
+        telegram_id: i64,
+        chat_id: i64,
+    ) -> Result<CallbackCheck, AppStoreError> {
         let mut g = self.inner.lock();
-        let Some(t) = g.callbacks.get_mut(token) else { return Ok(CallbackCheck::Unknown) };
+        let Some(t) = g.callbacks.get_mut(token) else {
+            return Ok(CallbackCheck::Unknown);
+        };
         if t.telegram_id != telegram_id || t.chat_id != chat_id {
             return Ok(CallbackCheck::WrongUser);
         }
@@ -326,11 +466,16 @@ impl AppStore for MemAppStore {
     }
     async fn add_tracked(&self, t: &TrackedWallet) -> Result<(), AppStoreError> {
         let mut g = self.inner.lock();
-        if g.tracked.iter().any(|x| x.user_id == t.user_id && x.address == t.address) {
+        if g.tracked
+            .iter()
+            .any(|x| x.user_id == t.user_id && x.address == t.address)
+        {
             return Ok(());
         }
         if g.tracked.iter().filter(|x| x.user_id == t.user_id).count() >= 20 {
-            return Err(AppStoreError::Conflict("tracking limit (20) reached".into()));
+            return Err(AppStoreError::Conflict(
+                "tracking limit (20) reached".into(),
+            ));
         }
         g.tracked.push(t.clone());
         Ok(())
@@ -338,11 +483,19 @@ impl AppStore for MemAppStore {
     async fn remove_tracked(&self, user_id: Uuid, address: &str) -> Result<bool, AppStoreError> {
         let mut g = self.inner.lock();
         let before = g.tracked.len();
-        g.tracked.retain(|x| !(x.user_id == user_id && x.address == address));
+        g.tracked
+            .retain(|x| !(x.user_id == user_id && x.address == address));
         Ok(g.tracked.len() != before)
     }
     async fn list_tracked(&self, user_id: Uuid) -> Result<Vec<TrackedWallet>, AppStoreError> {
-        Ok(self.inner.lock().tracked.iter().filter(|x| x.user_id == user_id).cloned().collect())
+        Ok(self
+            .inner
+            .lock()
+            .tracked
+            .iter()
+            .filter(|x| x.user_id == user_id)
+            .cloned()
+            .collect())
     }
     async fn enqueue(&self, m: &OutboxMessage) -> Result<bool, AppStoreError> {
         let mut g = self.inner.lock();
@@ -354,30 +507,71 @@ impl AppStore for MemAppStore {
     }
     async fn due_messages(&self, limit: usize) -> Result<Vec<OutboxMessage>, AppStoreError> {
         let now = Utc::now();
-        Ok(self.inner.lock().outbox.iter().filter(|(m, s)| !s && m.next_attempt_at <= now).take(limit).map(|(m, _)| m.clone()).collect())
+        Ok(self
+            .inner
+            .lock()
+            .outbox
+            .iter()
+            .filter(|(m, s)| !s && m.next_attempt_at <= now)
+            .take(limit)
+            .map(|(m, _)| m.clone())
+            .collect())
     }
     async fn mark_sent(&self, id: Uuid, _mid: Option<i64>) -> Result<(), AppStoreError> {
-        if let Some(e) = self.inner.lock().outbox.iter_mut().find(|(m, _)| m.id == id) {
+        if let Some(e) = self
+            .inner
+            .lock()
+            .outbox
+            .iter_mut()
+            .find(|(m, _)| m.id == id)
+        {
             e.1 = true;
         }
         Ok(())
     }
-    async fn mark_retry(&self, id: Uuid, at: DateTime<Utc>, _err: &str) -> Result<(), AppStoreError> {
-        if let Some(e) = self.inner.lock().outbox.iter_mut().find(|(m, _)| m.id == id) {
+    async fn mark_retry(
+        &self,
+        id: Uuid,
+        at: DateTime<Utc>,
+        _err: &str,
+    ) -> Result<(), AppStoreError> {
+        if let Some(e) = self
+            .inner
+            .lock()
+            .outbox
+            .iter_mut()
+            .find(|(m, _)| m.id == id)
+        {
             e.0.attempts += 1;
             e.0.next_attempt_at = at;
         }
         Ok(())
     }
-    async fn set_order_message(&self, order_id: Uuid, chat_id: i64, message_id: i64) -> Result<(), AppStoreError> {
-        self.inner.lock().order_msgs.insert(order_id, (chat_id, message_id));
+    async fn set_order_message(
+        &self,
+        order_id: Uuid,
+        chat_id: i64,
+        message_id: i64,
+    ) -> Result<(), AppStoreError> {
+        self.inner
+            .lock()
+            .order_msgs
+            .insert(order_id, (chat_id, message_id));
         Ok(())
     }
     async fn order_message(&self, order_id: Uuid) -> Result<Option<(i64, i64)>, AppStoreError> {
         Ok(self.inner.lock().order_msgs.get(&order_id).copied())
     }
-    async fn audit(&self, user_id: Option<Uuid>, kind: &str, detail: serde_json::Value) -> Result<(), AppStoreError> {
-        self.inner.lock().audit.push((user_id, kind.to_string(), detail, Utc::now()));
+    async fn audit(
+        &self,
+        user_id: Option<Uuid>,
+        kind: &str,
+        detail: serde_json::Value,
+    ) -> Result<(), AppStoreError> {
+        self.inner
+            .lock()
+            .audit
+            .push((user_id, kind.to_string(), detail, Utc::now()));
         Ok(())
     }
 }

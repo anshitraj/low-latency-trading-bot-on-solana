@@ -20,7 +20,9 @@ pub const TOKEN_ACCOUNT_LEN: u64 = 165;
 pub const TOKEN_2022_ATA_LEN: u64 = 170;
 
 pub fn rent_exempt_minimum(data_len: u64) -> Lamports {
-    Lamports((ACCOUNT_STORAGE_OVERHEAD + data_len) * LAMPORTS_PER_BYTE_YEAR * EXEMPTION_THRESHOLD_YEARS)
+    Lamports(
+        (ACCOUNT_STORAGE_OVERHEAD + data_len) * LAMPORTS_PER_BYTE_YEAR * EXEMPTION_THRESHOLD_YEARS,
+    )
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -62,7 +64,9 @@ impl CostEstimate {
     /// Network-side costs paid regardless of trade size or execution success
     /// (a failed tx still pays base + priority; tip depends on sender semantics).
     pub fn network_fees(&self) -> Result<Lamports, MoneyError> {
-        self.base_fee.checked_add(self.priority_fee)?.checked_add(self.tip)
+        self.base_fee
+            .checked_add(self.priority_fee)?
+            .checked_add(self.tip)
     }
     pub fn total_overhead(&self) -> Result<Lamports, MoneyError> {
         self.network_fees()?.checked_add(self.rent_deposit)
@@ -86,23 +90,41 @@ mod tests {
 
     #[test]
     fn priority_fee_ceil() {
-        let cb = ComputeBudget { unit_limit: 200_000, unit_price_micro_lamports: 1 };
+        let cb = ComputeBudget {
+            unit_limit: 200_000,
+            unit_price_micro_lamports: 1,
+        };
         assert_eq!(cb.priority_fee(), Lamports(1)); // 0.2 lamports -> ceil 1
-        let cb = ComputeBudget { unit_limit: 200_000, unit_price_micro_lamports: 10_000 };
+        let cb = ComputeBudget {
+            unit_limit: 200_000,
+            unit_price_micro_lamports: 10_000,
+        };
         assert_eq!(cb.priority_fee(), Lamports(2_000));
-        let cb = ComputeBudget { unit_limit: 0, unit_price_micro_lamports: 10_000 };
+        let cb = ComputeBudget {
+            unit_limit: 0,
+            unit_price_micro_lamports: 10_000,
+        };
         assert_eq!(cb.priority_fee(), Lamports(0));
-        let cb = ComputeBudget { unit_limit: MAX_COMPUTE_UNIT_LIMIT, unit_price_micro_lamports: u64::MAX };
+        let cb = ComputeBudget {
+            unit_limit: MAX_COMPUTE_UNIT_LIMIT,
+            unit_price_micro_lamports: u64::MAX,
+        };
         assert!(cb.priority_fee().0 > 0);
     }
 
     #[test]
     fn capped_price_respects_cap() {
         let p = ComputeBudget::capped_price(200_000, 1_000_000, Lamports(10_000));
-        let cb = ComputeBudget { unit_limit: 200_000, unit_price_micro_lamports: p };
+        let cb = ComputeBudget {
+            unit_limit: 200_000,
+            unit_price_micro_lamports: p,
+        };
         assert!(cb.priority_fee() <= Lamports(10_000));
         assert_eq!(p, 50_000);
-        assert_eq!(ComputeBudget::capped_price(200_000, 10, Lamports(10_000)), 10);
+        assert_eq!(
+            ComputeBudget::capped_price(200_000, 10, Lamports(10_000)),
+            10
+        );
     }
 
     #[test]

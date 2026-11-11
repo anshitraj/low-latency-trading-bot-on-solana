@@ -31,16 +31,37 @@ pub async fn reply(st: &AppState, chat_id: i64, html: String, buttons: Value) {
     }
 }
 
-pub async fn button(st: &AppState, user: &User, chat_id: i64, text: &str, action: CallbackAction, ttl: i64) -> Value {
+pub async fn button(
+    st: &AppState,
+    user: &User,
+    chat_id: i64,
+    text: &str,
+    action: CallbackAction,
+    ttl: i64,
+) -> Value {
     let token = new_callback_token();
-    let t = CallbackToken { token: token.clone(), user_id: user.id, telegram_id: user.telegram_id, chat_id, action, expires_at: chrono::Utc::now() + chrono::Duration::seconds(ttl), used_at: None };
+    let t = CallbackToken {
+        token: token.clone(),
+        user_id: user.id,
+        telegram_id: user.telegram_id,
+        chat_id,
+        action,
+        expires_at: chrono::Utc::now() + chrono::Duration::seconds(ttl),
+        used_at: None,
+    };
     let _ = st.app.create_callback(&t).await;
     json!({"text": text, "callback_data": format!("t:{token}")})
 }
 
 fn webapp_button(st: &AppState, path: &str) -> Option<Value> {
-    let base = st.cfg.public_url.as_ref().filter(|u| u.starts_with("https://"))?;
-    Some(json!({"text": "📱 Open Mini App", "web_app": {"url": format!("{}{}", base.trim_end_matches('/'), path)}}))
+    let base = st
+        .cfg
+        .public_url
+        .as_ref()
+        .filter(|u| u.starts_with("https://"))?;
+    Some(
+        json!({"text": "📱 Open Mini App", "web_app": {"url": format!("{}{}", base.trim_end_matches('/'), path)}}),
+    )
 }
 
 pub async fn handle_update(st: &AppState, upd: Value) {
@@ -52,13 +73,23 @@ pub async fn handle_update(st: &AppState, upd: Value) {
 }
 
 fn looks_like_mint(s: &str) -> bool {
-    (32..=44).contains(&s.len()) && s.chars().all(|c| c.is_ascii_alphanumeric() && !"0OIl".contains(c))
+    (32..=44).contains(&s.len())
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() && !"0OIl".contains(c))
 }
 
 async fn handle_message(st: &AppState, msg: &Value) {
-    let chat_id = msg.pointer("/chat/id").and_then(|v| v.as_i64()).unwrap_or(0);
-    let chat_type = msg.pointer("/chat/type").and_then(|v| v.as_str()).unwrap_or("");
-    let Some(from_id) = msg.pointer("/from/id").and_then(|v| v.as_i64()) else { return };
+    let chat_id = msg
+        .pointer("/chat/id")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let chat_type = msg
+        .pointer("/chat/type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let Some(from_id) = msg.pointer("/from/id").and_then(|v| v.as_i64()) else {
+        return;
+    };
     if msg.pointer("/from/is_bot").and_then(|v| v.as_bool()) == Some(true) {
         return;
     }
@@ -69,11 +100,27 @@ async fn handle_message(st: &AppState, msg: &Value) {
     if !st.allow(&format!("tg:{from_id}"), 40) {
         return;
     }
-    let username = msg.pointer("/from/username").and_then(|v| v.as_str()).map(str::to_string);
-    let text = msg.get("text").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let username = msg
+        .pointer("/from/username")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    let text = msg
+        .get("text")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
     let user = match service::ensure_tg_user(st, from_id, username).await {
         Ok(u) => u,
-        Err(e) => return reply(st, chat_id, format!("Internal error: {}", esc(&e.to_string())), json!(null)).await,
+        Err(e) => {
+            return reply(
+                st,
+                chat_id,
+                format!("Internal error: {}", esc(&e.to_string())),
+                json!(null),
+            )
+            .await
+        }
     };
     if text.is_empty() {
         return;
@@ -81,14 +128,23 @@ async fn handle_message(st: &AppState, msg: &Value) {
     let (cmd, args) = match text.strip_prefix('/') {
         Some(rest) => {
             let mut it = rest.split_whitespace();
-            let c = it.next().unwrap_or("").split('@').next().unwrap_or("").to_ascii_lowercase();
+            let c = it
+                .next()
+                .unwrap_or("")
+                .split('@')
+                .next()
+                .unwrap_or("")
+                .to_ascii_lowercase();
             (c, it.map(str::to_string).collect::<Vec<_>>())
         }
         None => (String::new(), vec![]),
     };
     let r = match cmd.as_str() {
         "start" => cmd_start(st, &user, chat_id, args.first().cloned()).await,
-        "help" => Ok(reply(st, chat_id, render::HELP.into(), json!(null)).await),
+        "help" => {
+            let _: () = reply(st, chat_id, render::HELP.into(), json!(null)).await;
+            Ok(())
+        }
         "wallet" | "balance" => cmd_wallet(st, &user, chat_id).await,
         "buy" => cmd_trade(st, &user, chat_id, Side::Buy, &args).await,
         "sell" => cmd_trade(st, &user, chat_id, Side::Sell, &args).await,
@@ -99,20 +155,72 @@ async fn handle_message(st: &AppState, msg: &Value) {
         "track" => cmd_track(st, &user, chat_id, &args, true).await,
         "untrack" => cmd_track(st, &user, chat_id, &args, false).await,
         "pause" | "resume" => cmd_pause(st, &user, chat_id, cmd == "pause").await,
-        "status" => Ok(reply(st, chat_id, format!("{}<pre>{}</pre>", render::mode_banner(st.cfg.mode), esc(&serde_json::to_string_pretty(&service::provider_health(st)).unwrap_or_default())), json!(null)).await),
-        "copy" => Ok(reply(st, chat_id, "Copy trading is <b>not available</b> in this build (P1, disabled by default). Use /track for a public-wallet watchlist.".into(), json!(null)).await),
-        "referrals" => Ok(reply(st, chat_id, "Referrals are <b>not implemented</b> (P2). No rewards program is running.".into(), json!(null)).await),
-        "export" => Ok(reply(st, chat_id, "🔒 Key export is <b>disabled</b> in this build. Private keys and seed phrases are never sent through Telegram. Withdraw by trading back to SOL; withdrawals to external addresses are not yet available.".into(), json!(null)).await),
-        "support" => Ok(reply(st, chat_id, "Support: this is a private beta. Contact the operator who invited you. We will never DM you first or ask for keys.".into(), json!(null)).await),
+        "status" => {
+            let _: () = reply(
+                st,
+                chat_id,
+                format!(
+                    "{}<pre>{}</pre>",
+                    render::mode_banner(st.cfg.mode),
+                    esc(&serde_json::to_string_pretty(&service::provider_health(st))
+                        .unwrap_or_default())
+                ),
+                json!(null),
+            )
+            .await;
+            Ok(())
+        }
+        "copy" => {
+            let _: () = reply(st, chat_id, "Copy trading is <b>not available</b> in this build (P1, disabled by default). Use /track for a public-wallet watchlist.".into(), json!(null)).await;
+            Ok(())
+        }
+        "referrals" => {
+            let _: () = reply(
+                st,
+                chat_id,
+                "Referrals are <b>not implemented</b> (P2). No rewards program is running.".into(),
+                json!(null),
+            )
+            .await;
+            Ok(())
+        }
+        "export" => {
+            let _: () = reply(st, chat_id, "🔒 Key export is <b>disabled</b> in this build. Private keys and seed phrases are never sent through Telegram. Withdraw by trading back to SOL; withdrawals to external addresses are not yet available.".into(), json!(null)).await;
+            Ok(())
+        }
+        "support" => {
+            let _: () = reply(st, chat_id, "Support: this is a private beta. Contact the operator who invited you. We will never DM you first or ask for keys.".into(), json!(null)).await;
+            Ok(())
+        }
         "" if looks_like_mint(&text) => token_panel(st, &user, chat_id, &text).await,
-        _ => Ok(reply(st, chat_id, "Unknown command. Send /help, or paste a token mint address.".into(), json!(null)).await),
+        _ => {
+            let _: () = reply(
+                st,
+                chat_id,
+                "Unknown command. Send /help, or paste a token mint address.".into(),
+                json!(null),
+            )
+            .await;
+            Ok(())
+        }
     };
     if let Err(e) = r {
-        reply(st, chat_id, format!("❌ {}", esc(&e.to_string())), json!(null)).await;
+        reply(
+            st,
+            chat_id,
+            format!("❌ {}", esc(&e.to_string())),
+            json!(null),
+        )
+        .await;
     }
 }
 
-async fn cmd_start(st: &AppState, user: &User, chat_id: i64, payload: Option<String>) -> Result<(), ServiceError> {
+async fn cmd_start(
+    st: &AppState,
+    user: &User,
+    chat_id: i64,
+    payload: Option<String>,
+) -> Result<(), ServiceError> {
     if !user.beta_allowed {
         reply(st, chat_id, "This bot is in a closed private beta. Your Telegram account is not on the tester list.".into(), json!(null)).await;
         return Ok(());
@@ -120,7 +228,17 @@ async fn cmd_start(st: &AppState, user: &User, chat_id: i64, payload: Option<Str
     let wallet = service::default_wallet(st, user).await?;
     let mut rows = vec![];
     if wallet.is_none() {
-        rows.push(vec![button(st, user, chat_id, "🔑 Create test trading wallet", CallbackAction::CreateWallet, NAV_BUTTON_TTL).await]);
+        rows.push(vec![
+            button(
+                st,
+                user,
+                chat_id,
+                "🔑 Create test trading wallet",
+                CallbackAction::CreateWallet,
+                NAV_BUTTON_TTL,
+            )
+            .await,
+        ]);
     }
     if let Some(b) = webapp_button(st, "/") {
         rows.push(vec![b]);
@@ -139,15 +257,47 @@ async fn cmd_start(st: &AppState, user: &User, chat_id: i64, payload: Option<Str
 
 async fn cmd_wallet(st: &AppState, user: &User, chat_id: i64) -> Result<(), ServiceError> {
     let Some(w) = service::default_wallet(st, user).await? else {
-        let b = button(st, user, chat_id, "🔑 Create test trading wallet", CallbackAction::CreateWallet, NAV_BUTTON_TTL).await;
-        reply(st, chat_id, "No wallet yet.".into(), json!({"inline_keyboard": [[b]]})).await;
+        let b = button(
+            st,
+            user,
+            chat_id,
+            "🔑 Create test trading wallet",
+            CallbackAction::CreateWallet,
+            NAV_BUTTON_TTL,
+        )
+        .await;
+        reply(
+            st,
+            chat_id,
+            "No wallet yet.".into(),
+            json!({"inline_keyboard": [[b]]}),
+        )
+        .await;
         return Ok(());
     };
     let pk = trader_domain::pubkey::parse(&w.pubkey).map_err(ServiceError::Internal)?;
-    let bal = st.rpc.get_balance(&pk, Commitment::Confirmed).await.map(|(l, _)| format!("{} SOL", render::sol(l))).unwrap_or_else(|_| "unavailable".into());
+    let bal = st
+        .rpc
+        .get_balance(&pk, Commitment::Confirmed)
+        .await
+        .map(|(l, _)| format!("{} SOL", render::sol(l)))
+        .unwrap_or_else(|_| "unavailable".into());
     let mut rows = vec![];
-    if matches!(st.cfg.mode, Network::Mock | Network::Localnet | Network::Devnet) {
-        rows.push(vec![button(st, user, chat_id, "💧 Airdrop test SOL", CallbackAction::MockAirdrop, NAV_BUTTON_TTL).await]);
+    if matches!(
+        st.cfg.mode,
+        Network::Mock | Network::Localnet | Network::Devnet
+    ) {
+        rows.push(vec![
+            button(
+                st,
+                user,
+                chat_id,
+                "💧 Airdrop test SOL",
+                CallbackAction::MockAirdrop,
+                NAV_BUTTON_TTL,
+            )
+            .await,
+        ]);
     }
     let text = format!(
         "{}<b>Wallet</b> ({}): <code>{}</code>\nBalance: {}\nSigner: managed by this service (envelope-encrypted at rest; decrypted in server memory to sign). Not hardware-isolated.\n⚠️ Fund only small amounts. Export is disabled.",
@@ -160,40 +310,98 @@ async fn cmd_wallet(st: &AppState, user: &User, chat_id: i64) -> Result<(), Serv
     Ok(())
 }
 
-async fn cmd_trade(st: &AppState, user: &User, chat_id: i64, side: Side, args: &[String]) -> Result<(), ServiceError> {
+async fn cmd_trade(
+    st: &AppState,
+    user: &User,
+    chat_id: i64,
+    side: Side,
+    args: &[String],
+) -> Result<(), ServiceError> {
     let (Some(mint), Some(amt)) = (args.first(), args.get(1)) else {
-        return Err(ServiceError::BadRequest(if side == Side::Buy { "usage: /buy <mint> <SOL amount>".into() } else { "usage: /sell <mint> <percent 1-100>".into() }));
+        return Err(ServiceError::BadRequest(if side == Side::Buy {
+            "usage: /buy <mint> <SOL amount>".into()
+        } else {
+            "usage: /sell <mint> <percent 1-100>".into()
+        }));
     };
     let mint = service::parse_mint_arg(mint)?;
     let amount = match side {
-        Side::Buy => AmountSpec::ExactSolIn { lamports: Lamports::from_sol_str(amt).map_err(|e| ServiceError::BadRequest(e.to_string()))? },
+        Side::Buy => AmountSpec::ExactSolIn {
+            lamports: Lamports::from_sol_str(amt)
+                .map_err(|e| ServiceError::BadRequest(e.to_string()))?,
+        },
         Side::Sell => {
-            let pct: u32 = amt.trim_end_matches('%').parse().map_err(|_| ServiceError::BadRequest("percent must be 1-100".into()))?;
+            let pct: u32 = amt
+                .trim_end_matches('%')
+                .parse()
+                .map_err(|_| ServiceError::BadRequest("percent must be 1-100".into()))?;
             if !(1..=100).contains(&pct) {
                 return Err(ServiceError::BadRequest("percent must be 1-100".into()));
             }
-            AmountSpec::SellPercent { bps: Bps::new(pct * 100).unwrap() }
+            AmountSpec::SellPercent {
+                bps: Bps::new(pct * 100).unwrap(),
+            }
         }
     };
-    let w = service::default_wallet(st, user).await?.ok_or(ServiceError::NoWallet)?;
+    let w = service::default_wallet(st, user)
+        .await?
+        .ok_or(ServiceError::NoWallet)?;
     // Commands are not idempotent across separate messages (each /buy is a new
     // intent), but webhook retries of the SAME update are deduped by update_id.
-    let intent = service::build_intent(st, user, &w, side, mint, amount, format!("tg:cmd:{}", Uuid::new_v4()), None).await?;
+    let intent = service::build_intent(
+        st,
+        user,
+        &w,
+        side,
+        mint,
+        amount,
+        format!("tg:cmd:{}", Uuid::new_v4()),
+        None,
+    )
+    .await?;
     let o = service::submit(st, user, intent, None).await?;
-    reply(st, chat_id, format!("⏳ Order <code>{}</code> created — preparing quote…", o.id), json!(null)).await;
+    reply(
+        st,
+        chat_id,
+        format!("⏳ Order <code>{}</code> created — preparing quote…", o.id),
+        json!(null),
+    )
+    .await;
     Ok(())
 }
 
-async fn token_panel(st: &AppState, user: &User, chat_id: i64, mint_s: &str) -> Result<(), ServiceError> {
+async fn token_panel(
+    st: &AppState,
+    user: &User,
+    chat_id: i64,
+    mint_s: &str,
+) -> Result<(), ServiceError> {
     let mint = service::parse_mint_arg(mint_s)?;
     let info = service::token_info(st, mint).await;
-    let mut text = format!("{}<b>Token</b> <code>{}</code>\n", render::mode_banner(st.cfg.mode), esc(&info.mint));
+    let mut text = format!(
+        "{}<b>Token</b> <code>{}</code>\n",
+        render::mode_banner(st.cfg.mode),
+        esc(&info.mint)
+    );
     match (&info.adapter, &info.market) {
         (Some(a), Some(m)) => {
-            let liq = m.get("liquidity_sol_lamports").and_then(|v| v.as_str()).and_then(|s| s.parse::<u64>().ok()).map(|l| format!("{} SOL", render::sol(l))).unwrap_or_else(|| "unknown".into());
-            text.push_str(&format!("Market: {} · Liquidity: {} · Source: {}\n", esc(a), esc(&liq), esc(m.get("source").and_then(|v| v.as_str()).unwrap_or("?"))));
+            let liq = m
+                .get("liquidity_sol_lamports")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<u64>().ok())
+                .map(|l| format!("{} SOL", render::sol(l)))
+                .unwrap_or_else(|| "unknown".into());
+            text.push_str(&format!(
+                "Market: {} · Liquidity: {} · Source: {}\n",
+                esc(a),
+                esc(&liq),
+                esc(m.get("source").and_then(|v| v.as_str()).unwrap_or("?"))
+            ));
         }
-        _ => text.push_str(&format!("Market: <b>not supported</b> — {}\n", esc(info.unsupported_reason.as_deref().unwrap_or("unknown")))),
+        _ => text.push_str(&format!(
+            "Market: <b>not supported</b> — {}\n",
+            esc(info.unsupported_reason.as_deref().unwrap_or("unknown"))
+        )),
     }
     match &info.risk {
         Some(r) => {
@@ -205,7 +413,12 @@ async fn token_panel(st: &AppState, user: &User, chat_id: i64, mint_s: &str) -> 
                 };
                 text.push_str(&format!("{icon} {}\n", esc(&f.message)));
             }
-            text.push_str(&format!("Top-10 holders: {}\n", r.top10_holder_bps.map(|b| format!("{}% (includes curve/pool account)", b / 100)).unwrap_or_else(|| "Unknown".into())));
+            text.push_str(&format!(
+                "Top-10 holders: {}\n",
+                r.top10_holder_bps
+                    .map(|b| format!("{}% (includes curve/pool account)", b / 100))
+                    .unwrap_or_else(|| "Unknown".into())
+            ));
         }
         None => text.push_str("Mint data: Unknown (not available from RPC)\n"),
     }
@@ -215,17 +428,55 @@ async fn token_panel(st: &AppState, user: &User, chat_id: i64, mint_s: &str) -> 
         let s = service::settings(st, user).await?;
         let mut buys = vec![];
         for l in &s.buy_presets {
-            buys.push(button(st, user, chat_id, &format!("Buy {}", render::sol(l.0)), CallbackAction::Buy { mint: info.mint.clone(), lamports: l.0 }, TRADE_BUTTON_TTL).await);
+            buys.push(
+                button(
+                    st,
+                    user,
+                    chat_id,
+                    &format!("Buy {}", render::sol(l.0)),
+                    CallbackAction::Buy {
+                        mint: info.mint.clone(),
+                        lamports: l.0,
+                    },
+                    TRADE_BUTTON_TTL,
+                )
+                .await,
+            );
         }
         for chunk in buys.chunks(3) {
             rows.push(chunk.to_vec());
         }
         let mut sells = vec![];
         for b in &s.sell_presets_bps {
-            sells.push(button(st, user, chat_id, &format!("Sell {}%", b / 100), CallbackAction::Sell { mint: info.mint.clone(), bps: *b }, TRADE_BUTTON_TTL).await);
+            sells.push(
+                button(
+                    st,
+                    user,
+                    chat_id,
+                    &format!("Sell {}%", b / 100),
+                    CallbackAction::Sell {
+                        mint: info.mint.clone(),
+                        bps: *b,
+                    },
+                    TRADE_BUTTON_TTL,
+                )
+                .await,
+            );
         }
         rows.push(sells);
-        rows.push(vec![button(st, user, chat_id, "🔄 Refresh", CallbackAction::Refresh { mint: info.mint.clone() }, NAV_BUTTON_TTL).await]);
+        rows.push(vec![
+            button(
+                st,
+                user,
+                chat_id,
+                "🔄 Refresh",
+                CallbackAction::Refresh {
+                    mint: info.mint.clone(),
+                },
+                NAV_BUTTON_TTL,
+            )
+            .await,
+        ]);
     }
     reply(st, chat_id, text, json!({"inline_keyboard": rows})).await;
     Ok(())
@@ -233,13 +484,25 @@ async fn token_panel(st: &AppState, user: &User, chat_id: i64, mint_s: &str) -> 
 
 async fn cmd_positions(st: &AppState, user: &User, chat_id: i64) -> Result<(), ServiceError> {
     let p = service::portfolio(st, user).await?;
-    let mut text = format!("{}<b>Positions</b> (cost basis: weighted average, fees included)\n", render::mode_banner(st.cfg.mode));
+    let mut text = format!(
+        "{}<b>Positions</b> (cost basis: weighted average, fees included)\n",
+        render::mode_banner(st.cfg.mode)
+    );
     let mut any = false;
     for w in p["wallets"].as_array().cloned().unwrap_or_default() {
         for pos in w["positions"].as_array().cloned().unwrap_or_default() {
             any = true;
             let lam = |k: &str| pos[k].as_str().and_then(|s| s.parse::<i128>().ok());
-            let fmt = |v: Option<i128>| v.map(|x| format!("{}{} SOL", if x < 0 { "-" } else { "" }, render::sol(x.unsigned_abs() as u64))).unwrap_or_else(|| "unavailable".into());
+            let fmt = |v: Option<i128>| {
+                v.map(|x| {
+                    format!(
+                        "{}{} SOL",
+                        if x < 0 { "-" } else { "" },
+                        render::sol(x.unsigned_abs() as u64)
+                    )
+                })
+                .unwrap_or_else(|| "unavailable".into())
+            };
             text.push_str(&format!(
                 "\n<code>{}</code> qty {} · cost {} · realized {} · unrealized {} ({})",
                 esc(&short(pos["mint"].as_str().unwrap_or(""))),
@@ -259,7 +522,11 @@ async fn cmd_positions(st: &AppState, user: &User, chat_id: i64) -> Result<(), S
 }
 
 async fn cmd_orders(st: &AppState, user: &User, chat_id: i64) -> Result<(), ServiceError> {
-    let orders = st.orders.list_orders(user.id, 10).await.map_err(|e| ServiceError::Internal(e.to_string()))?;
+    let orders = st
+        .orders
+        .list_orders(user.id, 10)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
     let mut text = "<b>Recent orders</b>".to_string();
     if orders.is_empty() {
         text.push_str("\nNone yet.");
@@ -267,11 +534,18 @@ async fn cmd_orders(st: &AppState, user: &User, chat_id: i64) -> Result<(), Serv
     for o in orders {
         text.push_str(&format!(
             "\n{} {} <code>{}</code> — <b>{}</b>{}",
-            if o.intent.side == Side::Buy { "BUY" } else { "SELL" },
+            if o.intent.side == Side::Buy {
+                "BUY"
+            } else {
+                "SELL"
+            },
             esc(&short(&o.intent.mint.to_string())),
             esc(&short(&o.id.to_string())),
             o.state.as_str(),
-            o.signed.as_ref().map(|s| format!(" · sig <code>{}</code>", esc(&short(&s.signature)))).unwrap_or_default()
+            o.signed
+                .as_ref()
+                .map(|s| format!(" · sig <code>{}</code>", esc(&short(&s.signature))))
+                .unwrap_or_default()
         ));
     }
     reply(st, chat_id, text, json!(null)).await;
@@ -296,55 +570,135 @@ async fn cmd_settings(st: &AppState, user: &User, chat_id: i64) -> Result<(), Se
     Ok(())
 }
 
-async fn cmd_set(st: &AppState, user: &User, chat_id: i64, args: &[String]) -> Result<(), ServiceError> {
-    let (Some(k), Some(v)) = (args.first(), args.get(1)) else { return Err(ServiceError::BadRequest("usage: /set <key> <value>".into())) };
+async fn cmd_set(
+    st: &AppState,
+    user: &User,
+    chat_id: i64,
+    args: &[String],
+) -> Result<(), ServiceError> {
+    let (Some(k), Some(v)) = (args.first(), args.get(1)) else {
+        return Err(ServiceError::BadRequest("usage: /set <key> <value>".into()));
+    };
     let mut s = service::settings(st, user).await?;
     let bad = |m: &str| ServiceError::BadRequest(m.to_string());
     match k.as_str() {
-        "slippage" => s.slippage = Bps::new(v.parse().map_err(|_| bad("slippage in bps"))?).map_err(|e| bad(&e.to_string()))?,
-        "presets" => s.buy_presets = v.split(',').map(|x| Lamports::from_sol_str(x)).collect::<Result<Vec<_>, _>>().map_err(|e| bad(&e.to_string()))?,
+        "slippage" => {
+            s.slippage = Bps::new(v.parse().map_err(|_| bad("slippage in bps"))?)
+                .map_err(|e| bad(&e.to_string()))?
+        }
+        "presets" => {
+            s.buy_presets = v
+                .split(',')
+                .map(Lamports::from_sol_str)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| bad(&e.to_string()))?
+        }
         "confirm" => s.confirm_trades = matches!(v.as_str(), "on" | "true" | "yes"),
-        "priority" => s.compute_unit_price_micro_lamports = v.parse().map_err(|_| bad("µlamports per CU"))?,
-        "maxfee" => s.max_priority_fee = Lamports::from_sol_str(v).map_err(|e| bad(&e.to_string()))?,
+        "priority" => {
+            s.compute_unit_price_micro_lamports = v.parse().map_err(|_| bad("µlamports per CU"))?
+        }
+        "maxfee" => {
+            s.max_priority_fee = Lamports::from_sol_str(v).map_err(|e| bad(&e.to_string()))?
+        }
         "tip" => s.tip = Lamports::from_sol_str(v).map_err(|e| bad(&e.to_string()))?,
         _ => return Err(bad("unknown setting")),
     }
     s.validate().map_err(ServiceError::BadRequest)?;
     st.app.set_settings(user.id, &s).await?;
-    st.app.audit(Some(user.id), "settings_changed", json!({"key": k})).await.ok();
-    reply(st, chat_id, "✅ Saved. Per-wallet hard limits (max order, daily turnover, fee/tip caps) still apply.".into(), json!(null)).await;
+    st.app
+        .audit(Some(user.id), "settings_changed", json!({"key": k}))
+        .await
+        .ok();
+    reply(
+        st,
+        chat_id,
+        "✅ Saved. Per-wallet hard limits (max order, daily turnover, fee/tip caps) still apply."
+            .into(),
+        json!(null),
+    )
+    .await;
     Ok(())
 }
 
-async fn cmd_track(st: &AppState, user: &User, chat_id: i64, args: &[String], add: bool) -> Result<(), ServiceError> {
-    let addr = args.first().ok_or_else(|| ServiceError::BadRequest("usage: /track <wallet address>".into()))?;
+async fn cmd_track(
+    st: &AppState,
+    user: &User,
+    chat_id: i64,
+    args: &[String],
+    add: bool,
+) -> Result<(), ServiceError> {
+    let addr = args
+        .first()
+        .ok_or_else(|| ServiceError::BadRequest("usage: /track <wallet address>".into()))?;
     let pk = service::parse_mint_arg(addr)?;
     if add {
         st.app
-            .add_tracked(&crate::appstore::TrackedWallet { user_id: user.id, address: pk.to_string(), label: args.get(1).cloned(), created_at: chrono::Utc::now() })
+            .add_tracked(&crate::appstore::TrackedWallet {
+                user_id: user.id,
+                address: pk.to_string(),
+                label: args.get(1).cloned(),
+                created_at: chrono::Utc::now(),
+            })
             .await?;
         reply(st, chat_id, format!("👀 Tracking <code>{}</code> (public on-chain activity only). Live alerts: polling-based, P1 — see /status.", esc(&pk.to_string())), json!(null)).await;
     } else {
         let removed = st.app.remove_tracked(user.id, &pk.to_string()).await?;
-        reply(st, chat_id, if removed { "Removed.".into() } else { "Not tracked.".into() }, json!(null)).await;
+        reply(
+            st,
+            chat_id,
+            if removed {
+                "Removed.".into()
+            } else {
+                "Not tracked.".into()
+            },
+            json!(null),
+        )
+        .await;
     }
     Ok(())
 }
 
-async fn cmd_pause(st: &AppState, user: &User, chat_id: i64, pause: bool) -> Result<(), ServiceError> {
-    let w = service::default_wallet(st, user).await?.ok_or(ServiceError::NoWallet)?;
-    let mut p = st.app.get_policy(w.id).await?.unwrap_or_else(|| crate::providers::default_policy(st.cfg.mode, &st.senders));
+async fn cmd_pause(
+    st: &AppState,
+    user: &User,
+    chat_id: i64,
+    pause: bool,
+) -> Result<(), ServiceError> {
+    let w = service::default_wallet(st, user)
+        .await?
+        .ok_or(ServiceError::NoWallet)?;
+    let mut p = st
+        .app
+        .get_policy(w.id)
+        .await?
+        .unwrap_or_else(|| crate::providers::default_policy(st.cfg.mode, &st.senders));
     p.paused = pause;
     st.app.set_policy(w.id, &p).await?;
-    st.app.audit(Some(user.id), if pause { "paused" } else { "resumed" }, json!({"wallet_id": w.id})).await.ok();
+    st.app
+        .audit(
+            Some(user.id),
+            if pause { "paused" } else { "resumed" },
+            json!({"wallet_id": w.id}),
+        )
+        .await
+        .ok();
     reply(st, chat_id, if pause { "⏸ Trading paused for your wallet. Pending signed transactions may still land; nothing new will be signed.".into() } else { "▶️ Trading resumed.".into() }, json!(null)).await;
     Ok(())
 }
 
 async fn handle_callback(st: &AppState, cb: &Value) {
-    let cb_id = cb.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let Some(from_id) = cb.pointer("/from/id").and_then(|v| v.as_i64()) else { return };
-    let chat_id = cb.pointer("/message/chat/id").and_then(|v| v.as_i64()).unwrap_or(0);
+    let cb_id = cb
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let Some(from_id) = cb.pointer("/from/id").and_then(|v| v.as_i64()) else {
+        return;
+    };
+    let chat_id = cb
+        .pointer("/message/chat/id")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
     let data = cb.get("data").and_then(|v| v.as_str()).unwrap_or("");
     let answer = |text: String| {
         let (tg, id) = (st.tg.clone(), cb_id.clone());
@@ -354,7 +708,9 @@ async fn handle_callback(st: &AppState, cb: &Value) {
             }
         }
     };
-    let Some(token) = data.strip_prefix("t:") else { return answer("Unknown button".into()).await };
+    let Some(token) = data.strip_prefix("t:") else {
+        return answer("Unknown button".into()).await;
+    };
     let check = match st.app.check_callback(token, from_id, chat_id).await {
         Ok(c) => c,
         Err(_) => return answer("Try again".into()).await,
@@ -366,15 +722,30 @@ async fn handle_callback(st: &AppState, cb: &Value) {
     let (action, replayed) = match check {
         CallbackCheck::Ok(a) => (a, false),
         CallbackCheck::Replayed(a) => (a, true),
-        CallbackCheck::Expired => return answer("This button expired. Paste the mint again for a fresh quote.".into()).await,
+        CallbackCheck::Expired => {
+            return answer("This button expired. Paste the mint again for a fresh quote.".into())
+                .await
+        }
         CallbackCheck::WrongUser => {
-            st.app.audit(Some(user.id), "callback_wrong_user", json!({"token": short(token)})).await.ok();
+            st.app
+                .audit(
+                    Some(user.id),
+                    "callback_wrong_user",
+                    json!({"token": short(token)}),
+                )
+                .await
+                .ok();
             return answer("Not your button.".into()).await;
         }
         CallbackCheck::Unknown => return answer("Unknown or expired button.".into()).await,
     };
     // Answer promptly (Telegram shows a spinner until answered).
-    answer(if replayed { "Already received — not submitting twice.".into() } else { "Working…".into() }).await;
+    answer(if replayed {
+        "Already received — not submitting twice.".into()
+    } else {
+        "Working…".into()
+    })
+    .await;
     let result: Result<(), ServiceError> = async {
         match action {
             CallbackAction::Buy { mint, lamports } => {
@@ -423,6 +794,12 @@ async fn handle_callback(st: &AppState, cb: &Value) {
     }
     .await;
     if let Err(e) = result {
-        reply(st, chat_id, format!("❌ {}", esc(&e.to_string())), json!(null)).await;
+        reply(
+            st,
+            chat_id,
+            format!("❌ {}", esc(&e.to_string())),
+            json!(null),
+        )
+        .await;
     }
 }

@@ -6,6 +6,6 @@ pub mod token;
 
 pub use cache::{Freshness, SlotCache, Stamped};
 pub use rpc::{
-    AccountData, RpcClient, RpcConfig, RpcError, SignatureStatus, TransactionDetails,
-    TokenBalanceChange,
+    AccountData, RpcClient, RpcConfig, RpcError, SignatureStatus, TokenBalanceChange,
+    TransactionDetails,
 };

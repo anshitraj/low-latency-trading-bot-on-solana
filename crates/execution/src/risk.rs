@@ -35,7 +35,11 @@ impl RiskReport {
         self.flags.iter().any(|f| f.level == RiskLevel::Block)
     }
     fn push(&mut self, code: &'static str, level: RiskLevel, message: impl Into<String>) {
-        self.flags.push(RiskFlag { code, level, message: message.into() });
+        self.flags.push(RiskFlag {
+            code,
+            level,
+            message: message.into(),
+        });
     }
 }
 
@@ -43,34 +47,64 @@ impl RiskReport {
 fn extension_policy(e: Extension) -> (RiskLevel, &'static str) {
     use Extension::*;
     match e {
-        MetadataPointer | TokenMetadata | GroupPointer | TokenGroup | GroupMemberPointer | TokenGroupMember | ImmutableOwner => {
-            (RiskLevel::Info, "metadata/group extension")
-        }
+        MetadataPointer | TokenMetadata | GroupPointer | TokenGroup | GroupMemberPointer
+        | TokenGroupMember | ImmutableOwner => (RiskLevel::Info, "metadata/group extension"),
         MintCloseAuthority => (RiskLevel::Warn, "mint close authority set"),
-        InterestBearingConfig | ScaledUiAmount => (RiskLevel::Warn, "UI amount differs from raw amount"),
-        TransferFeeConfig => (RiskLevel::Block, "transfer fee on base token is not supported by our quote math"),
-        TransferHook => (RiskLevel::Block, "transfer hook can run arbitrary code on transfer"),
-        PermanentDelegate => (RiskLevel::Block, "permanent delegate can move or burn holder tokens"),
-        NonTransferable => (RiskLevel::Block, "token is non-transferable"),
-        DefaultAccountState => (RiskLevel::Block, "default account state may freeze new accounts"),
-        Pausable => (RiskLevel::Block, "transfers can be paused by an authority"),
-        ConfidentialTransferMint | ConfidentialTransferFeeConfig | ConfidentialMintBurn => {
-            (RiskLevel::Block, "confidential transfer extensions not supported")
+        InterestBearingConfig | ScaledUiAmount => {
+            (RiskLevel::Warn, "UI amount differs from raw amount")
         }
+        TransferFeeConfig => (
+            RiskLevel::Block,
+            "transfer fee on base token is not supported by our quote math",
+        ),
+        TransferHook => (
+            RiskLevel::Block,
+            "transfer hook can run arbitrary code on transfer",
+        ),
+        PermanentDelegate => (
+            RiskLevel::Block,
+            "permanent delegate can move or burn holder tokens",
+        ),
+        NonTransferable => (RiskLevel::Block, "token is non-transferable"),
+        DefaultAccountState => (
+            RiskLevel::Block,
+            "default account state may freeze new accounts",
+        ),
+        Pausable => (RiskLevel::Block, "transfers can be paused by an authority"),
+        ConfidentialTransferMint | ConfidentialTransferFeeConfig | ConfidentialMintBurn => (
+            RiskLevel::Block,
+            "confidential transfer extensions not supported",
+        ),
         _ => (RiskLevel::Block, "unrecognized token extension"),
     }
 }
 
 pub fn screen_mint(mint: &MintInfo, top10_holder_bps: Option<u32>) -> RiskReport {
-    let mut r = RiskReport { top10_holder_bps, source: "on-chain mint account", ..Default::default() };
+    let mut r = RiskReport {
+        top10_holder_bps,
+        source: "on-chain mint account",
+        ..Default::default()
+    };
     if !mint.is_initialized {
-        r.push("uninitialized_mint", RiskLevel::Block, "mint is not initialized");
+        r.push(
+            "uninitialized_mint",
+            RiskLevel::Block,
+            "mint is not initialized",
+        );
     }
     if mint.freeze_authority.is_some() {
-        r.push("freeze_authority", RiskLevel::Block, "freeze authority is set: your tokens could be frozen");
+        r.push(
+            "freeze_authority",
+            RiskLevel::Block,
+            "freeze authority is set: your tokens could be frozen",
+        );
     }
     if mint.mint_authority.is_some() {
-        r.push("mint_authority", RiskLevel::Warn, "mint authority is set: supply can be inflated");
+        r.push(
+            "mint_authority",
+            RiskLevel::Warn,
+            "mint authority is set: supply can be inflated",
+        );
     }
     if mint.program == TokenProgram::Token2022 {
         r.push("token_2022", RiskLevel::Info, "Token-2022 mint");
@@ -82,8 +116,16 @@ pub fn screen_mint(mint: &MintInfo, top10_holder_bps: Option<u32>) -> RiskReport
         }
     }
     match top10_holder_bps {
-        Some(b) if b >= 8_000 => r.push("holder_concentration", RiskLevel::Warn, format!("top-10 holders own {}%", b / 100)),
-        None => r.push("holder_concentration_unknown", RiskLevel::Info, "holder concentration unknown"),
+        Some(b) if b >= 8_000 => r.push(
+            "holder_concentration",
+            RiskLevel::Warn,
+            format!("top-10 holders own {}%", b / 100),
+        ),
+        None => r.push(
+            "holder_concentration_unknown",
+            RiskLevel::Info,
+            "holder concentration unknown",
+        ),
         _ => {}
     }
     r
@@ -109,10 +151,25 @@ mod tests {
 
     #[test]
     fn blocks_dangerous_extensions() {
-        for e in [Extension::TransferHook, Extension::PermanentDelegate, Extension::TransferFeeConfig, Extension::NonTransferable, Extension::Other(99)] {
-            assert!(screen_mint(&mint(TokenProgram::Token2022, vec![e]), None).blocked(), "{e:?}");
+        for e in [
+            Extension::TransferHook,
+            Extension::PermanentDelegate,
+            Extension::TransferFeeConfig,
+            Extension::NonTransferable,
+            Extension::Other(99),
+        ] {
+            assert!(
+                screen_mint(&mint(TokenProgram::Token2022, vec![e]), None).blocked(),
+                "{e:?}"
+            );
         }
-        let ok = screen_mint(&mint(TokenProgram::Token2022, vec![Extension::MetadataPointer, Extension::TokenMetadata]), Some(1000));
+        let ok = screen_mint(
+            &mint(
+                TokenProgram::Token2022,
+                vec![Extension::MetadataPointer, Extension::TokenMetadata],
+            ),
+            Some(1000),
+        );
         assert!(!ok.blocked());
     }
 

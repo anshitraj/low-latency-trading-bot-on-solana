@@ -32,10 +32,16 @@ impl TransactionSender for TpuSender {
         TipPolicy::None
     }
     async fn submit(&self, _wire: &[u8], _ctx: &SendContext) -> SendOutcome {
-        SendOutcome::NotSent { reason: "TPU sender not built (enable feature `jet`; not implemented yet)".into() }
+        SendOutcome::NotSent {
+            reason: "TPU sender not built (enable feature `jet`; not implemented yet)".into(),
+        }
     }
     async fn health(&self) -> SenderHealth {
-        SenderHealth { configured: false, note: Some("not implemented".into()), ..Default::default() }
+        SenderHealth {
+            configured: false,
+            note: Some("not implemented".into()),
+            ..Default::default()
+        }
     }
 }
 
@@ -44,8 +50,17 @@ mod tests {
     use super::*;
     #[tokio::test]
     async fn reports_not_sent() {
-        let ctx = SendContext { order_id: Default::default(), signature: "S".into(), last_valid_block_height: 0, attempt: 0, rebroadcast: false };
-        assert!(matches!(TpuSender.submit(&[1], &ctx).await, SendOutcome::NotSent { .. }));
+        let ctx = SendContext {
+            order_id: Default::default(),
+            signature: "S".into(),
+            last_valid_block_height: 0,
+            attempt: 0,
+            rebroadcast: false,
+        };
+        assert!(matches!(
+            TpuSender.submit(&[1], &ctx).await,
+            SendOutcome::NotSent { .. }
+        ));
         assert!(!TpuSender.health().await.configured);
     }
 }

@@ -3,7 +3,6 @@
 //! two different transactions (and thus never two swaps).
 
 use crate::guard::{GuardConfig, GuardError, TxGuard};
-use trader_wallets::{SignError, TxSigner};
 use solana_compute_budget_interface::ComputeBudgetInstruction;
 use solana_hash::Hash;
 use solana_instruction::Instruction;
@@ -12,6 +11,7 @@ use solana_pubkey::Pubkey;
 use solana_signature::Signature;
 use solana_transaction::versioned::VersionedTransaction;
 use trader_domain::{ComputeBudget, Lamports, Network};
+use trader_wallets::{SignError, TxSigner};
 
 /// Max serialized transaction size (bytes) accepted by the network.
 pub const PACKET_DATA_SIZE: usize = 1232;
@@ -70,22 +70,31 @@ impl SignedTx {
 
 pub fn assemble_instructions(p: &BuildParams) -> Vec<Instruction> {
     let mut ixs = Vec::with_capacity(p.instructions.len() + 3);
-    ixs.push(ComputeBudgetInstruction::set_compute_unit_limit(p.compute.unit_limit));
+    ixs.push(ComputeBudgetInstruction::set_compute_unit_limit(
+        p.compute.unit_limit,
+    ));
     if p.compute.unit_price_micro_lamports > 0 {
-        ixs.push(ComputeBudgetInstruction::set_compute_unit_price(p.compute.unit_price_micro_lamports));
+        ixs.push(ComputeBudgetInstruction::set_compute_unit_price(
+            p.compute.unit_price_micro_lamports,
+        ));
     }
     ixs.extend(p.instructions.iter().cloned());
     if let Some(t) = &p.tip {
         // Tip last: if the swap fails the whole tx fails atomically and no tip
         // is transferred (base + priority fee are still charged).
-        ixs.push(solana_system_interface::instruction::transfer(&p.payer, &t.account, t.lamports.0));
+        ixs.push(solana_system_interface::instruction::transfer(
+            &p.payer,
+            &t.account,
+            t.lamports.0,
+        ));
     }
     ixs
 }
 
 pub fn compile(p: &BuildParams) -> Result<VersionedMessage, BuildError> {
     let ixs = assemble_instructions(p);
-    let msg = v0::Message::try_compile(&p.payer, &ixs, &[], p.blockhash).map_err(|e| BuildError::Compile(e.to_string()))?;
+    let msg = v0::Message::try_compile(&p.payer, &ixs, &[], p.blockhash)
+        .map_err(|e| BuildError::Compile(e.to_string()))?;
     Ok(VersionedMessage::V0(msg))
 }
 
@@ -103,7 +112,10 @@ pub async fn build_and_sign(
     guard.validate(&message, &p.payer, guard_cfg)?;
     let msg_bytes = message.serialize();
     let signature = signer.sign_message(p.network, &msg_bytes).await?;
-    let tx = VersionedTransaction { signatures: vec![signature], message };
+    let tx = VersionedTransaction {
+        signatures: vec![signature],
+        message,
+    };
     let wire = bincode::serialize(&tx).map_err(|e| BuildError::Serialize(e.to_string()))?;
     if wire.len() > PACKET_DATA_SIZE {
         return Err(BuildError::TooLarge(wire.len()));
@@ -138,7 +150,11 @@ mod tests {
     use trader_wallets::{MockSigner, TxSigner};
 
     fn memo_like_ix(program: Pubkey, payer: Pubkey) -> Instruction {
-        Instruction::new_with_bytes(program, &[1, 2, 3], vec![solana_instruction::AccountMeta::new(payer, true)])
+        Instruction::new_with_bytes(
+            program,
+            &[1, 2, 3],
+            vec![solana_instruction::AccountMeta::new(payer, true)],
+        )
     }
 
     #[tokio::test]
@@ -151,12 +167,19 @@ mod tests {
             network: Network::Localnet,
             payer: signer.pubkey(),
             instructions: vec![memo_like_ix(program, signer.pubkey())],
-            compute: ComputeBudget { unit_limit: 50_000, unit_price_micro_lamports: 1_000 },
+            compute: ComputeBudget {
+                unit_limit: 50_000,
+                unit_price_micro_lamports: 1_000,
+            },
             tip: None,
             blockhash: Hash::new_from_array([5; 32]),
             last_valid_block_height: 100,
         };
-        let cfg = GuardConfig { max_priority_fee: Lamports(1_000_000), max_tip: Lamports(0), tip_accounts: vec![] };
+        let cfg = GuardConfig {
+            max_priority_fee: Lamports(1_000_000),
+            max_tip: Lamports(0),
+            tip_accounts: vec![],
+        };
         let tx = build_and_sign(&p, &guard, &cfg, &signer).await.unwrap();
         let (decoded, sig) = verify_wire(&tx.wire).unwrap();
         assert_eq!(sig, tx.signature);
@@ -180,14 +203,23 @@ mod tests {
             network: Network::Mainnet,
             payer: signer.pubkey(),
             instructions: vec![],
-            compute: ComputeBudget { unit_limit: 1000, unit_price_micro_lamports: 0 },
+            compute: ComputeBudget {
+                unit_limit: 1000,
+                unit_price_micro_lamports: 0,
+            },
             tip: None,
             blockhash: Hash::default(),
             last_valid_block_height: 1,
         };
-        assert!(matches!(build_and_sign(&p, &guard, &cfg, &signer).await, Err(BuildError::Sign(_))));
+        assert!(matches!(
+            build_and_sign(&p, &guard, &cfg, &signer).await,
+            Err(BuildError::Sign(_))
+        ));
         p.network = Network::Localnet;
         p.payer = Pubkey::new_unique();
-        assert!(matches!(build_and_sign(&p, &guard, &cfg, &signer).await, Err(BuildError::Guard(GuardError::WrongPayer))));
+        assert!(matches!(
+            build_and_sign(&p, &guard, &cfg, &signer).await,
+            Err(BuildError::Guard(GuardError::WrongPayer))
+        ));
     }
 }

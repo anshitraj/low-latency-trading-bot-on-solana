@@ -16,18 +16,44 @@ fn load(name: &str) -> (Pubkey, trader_protocol_pump::CurveSnapshot) {
     let acct = |k: &str| {
         let a = &v["accounts"][k]["account"];
         let owner = Pubkey::from_str(a["owner"].as_str().unwrap()).unwrap();
-        let data = base64::engine::general_purpose::STANDARD.decode(a["data"][0].as_str().unwrap()).unwrap();
+        let data = base64::engine::general_purpose::STANDARD
+            .decode(a["data"][0].as_str().unwrap())
+            .unwrap();
         (owner, data)
     };
     let mint = Pubkey::from_str(v["mint"].as_str().unwrap()).unwrap();
-    let (g, f, c, m) = (acct("global"), acct("fee_config"), acct("bonding_curve"), acct("mint"));
-    let ata: u64 = v["curve_base_ata_amount"].as_str().unwrap().parse().unwrap();
-    let snap = PumpAdapter::decode_snapshot(&mint, (&g.0, &g.1), (&f.0, &f.1), (&c.0, &c.1), (&m.0, &m.1), ata, v["slot"].as_u64().unwrap()).unwrap();
+    let (g, f, c, m) = (
+        acct("global"),
+        acct("fee_config"),
+        acct("bonding_curve"),
+        acct("mint"),
+    );
+    let ata: u64 = v["curve_base_ata_amount"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let snap = PumpAdapter::decode_snapshot(
+        &mint,
+        (&g.0, &g.1),
+        (&f.0, &f.1),
+        (&c.0, &c.1),
+        (&m.0, &m.1),
+        ata,
+        v["slot"].as_u64().unwrap(),
+    )
+    .unwrap();
     (mint, snap)
 }
 
 fn req(mint: Pubkey, side: Side, amount: u64) -> QuoteRequest {
-    QuoteRequest { mint, side, amount_in: amount, slippage_bps: 100, max_state_age: Duration::from_secs(3600) }
+    QuoteRequest {
+        mint,
+        side,
+        amount_in: amount,
+        slippage_bps: 100,
+        max_state_age: Duration::from_secs(3600),
+    }
 }
 
 #[test]
@@ -38,20 +64,35 @@ fn localnet_curve_quotes_are_sane() {
     let a = PumpAdapter::offline();
     a.insert_snapshot(mint, snap);
     let small = a.quote_exact_in(&req(mint, Side::Buy, 10_000_000)).unwrap();
-    let big = a.quote_exact_in(&req(mint, Side::Buy, 1_000_000_000)).unwrap();
+    let big = a
+        .quote_exact_in(&req(mint, Side::Buy, 1_000_000_000))
+        .unwrap();
     assert!(small.min_out <= small.expected_out);
-    assert!(big.expected_out > small.expected_out, "more SOL buys more tokens");
+    assert!(
+        big.expected_out > small.expected_out,
+        "more SOL buys more tokens"
+    );
     // Larger order gets a worse average price (bonding curve convexity).
     assert!((big.expected_out as u128) * 10_000_000 < (small.expected_out as u128) * 1_000_000_000);
     assert!(big.price_impact_bps.unwrap() > small.price_impact_bps.unwrap());
     // Round trip loses to fees: selling what we'd buy returns less SOL.
-    let back = a.quote_exact_in(&req(mint, Side::Sell, small.expected_out)).unwrap();
-    assert!(back.expected_out < 10_000_000, "round trip must cost fees: {}", back.expected_out);
+    let back = a
+        .quote_exact_in(&req(mint, Side::Sell, small.expected_out))
+        .unwrap();
+    assert!(
+        back.expected_out < 10_000_000,
+        "round trip must cost fees: {}",
+        back.expected_out
+    );
     assert!(small.protocol_fee_lamports.unwrap().0 > 0);
     // builder: v3 buy with user at the IDL position
     let user = Pubkey::new_unique();
     let b = a.build_swap(&small, &user).unwrap();
-    let ix = b.instructions.iter().find(|i| i.program_id == trader_protocol_pump::PUMP_PROGRAM_ID).unwrap();
+    let ix = b
+        .instructions
+        .iter()
+        .find(|i| i.program_id == trader_protocol_pump::PUMP_PROGRAM_ID)
+        .unwrap();
     assert_eq!(ix.accounts[V3_USER_INDEX].pubkey, user);
     // zero amount rejected
     assert!(a.quote_exact_in(&req(mint, Side::Buy, 0)).is_err());
@@ -78,7 +119,10 @@ fn devnet_fixtures_decode_and_classify() {
         a.insert_snapshot(mint, snap);
         let r = a.quote_exact_in(&req(mint, Side::Buy, 10_000_000));
         if complete || cashback {
-            assert!(matches!(r, Err(ProtocolError::Unsupported { .. })), "{f}: {r:?}");
+            assert!(
+                matches!(r, Err(ProtocolError::Unsupported { .. })),
+                "{f}: {r:?}"
+            );
         } else {
             let q = r.unwrap_or_else(|e| panic!("{f}: {e}"));
             assert!(q.expected_out > 0 && q.min_out <= q.expected_out);
@@ -88,16 +132,40 @@ fn devnet_fixtures_decode_and_classify() {
 
 #[test]
 fn tampered_owner_is_rejected() {
-    let p = format!("{}/../../fixtures/pump/localnet_curve.json", env!("CARGO_MANIFEST_DIR"));
+    let p = format!(
+        "{}/../../fixtures/pump/localnet_curve.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
     let v: Value = serde_json::from_slice(&std::fs::read(&p).unwrap()).unwrap();
-    let data = |k: &str| base64::engine::general_purpose::STANDARD.decode(v["accounts"][k]["account"]["data"][0].as_str().unwrap()).unwrap();
-    let owner = |k: &str| Pubkey::from_str(v["accounts"][k]["account"]["owner"].as_str().unwrap()).unwrap();
+    let data = |k: &str| {
+        base64::engine::general_purpose::STANDARD
+            .decode(v["accounts"][k]["account"]["data"][0].as_str().unwrap())
+            .unwrap()
+    };
+    let owner =
+        |k: &str| Pubkey::from_str(v["accounts"][k]["account"]["owner"].as_str().unwrap()).unwrap();
     let mint = Pubkey::from_str(v["mint"].as_str().unwrap()).unwrap();
     let fake = Pubkey::new_unique();
-    let r = PumpAdapter::decode_snapshot(&mint, (&owner("global"), &data("global")), (&owner("fee_config"), &data("fee_config")), (&fake, &data("bonding_curve")), (&owner("mint"), &data("mint")), 0, 1);
+    let r = PumpAdapter::decode_snapshot(
+        &mint,
+        (&owner("global"), &data("global")),
+        (&owner("fee_config"), &data("fee_config")),
+        (&fake, &data("bonding_curve")),
+        (&owner("mint"), &data("mint")),
+        0,
+        1,
+    );
     assert!(r.is_err(), "spoofed curve owner must be rejected");
     let mut bad = data("bonding_curve");
     bad[0] ^= 0xff; // wrong anchor discriminator
-    let r = PumpAdapter::decode_snapshot(&mint, (&owner("global"), &data("global")), (&owner("fee_config"), &data("fee_config")), (&owner("bonding_curve"), &bad), (&owner("mint"), &data("mint")), 0, 1);
+    let r = PumpAdapter::decode_snapshot(
+        &mint,
+        (&owner("global"), &data("global")),
+        (&owner("fee_config"), &data("fee_config")),
+        (&owner("bonding_curve"), &bad),
+        (&owner("mint"), &data("mint")),
+        0,
+        1,
+    );
     assert!(r.is_err(), "malformed curve must be rejected");
 }

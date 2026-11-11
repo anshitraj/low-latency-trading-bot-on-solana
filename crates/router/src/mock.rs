@@ -30,7 +30,12 @@ pub struct MockSender {
 
 impl MockSender {
     pub fn new(kind: SenderKind, behavior: MockBehavior) -> Self {
-        Self { kind, behavior: Mutex::new(behavior), received: Mutex::new(vec![]), on_receive: Mutex::new(None) }
+        Self {
+            kind,
+            behavior: Mutex::new(behavior),
+            received: Mutex::new(vec![]),
+            on_receive: Mutex::new(None),
+        }
     }
     pub fn set_behavior(&self, b: MockBehavior) {
         *self.behavior.lock() = b;
@@ -66,29 +71,43 @@ impl TransactionSender for MockSender {
         match b {
             MockBehavior::Accept => {
                 forward();
-                SendOutcome::Accepted { returned_signature: Some(ctx.signature.clone()) }
+                SendOutcome::Accepted {
+                    returned_signature: Some(ctx.signature.clone()),
+                }
             }
-            MockBehavior::AcceptWithSignature(s) => SendOutcome::Accepted { returned_signature: Some(s) },
+            MockBehavior::AcceptWithSignature(s) => SendOutcome::Accepted {
+                returned_signature: Some(s),
+            },
             MockBehavior::Reject(r) => SendOutcome::Rejected { reason: r },
             MockBehavior::RateLimited => SendOutcome::RateLimited,
             MockBehavior::Http5xx => {
                 // A 5xx may still have forwarded (ambiguous): model that pessimistically.
                 forward();
-                SendOutcome::Ambiguous { reason: "http 502".into() }
+                SendOutcome::Ambiguous {
+                    reason: "http 502".into(),
+                }
             }
             MockBehavior::Timeout(d) => {
                 forward();
                 tokio::time::sleep(d).await;
-                SendOutcome::Ambiguous { reason: "timeout".into() }
+                SendOutcome::Ambiguous {
+                    reason: "timeout".into(),
+                }
             }
             MockBehavior::Delay(d) => {
                 tokio::time::sleep(d).await;
                 forward();
-                SendOutcome::Accepted { returned_signature: Some(ctx.signature.clone()) }
+                SendOutcome::Accepted {
+                    returned_signature: Some(ctx.signature.clone()),
+                }
             }
         }
     }
     async fn health(&self) -> SenderHealth {
-        SenderHealth { configured: true, note: Some("MOCK".into()), ..Default::default() }
+        SenderHealth {
+            configured: true,
+            note: Some("MOCK".into()),
+            ..Default::default()
+        }
     }
 }

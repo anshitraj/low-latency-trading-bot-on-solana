@@ -103,7 +103,10 @@ pub fn validate_idempotency_key(k: &str) -> Result<(), &'static str> {
     if k.is_empty() || k.len() > MAX_IDEMPOTENCY_KEY_LEN {
         return Err("idempotency key must be 1..=128 bytes");
     }
-    if !k.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b':' | b'.')) {
+    if !k
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b':' | b'.'))
+    {
         return Err("idempotency key has invalid characters");
     }
     Ok(())
@@ -114,12 +117,18 @@ impl TradeIntent {
         validate_idempotency_key(&self.idempotency_key).map_err(str::to_string)?;
         match (&self.side, &self.amount) {
             (Side::Buy, AmountSpec::ExactSolIn { lamports }) if lamports.0 > 0 => {}
-            (Side::Buy, AmountSpec::ExactSolIn { .. }) => return Err("buy amount must be > 0".into()),
+            (Side::Buy, AmountSpec::ExactSolIn { .. }) => {
+                return Err("buy amount must be > 0".into())
+            }
             (Side::Buy, _) => return Err("buy requires exact_sol_in".into()),
             (Side::Sell, AmountSpec::SellPercent { bps }) if bps.get() > 0 => {}
-            (Side::Sell, AmountSpec::SellPercent { .. }) => return Err("sell percent must be > 0".into()),
+            (Side::Sell, AmountSpec::SellPercent { .. }) => {
+                return Err("sell percent must be > 0".into())
+            }
             (Side::Sell, AmountSpec::ExactTokenIn { raw }) if *raw > 0 => {}
-            (Side::Sell, AmountSpec::ExactTokenIn { .. }) => return Err("sell amount must be > 0".into()),
+            (Side::Sell, AmountSpec::ExactTokenIn { .. }) => {
+                return Err("sell amount must be > 0".into())
+            }
             (Side::Sell, AmountSpec::ExactSolIn { .. }) => {
                 return Err("sell requires sell_percent or exact_token_in".into())
             }
@@ -152,7 +161,9 @@ mod tests {
             network: Network::Localnet,
             side: Side::Buy,
             mint: Pubkey::new_unique(),
-            amount: AmountSpec::ExactSolIn { lamports: Lamports(50_000_000) },
+            amount: AmountSpec::ExactSolIn {
+                lamports: Lamports(50_000_000),
+            },
             slippage: Bps::new(100).unwrap(),
             fees: FeePreference::default(),
             senders: vec![SenderKind::Rpc],
@@ -172,7 +183,9 @@ mod tests {
         assert!(bad.validate_shape().is_err());
 
         let mut bad = sample();
-        bad.amount = AmountSpec::ExactSolIn { lamports: Lamports(0) };
+        bad.amount = AmountSpec::ExactSolIn {
+            lamports: Lamports(0),
+        };
         assert!(bad.validate_shape().is_err());
 
         let mut bad = sample();
@@ -190,7 +203,9 @@ mod tests {
 
         let mut ok = sample();
         ok.side = Side::Sell;
-        ok.amount = AmountSpec::SellPercent { bps: Bps::new(10_000).unwrap() };
+        ok.amount = AmountSpec::SellPercent {
+            bps: Bps::new(10_000).unwrap(),
+        };
         assert!(ok.validate_shape().is_ok());
     }
 

@@ -43,7 +43,13 @@ impl std::fmt::Debug for Config {
         f.debug_struct("Config")
             .field("mode", &self.mode)
             .field("bind", &self.bind)
-            .field("rpc_host", &self.rpc_url.as_deref().map(trader_market_data::rpc::url_host))
+            .field(
+                "rpc_host",
+                &self
+                    .rpc_url
+                    .as_deref()
+                    .map(trader_market_data::rpc::url_host),
+            )
             .field("database", &self.database_url.is_some())
             .field("telegram", &self.bot_token.is_some())
             .field("webhook_secret", &self.webhook_secret.is_some())
@@ -56,12 +62,16 @@ impl std::fmt::Debug for Config {
 }
 
 fn env(k: &str) -> Option<String> {
-    std::env::var(k).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+    std::env::var(k)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
 }
 
 impl Config {
     pub fn from_env() -> anyhow::Result<Self> {
-        let mode = Network::from_str(&env("TRADER_MODE").unwrap_or_else(|| "mock".into())).map_err(anyhow::Error::msg)?;
+        let mode = Network::from_str(&env("TRADER_MODE").unwrap_or_else(|| "mock".into()))
+            .map_err(anyhow::Error::msg)?;
         let kek = match env("KEK_BASE64") {
             Some(b) => {
                 let k = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, b)?;
@@ -70,7 +80,8 @@ impl Config {
             }
             None => None,
         };
-        let mainnet_trading_enabled = env("MAINNET_TRADING_ENABLED").as_deref() == Some(MAINNET_ACK);
+        let mainnet_trading_enabled =
+            env("MAINNET_TRADING_ENABLED").as_deref() == Some(MAINNET_ACK);
         let cfg = Self {
             mode,
             bind: env("BIND_ADDR").unwrap_or_else(|| "127.0.0.1:8080".into()),
@@ -78,7 +89,8 @@ impl Config {
             database_url: env("DATABASE_URL"),
             bot_token: env("TELEGRAM_BOT_TOKEN"),
             webhook_secret: env("TELEGRAM_WEBHOOK_SECRET"),
-            telegram_api_base: env("TELEGRAM_API_BASE").unwrap_or_else(|| "https://api.telegram.org".into()),
+            telegram_api_base: env("TELEGRAM_API_BASE")
+                .unwrap_or_else(|| "https://api.telegram.org".into()),
             public_url: env("PUBLIC_URL"),
             miniapp_dir: env("MINIAPP_DIR"),
             cors_origin: env("CORS_ORIGIN"),
@@ -89,16 +101,24 @@ impl Config {
             beta_allowlist: env("BETA_ALLOWLIST_TELEGRAM_IDS")
                 .map(|s| s.split(',').filter_map(|x| x.trim().parse().ok()).collect())
                 .unwrap_or_default(),
-            initdata_max_age_secs: env("INITDATA_MAX_AGE_SECS").and_then(|s| s.parse().ok()).unwrap_or(300),
-            session_ttl_secs: env("SESSION_TTL_SECS").and_then(|s| s.parse().ok()).unwrap_or(1800),
+            initdata_max_age_secs: env("INITDATA_MAX_AGE_SECS")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(300),
+            session_ttl_secs: env("SESSION_TTL_SECS")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(1800),
             jito_url: env("JITO_BLOCK_ENGINE_URL"),
             jito_bundle_only: env("JITO_BUNDLE_ONLY").as_deref() == Some("true"),
             jito_rps: env("JITO_RPS").and_then(|s| s.parse().ok()).unwrap_or(1),
             helius_sender_url: env("HELIUS_SENDER_URL"),
             helius_swqos_only: env("HELIUS_SWQOS_ONLY").as_deref() != Some("false"),
             skip_preflight: env("SKIP_PREFLIGHT").as_deref() == Some("true"),
-            observer_poll_ms: env("OBSERVER_POLL_MS").and_then(|s| s.parse().ok()).unwrap_or(250),
-            mock_slot_ms: env("MOCK_SLOT_MS").and_then(|s| s.parse().ok()).unwrap_or(400),
+            observer_poll_ms: env("OBSERVER_POLL_MS")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(250),
+            mock_slot_ms: env("MOCK_SLOT_MS")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(400),
         };
         cfg.validate()?;
         Ok(cfg)
@@ -106,18 +126,39 @@ impl Config {
 
     pub fn validate(&self) -> anyhow::Result<()> {
         if self.mode != Network::Mock {
-            anyhow::ensure!(self.rpc_url.is_some(), "RPC_URL is required outside mock mode");
-            anyhow::ensure!(self.kek.is_some(), "KEK_BASE64 is required outside mock mode (managed wallet encryption)");
+            anyhow::ensure!(
+                self.rpc_url.is_some(),
+                "RPC_URL is required outside mock mode"
+            );
+            anyhow::ensure!(
+                self.kek.is_some(),
+                "KEK_BASE64 is required outside mock mode (managed wallet encryption)"
+            );
         }
         if self.mode == Network::Mainnet {
-            anyhow::ensure!(self.database_url.is_some(), "DATABASE_URL is required on mainnet");
-            anyhow::ensure!(!self.beta_allowlist.is_empty(), "BETA_ALLOWLIST_TELEGRAM_IDS is required on mainnet (private beta)");
+            anyhow::ensure!(
+                self.database_url.is_some(),
+                "DATABASE_URL is required on mainnet"
+            );
+            anyhow::ensure!(
+                !self.beta_allowlist.is_empty(),
+                "BETA_ALLOWLIST_TELEGRAM_IDS is required on mainnet (private beta)"
+            );
         }
         if self.skip_preflight {
-            anyhow::ensure!(self.mode != Network::Mainnet, "SKIP_PREFLIGHT is not permitted on mainnet in this build");
+            anyhow::ensure!(
+                self.mode != Network::Mainnet,
+                "SKIP_PREFLIGHT is not permitted on mainnet in this build"
+            );
         }
         if self.bot_token.is_some() {
-            anyhow::ensure!(self.webhook_secret.as_deref().map(|s| s.len() >= 24).unwrap_or(false), "TELEGRAM_WEBHOOK_SECRET (>=24 chars) is required with TELEGRAM_BOT_TOKEN");
+            anyhow::ensure!(
+                self.webhook_secret
+                    .as_deref()
+                    .map(|s| s.len() >= 24)
+                    .unwrap_or(false),
+                "TELEGRAM_WEBHOOK_SECRET (>=24 chars) is required with TELEGRAM_BOT_TOKEN"
+            );
         }
         Ok(())
     }
@@ -179,6 +220,9 @@ mod tests {
         assert!(t.validate().is_err(), "webhook secret required");
         t.webhook_secret = Some("s".repeat(32));
         assert!(t.validate().is_ok());
-        assert!(!format!("{t:?}").contains("sss"), "debug never prints secrets");
+        assert!(
+            !format!("{t:?}").contains("sss"),
+            "debug never prints secrets"
+        );
     }
 }

@@ -18,7 +18,10 @@ pub enum StoreError {
     #[error("not found")]
     NotFound,
     #[error("state conflict: expected {expected}, found {found}")]
-    Conflict { expected: OrderState, found: OrderState },
+    Conflict {
+        expected: OrderState,
+        found: OrderState,
+    },
     #[error("illegal transition: {0}")]
     Illegal(#[from] trader_domain::TransitionError),
     #[error("duplicate signature")]
@@ -30,13 +33,23 @@ pub enum StoreError {
 #[async_trait]
 pub trait OrderStore: Send + Sync {
     /// Idempotent on (user_id, idempotency_key).
-    async fn create_order(&self, intent: &TradeIntent, wallet: Pubkey) -> Result<CreateOutcome, StoreError>;
+    async fn create_order(
+        &self,
+        intent: &TradeIntent,
+        wallet: Pubkey,
+    ) -> Result<CreateOutcome, StoreError>;
     async fn get_order(&self, id: Uuid) -> Result<Order, StoreError>;
     async fn list_orders(&self, user_id: Uuid, limit: usize) -> Result<Vec<Order>, StoreError>;
     /// Orders that may need recovery after restart (non-terminal).
     async fn list_unresolved(&self) -> Result<Vec<Order>, StoreError>;
     /// CAS transition with an event row. `detail` is stored in the journal.
-    async fn transition(&self, id: Uuid, from: OrderState, to: OrderState, detail: serde_json::Value) -> Result<(), StoreError>;
+    async fn transition(
+        &self,
+        id: Uuid,
+        from: OrderState,
+        to: OrderState,
+        detail: serde_json::Value,
+    ) -> Result<(), StoreError>;
     async fn save_quote(&self, id: Uuid, quote: &Quote) -> Result<(), StoreError>;
     /// Must be durable before any send. Transitions SIGNING -> SIGNED atomically.
     async fn save_signed(&self, id: Uuid, signed: &SignedRecord) -> Result<(), StoreError>;
@@ -46,8 +59,20 @@ pub trait OrderStore: Send + Sync {
     async fn usage_today(&self, wallet_id: Uuid) -> Result<UsageSnapshot, StoreError>;
     /// Idempotent per order: a second call for the same order_id is a no-op
     /// returning None (restart reconciliation can re-observe a fill).
-    async fn apply_position_fill(&self, order_id: Uuid, user_id: Uuid, wallet_id: Uuid, mint: Pubkey, side: Side, fill: &Fill) -> Result<Option<Position>, StoreError>;
-    async fn get_position(&self, wallet_id: Uuid, mint: Pubkey) -> Result<Option<Position>, StoreError>;
+    async fn apply_position_fill(
+        &self,
+        order_id: Uuid,
+        user_id: Uuid,
+        wallet_id: Uuid,
+        mint: Pubkey,
+        side: Side,
+        fill: &Fill,
+    ) -> Result<Option<Position>, StoreError>;
+    async fn get_position(
+        &self,
+        wallet_id: Uuid,
+        mint: Pubkey,
+    ) -> Result<Option<Position>, StoreError>;
     async fn list_positions(&self, wallet_id: Uuid) -> Result<Vec<(Pubkey, Position)>, StoreError>;
     async fn events(&self, id: Uuid) -> Result<Vec<OrderEvent>, StoreError>;
     async fn find_by_signature(&self, sig: &str) -> Result<Option<Order>, StoreError>;
@@ -98,7 +123,11 @@ fn now() -> chrono::DateTime<chrono::Utc> {
 
 #[async_trait]
 impl OrderStore for MemStore {
-    async fn create_order(&self, intent: &TradeIntent, wallet: Pubkey) -> Result<CreateOutcome, StoreError> {
+    async fn create_order(
+        &self,
+        intent: &TradeIntent,
+        wallet: Pubkey,
+    ) -> Result<CreateOutcome, StoreError> {
         let mut g = self.inner.lock();
         let k = (intent.user_id, intent.idempotency_key.clone());
         if let Some(id) = g.idem.get(&k) {
@@ -123,40 +152,83 @@ impl OrderStore for MemStore {
             trader_domain::AmountSpec::ExactSolIn { lamports } => lamports.0,
             _ => 0,
         };
-        let d = g.daily.entry((o.wallet_id, o.created_at.date_naive())).or_default();
+        let d = g
+            .daily
+            .entry((o.wallet_id, o.created_at.date_naive()))
+            .or_default();
         d.0 += 1;
         d.1 = d.1.saturating_add(turnover);
         g.orders.insert(o.id, o.clone());
-        g.events.push(OrderEvent { order_id: o.id, user_id: o.user_id, from: None, to: OrderState::Created, at: now(), detail: serde_json::json!({}) });
+        g.events.push(OrderEvent {
+            order_id: o.id,
+            user_id: o.user_id,
+            from: None,
+            to: OrderState::Created,
+            at: now(),
+            detail: serde_json::json!({}),
+        });
         Ok(CreateOutcome::Created(o))
     }
 
     async fn get_order(&self, id: Uuid) -> Result<Order, StoreError> {
-        self.inner.lock().orders.get(&id).cloned().ok_or(StoreError::NotFound)
+        self.inner
+            .lock()
+            .orders
+            .get(&id)
+            .cloned()
+            .ok_or(StoreError::NotFound)
     }
 
     async fn list_orders(&self, user_id: Uuid, limit: usize) -> Result<Vec<Order>, StoreError> {
         let g = self.inner.lock();
-        let mut v: Vec<Order> = g.orders.values().filter(|o| o.user_id == user_id).cloned().collect();
+        let mut v: Vec<Order> = g
+            .orders
+            .values()
+            .filter(|o| o.user_id == user_id)
+            .cloned()
+            .collect();
         v.sort_by(|a, b| b.created_at.cmp(&a.created_at));
         v.truncate(limit);
         Ok(v)
     }
 
     async fn list_unresolved(&self) -> Result<Vec<Order>, StoreError> {
-        Ok(self.inner.lock().orders.values().filter(|o| !o.state.is_terminal()).cloned().collect())
+        Ok(self
+            .inner
+            .lock()
+            .orders
+            .values()
+            .filter(|o| !o.state.is_terminal())
+            .cloned()
+            .collect())
     }
 
-    async fn transition(&self, id: Uuid, from: OrderState, to: OrderState, detail: serde_json::Value) -> Result<(), StoreError> {
+    async fn transition(
+        &self,
+        id: Uuid,
+        from: OrderState,
+        to: OrderState,
+        detail: serde_json::Value,
+    ) -> Result<(), StoreError> {
         let mut g = self.inner.lock();
         let o = g.orders.get_mut(&id).ok_or(StoreError::NotFound)?;
         if o.state != from {
-            return Err(StoreError::Conflict { expected: from, found: o.state });
+            return Err(StoreError::Conflict {
+                expected: from,
+                found: o.state,
+            });
         }
         o.state = from.transition(to)?;
         o.updated_at = now();
         let user_id = o.user_id;
-        g.events.push(OrderEvent { order_id: id, user_id, from: Some(from), to, at: now(), detail });
+        g.events.push(OrderEvent {
+            order_id: id,
+            user_id,
+            from: Some(from),
+            to,
+            at: now(),
+            detail,
+        });
         Ok(())
     }
 
@@ -174,7 +246,10 @@ impl OrderStore for MemStore {
         }
         let o = g.orders.get_mut(&id).ok_or(StoreError::NotFound)?;
         if o.state != OrderState::Signing {
-            return Err(StoreError::Conflict { expected: OrderState::Signing, found: o.state });
+            return Err(StoreError::Conflict {
+                expected: OrderState::Signing,
+                found: o.state,
+            });
         }
         if o.signed.is_some() {
             return Err(StoreError::DuplicateSignature);
@@ -196,7 +271,13 @@ impl OrderStore for MemStore {
     }
 
     async fn reject(&self, id: Uuid, from: OrderState, reason: &str) -> Result<(), StoreError> {
-        self.transition(id, from, OrderState::Rejected, serde_json::json!({"reason": reason})).await?;
+        self.transition(
+            id,
+            from,
+            OrderState::Rejected,
+            serde_json::json!({"reason": reason}),
+        )
+        .await?;
         let mut g = self.inner.lock();
         let mut key = None;
         if let Some(o) = g.orders.get_mut(&id) {
@@ -239,37 +320,69 @@ impl OrderStore for MemStore {
         for ((w, _), p) in g.positions.iter() {
             if *w == wallet_id && p.realized_pnl_lamports < 0 {
                 // Approximation in MemStore: cumulative realized loss (PgStore uses today's fills).
-                u.realized_loss_today.0 = u.realized_loss_today.0.saturating_add((-p.realized_pnl_lamports) as u64);
+                u.realized_loss_today.0 = u
+                    .realized_loss_today
+                    .0
+                    .saturating_add((-p.realized_pnl_lamports) as u64);
             }
         }
         Ok(u)
     }
 
-    async fn apply_position_fill(&self, order_id: Uuid, _user_id: Uuid, wallet_id: Uuid, mint: Pubkey, side: Side, fill: &Fill) -> Result<Option<Position>, StoreError> {
+    async fn apply_position_fill(
+        &self,
+        order_id: Uuid,
+        _user_id: Uuid,
+        wallet_id: Uuid,
+        mint: Pubkey,
+        side: Side,
+        fill: &Fill,
+    ) -> Result<Option<Position>, StoreError> {
         let mut g = self.inner.lock();
         if !g.applied_fills.insert(order_id) {
             return Ok(None);
         }
         let p = g.positions.entry((wallet_id, mint)).or_default();
         match side {
-            Side::Buy => p.apply_buy(fill).map_err(|e| StoreError::Backend(e.to_string()))?,
+            Side::Buy => p
+                .apply_buy(fill)
+                .map_err(|e| StoreError::Backend(e.to_string()))?,
             Side::Sell => {
-                p.apply_sell(fill).map_err(|e| StoreError::Backend(e.to_string()))?;
+                p.apply_sell(fill)
+                    .map_err(|e| StoreError::Backend(e.to_string()))?;
             }
         }
         Ok(Some(p.clone()))
     }
 
-    async fn get_position(&self, wallet_id: Uuid, mint: Pubkey) -> Result<Option<Position>, StoreError> {
+    async fn get_position(
+        &self,
+        wallet_id: Uuid,
+        mint: Pubkey,
+    ) -> Result<Option<Position>, StoreError> {
         Ok(self.inner.lock().positions.get(&(wallet_id, mint)).cloned())
     }
 
     async fn events(&self, id: Uuid) -> Result<Vec<OrderEvent>, StoreError> {
-        Ok(self.inner.lock().events.iter().filter(|e| e.order_id == id).cloned().collect())
+        Ok(self
+            .inner
+            .lock()
+            .events
+            .iter()
+            .filter(|e| e.order_id == id)
+            .cloned()
+            .collect())
     }
 
     async fn list_positions(&self, wallet_id: Uuid) -> Result<Vec<(Pubkey, Position)>, StoreError> {
-        Ok(self.inner.lock().positions.iter().filter(|((w, _), _)| *w == wallet_id).map(|((_, m), p)| (*m, p.clone())).collect())
+        Ok(self
+            .inner
+            .lock()
+            .positions
+            .iter()
+            .filter(|((w, _), _)| *w == wallet_id)
+            .map(|((_, m), p)| (*m, p.clone()))
+            .collect())
     }
 
     async fn find_by_signature(&self, sig: &str) -> Result<Option<Order>, StoreError> {

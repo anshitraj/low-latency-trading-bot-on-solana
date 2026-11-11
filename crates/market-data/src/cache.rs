@@ -36,7 +36,10 @@ pub struct SlotCache<K, V> {
 
 impl<K: Eq + Hash + Clone, V: Clone> SlotCache<K, V> {
     pub fn new(capacity: usize) -> Self {
-        Self { inner: Arc::new(RwLock::new(HashMap::new())), capacity }
+        Self {
+            inner: Arc::new(RwLock::new(HashMap::new())),
+            capacity,
+        }
     }
 
     /// Insert unless an entry with a *newer* slot already exists (prevents an
@@ -51,11 +54,22 @@ impl<K: Eq + Hash + Clone, V: Clone> SlotCache<K, V> {
         if m.len() >= self.capacity && !m.contains_key(&k) {
             // Evict the oldest entry by fetch time. O(n) but n is bounded and
             // eviction is off the hot path (refresh tasks).
-            if let Some(oldest) = m.iter().min_by_key(|(_, v)| v.fetched_at).map(|(k, _)| k.clone()) {
+            if let Some(oldest) = m
+                .iter()
+                .min_by_key(|(_, v)| v.fetched_at)
+                .map(|(k, _)| k.clone())
+            {
                 m.remove(&oldest);
             }
         }
-        m.insert(k, Stamped { value, slot, fetched_at: Instant::now() });
+        m.insert(
+            k,
+            Stamped {
+                value,
+                slot,
+                fetched_at: Instant::now(),
+            },
+        );
         true
     }
 
@@ -67,7 +81,10 @@ impl<K: Eq + Hash + Clone, V: Clone> SlotCache<K, V> {
         let s = self.get(k).ok_or(Freshness::Missing)?;
         let age = s.age();
         if age > max_age {
-            return Err(Freshness::Stale { age_ms: age.as_millis() as u64, max_ms: max_age.as_millis() as u64 });
+            return Err(Freshness::Stale {
+                age_ms: age.as_millis() as u64,
+                max_ms: max_age.as_millis() as u64,
+            });
         }
         Ok(s)
     }
@@ -94,13 +111,19 @@ mod tests {
     #[test]
     fn freshness_and_ordering() {
         let c: SlotCache<u32, &str> = SlotCache::new(2);
-        assert_eq!(c.get_fresh(&1, Duration::from_secs(1)).unwrap_err(), Freshness::Missing);
+        assert_eq!(
+            c.get_fresh(&1, Duration::from_secs(1)).unwrap_err(),
+            Freshness::Missing
+        );
         assert!(c.put(1, "a", 10));
         assert!(!c.put(1, "old", 9), "older slot must not overwrite");
         assert_eq!(c.get(&1).unwrap().value, "a");
         assert!(c.put(1, "b", 10));
         std::thread::sleep(Duration::from_millis(15));
-        assert!(matches!(c.get_fresh(&1, Duration::from_millis(5)), Err(Freshness::Stale { .. })));
+        assert!(matches!(
+            c.get_fresh(&1, Duration::from_millis(5)),
+            Err(Freshness::Stale { .. })
+        ));
         assert!(c.get_fresh(&1, Duration::from_secs(5)).is_ok());
         c.put(2, "x", 1);
         c.put(3, "y", 1);

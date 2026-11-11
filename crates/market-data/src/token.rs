@@ -4,10 +4,14 @@
 
 use solana_pubkey::Pubkey;
 
-pub const SPL_TOKEN_PROGRAM: Pubkey = solana_pubkey::pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-pub const TOKEN_2022_PROGRAM: Pubkey = solana_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
-pub const ATA_PROGRAM: Pubkey = solana_pubkey::pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
-pub const NATIVE_MINT: Pubkey = solana_pubkey::pubkey!("So11111111111111111111111111111111111111112");
+pub const SPL_TOKEN_PROGRAM: Pubkey =
+    solana_pubkey::pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+pub const TOKEN_2022_PROGRAM: Pubkey =
+    solana_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+pub const ATA_PROGRAM: Pubkey =
+    solana_pubkey::pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+pub const NATIVE_MINT: Pubkey =
+    solana_pubkey::pubkey!("So11111111111111111111111111111111111111112");
 
 const MINT_LEN: usize = 82;
 const ACCOUNT_LEN: usize = 165;
@@ -171,7 +175,9 @@ fn parse_tlv(data: &[u8], expect_type: u8) -> Result<Vec<(Extension, &[u8])>, To
             break; // uninitialized padding
         }
         let start = i + 4;
-        let end = start.checked_add(len).ok_or(TokenParseError::BadExtensions)?;
+        let end = start
+            .checked_add(len)
+            .ok_or(TokenParseError::BadExtensions)?;
         if end > data.len() {
             return Err(TokenParseError::BadExtensions);
         }
@@ -186,13 +192,20 @@ pub fn parse_mint(owner: &Pubkey, data: &[u8]) -> Result<MintInfo, TokenParseErr
     if data.len() < MINT_LEN {
         return Err(TokenParseError::TooShort);
     }
-    let exts = if program == TokenProgram::Token2022 { parse_tlv(data, 1)? } else { vec![] };
-    let transfer_fee_bps = exts.iter().find(|(e, _)| *e == Extension::TransferFeeConfig).and_then(|(_, v)| {
-        // TransferFeeConfig: authority(32) withdraw_authority(32) withheld(8) older(18) newer(18)
-        // TransferFee { epoch u64, maximum_fee u64, transfer_fee_basis_points u16 }
-        let newer = v.get(32 + 32 + 8 + 18..32 + 32 + 8 + 36)?;
-        Some(u16::from_le_bytes([newer[16], newer[17]]))
-    });
+    let exts = if program == TokenProgram::Token2022 {
+        parse_tlv(data, 1)?
+    } else {
+        vec![]
+    };
+    let transfer_fee_bps = exts
+        .iter()
+        .find(|(e, _)| *e == Extension::TransferFeeConfig)
+        .and_then(|(_, v)| {
+            // TransferFeeConfig: authority(32) withdraw_authority(32) withheld(8) older(18) newer(18)
+            // TransferFee { epoch u64, maximum_fee u64, transfer_fee_basis_points u16 }
+            let newer = v.get(32 + 32 + 8 + 18..32 + 32 + 8 + 36)?;
+            Some(u16::from_le_bytes([newer[16], newer[17]]))
+        });
     Ok(MintInfo {
         program,
         mint_authority: read_coption_pubkey(&data[0..36]),
@@ -205,12 +218,19 @@ pub fn parse_mint(owner: &Pubkey, data: &[u8]) -> Result<MintInfo, TokenParseErr
     })
 }
 
-pub fn parse_token_account(owner: &Pubkey, data: &[u8]) -> Result<TokenAccountInfo, TokenParseError> {
+pub fn parse_token_account(
+    owner: &Pubkey,
+    data: &[u8],
+) -> Result<TokenAccountInfo, TokenParseError> {
     let program = TokenProgram::from_owner(owner).ok_or(TokenParseError::NotTokenProgram)?;
     if data.len() < ACCOUNT_LEN {
         return Err(TokenParseError::TooShort);
     }
-    let exts = if program == TokenProgram::Token2022 { parse_tlv(data, 2)? } else { vec![] };
+    let exts = if program == TokenProgram::Token2022 {
+        parse_tlv(data, 2)?
+    } else {
+        vec![]
+    };
     Ok(TokenAccountInfo {
         program,
         mint: Pubkey::new_from_array(data[0..32].try_into().unwrap()),
@@ -222,7 +242,11 @@ pub fn parse_token_account(owner: &Pubkey, data: &[u8]) -> Result<TokenAccountIn
 }
 
 pub fn associated_token_address(wallet: &Pubkey, mint: &Pubkey, token_program: &Pubkey) -> Pubkey {
-    Pubkey::find_program_address(&[wallet.as_ref(), token_program.as_ref(), mint.as_ref()], &ATA_PROGRAM).0
+    Pubkey::find_program_address(
+        &[wallet.as_ref(), token_program.as_ref(), mint.as_ref()],
+        &ATA_PROGRAM,
+    )
+    .0
 }
 
 #[cfg(test)]
@@ -255,8 +279,14 @@ mod tests {
         assert_eq!(m.supply, 1_000_000);
         assert_eq!(m.decimals, 6);
         assert!(m.extensions.is_empty());
-        assert_eq!(parse_mint(&Pubkey::new_unique(), &d), Err(TokenParseError::NotTokenProgram));
-        assert_eq!(parse_mint(&SPL_TOKEN_PROGRAM, &d[..50]), Err(TokenParseError::TooShort));
+        assert_eq!(
+            parse_mint(&Pubkey::new_unique(), &d),
+            Err(TokenParseError::NotTokenProgram)
+        );
+        assert_eq!(
+            parse_mint(&SPL_TOKEN_PROGRAM, &d[..50]),
+            Err(TokenParseError::TooShort)
+        );
     }
 
     #[test]
@@ -264,7 +294,7 @@ mod tests {
         let mut d = mint_bytes(None, Some(Pubkey::new_unique()), 5, 9);
         d.resize(ACCOUNT_TYPE_OFFSET, 0);
         d.push(1); // AccountType::Mint
-        // TransferHook (14), len 64
+                   // TransferHook (14), len 64
         d.extend_from_slice(&14u16.to_le_bytes());
         d.extend_from_slice(&64u16.to_le_bytes());
         d.extend_from_slice(&[0u8; 64]);
@@ -275,12 +305,18 @@ mod tests {
         d.extend_from_slice(&108u16.to_le_bytes());
         d.extend_from_slice(&tf);
         let m = parse_mint(&TOKEN_2022_PROGRAM, &d).unwrap();
-        assert_eq!(m.extensions, vec![Extension::TransferHook, Extension::TransferFeeConfig]);
+        assert_eq!(
+            m.extensions,
+            vec![Extension::TransferHook, Extension::TransferFeeConfig]
+        );
         assert_eq!(m.transfer_fee_bps, Some(250));
         assert!(m.freeze_authority.is_some());
         // truncated TLV is rejected rather than ignored
         let bad = &d[..d.len() - 10];
-        assert_eq!(parse_mint(&TOKEN_2022_PROGRAM, bad), Err(TokenParseError::BadExtensions));
+        assert_eq!(
+            parse_mint(&TOKEN_2022_PROGRAM, bad),
+            Err(TokenParseError::BadExtensions)
+        );
     }
 
     #[test]
@@ -304,6 +340,9 @@ mod tests {
         let ata = associated_token_address(&wallet, &NATIVE_MINT, &SPL_TOKEN_PROGRAM);
         assert_ne!(ata, Pubkey::default());
         // deterministic
-        assert_eq!(ata, associated_token_address(&wallet, &NATIVE_MINT, &SPL_TOKEN_PROGRAM));
+        assert_eq!(
+            ata,
+            associated_token_address(&wallet, &NATIVE_MINT, &SPL_TOKEN_PROGRAM)
+        );
     }
 }

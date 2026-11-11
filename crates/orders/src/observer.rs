@@ -58,7 +58,11 @@ pub struct ObserverConfig {
 
 impl Default for ObserverConfig {
     fn default() -> Self {
-        Self { poll_interval: Duration::from_millis(250), rebroadcast_interval: Duration::from_millis(2_000), max_rebroadcasts: 30 }
+        Self {
+            poll_interval: Duration::from_millis(250),
+            rebroadcast_interval: Duration::from_millis(2_000),
+            max_rebroadcasts: 30,
+        }
     }
 }
 
@@ -97,8 +101,24 @@ pub struct Observer {
 }
 
 impl Observer {
-    pub fn new(store: Arc<dyn OrderStore>, rpc: RpcClient, locks: WalletLocks, updates: broadcast::Sender<OrderUpdate>, cfg: ObserverConfig) -> Self {
-        Self { handle: ObserverHandle { inner: Default::default() }, store, rpc, locks, updates, cfg, traces: Default::default() }
+    pub fn new(
+        store: Arc<dyn OrderStore>,
+        rpc: RpcClient,
+        locks: WalletLocks,
+        updates: broadcast::Sender<OrderUpdate>,
+        cfg: ObserverConfig,
+    ) -> Self {
+        Self {
+            handle: ObserverHandle {
+                inner: Default::default(),
+            },
+            store,
+            rpc,
+            locks,
+            updates,
+            cfg,
+            traces: Default::default(),
+        }
     }
 
     pub fn spawn(self: Arc<Self>) -> tokio::task::JoinHandle<()> {
@@ -115,14 +135,30 @@ impl Observer {
     }
 
     fn notify(&self, t: &Track, state: OrderState, detail: String, fill: Option<FillRecord>) {
-        let _ = self.updates.send(OrderUpdate { order_id: t.order_id, user_id: t.user_id, state, signature: Some(t.signature.clone()), detail, fill });
+        let _ = self.updates.send(OrderUpdate {
+            order_id: t.order_id,
+            user_id: t.user_id,
+            state,
+            signature: Some(t.signature.clone()),
+            detail,
+            fill,
+        });
     }
 
-    async fn advance(&self, tr: &mut Tracked, to: OrderState, detail: serde_json::Value) -> Result<bool, StoreError> {
+    async fn advance(
+        &self,
+        tr: &mut Tracked,
+        to: OrderState,
+        detail: serde_json::Value,
+    ) -> Result<bool, StoreError> {
         if tr.t.state == to || !tr.t.state.can_transition_to(to) {
             return Ok(false);
         }
-        match self.store.transition(tr.t.order_id, tr.t.state, to, detail).await {
+        match self
+            .store
+            .transition(tr.t.order_id, tr.t.state, to, detail)
+            .await
+        {
             Ok(()) => {
                 tr.t.state = to;
                 Ok(true)
@@ -137,7 +173,18 @@ impl Observer {
 
     /// One reconciliation pass. Public for deterministic tests.
     pub async fn poll_once(&self) -> Result<(), String> {
-        let sigs: Vec<(String, bool)> = self.handle.inner.lock().values().map(|t| (t.t.signature.clone(), t.t.recovered || t.t.state == OrderState::UnknownReconcile)).collect();
+        let sigs: Vec<(String, bool)> = self
+            .handle
+            .inner
+            .lock()
+            .values()
+            .map(|t| {
+                (
+                    t.t.signature.clone(),
+                    t.t.recovered || t.t.state == OrderState::UnknownReconcile,
+                )
+            })
+            .collect();
         if sigs.is_empty() {
             return Ok(());
         }
@@ -145,7 +192,11 @@ impl Observer {
         for chunk in sigs.chunks(256) {
             let list: Vec<String> = chunk.iter().map(|(s, _)| s.clone()).collect();
             let search = chunk.iter().any(|(_, r)| *r);
-            let (_, statuses) = self.rpc.get_signature_statuses(&list, search).await.map_err(|e| e.to_string())?;
+            let (_, statuses) = self
+                .rpc
+                .get_signature_statuses(&list, search)
+                .await
+                .map_err(|e| e.to_string())?;
             for (sig, st) in list.iter().zip(statuses) {
                 self.handle_status(sig, st, finalized_height).await;
             }
@@ -153,8 +204,15 @@ impl Observer {
         Ok(())
     }
 
-    async fn handle_status(&self, sig: &str, st: Option<SignatureStatus>, finalized_height: Option<u64>) {
-        let Some(mut tr) = self.handle.inner.lock().remove(sig) else { return };
+    async fn handle_status(
+        &self,
+        sig: &str,
+        st: Option<SignatureStatus>,
+        finalized_height: Option<u64>,
+    ) {
+        let Some(mut tr) = self.handle.inner.lock().remove(sig) else {
+            return;
+        };
         let keep = match self.handle_one(&mut tr, st, finalized_height).await {
             Ok(k) => k,
             Err(e) => {
@@ -173,7 +231,12 @@ impl Observer {
     }
 
     /// Returns whether to keep tracking.
-    async fn handle_one(&self, tr: &mut Tracked, st: Option<SignatureStatus>, finalized_height: Option<u64>) -> Result<bool, StoreError> {
+    async fn handle_one(
+        &self,
+        tr: &mut Tracked,
+        st: Option<SignatureStatus>,
+        finalized_height: Option<u64>,
+    ) -> Result<bool, StoreError> {
         match st {
             Some(s) => {
                 tr.missing_after_observed = 0;
@@ -191,22 +254,45 @@ impl Observer {
                 let target = commitment.landed_state(failed);
                 let detail = serde_json::json!({"slot": s.slot, "commitment": commitment.as_str(), "err": s.err});
                 // Walk through OBSERVED first for a coherent journal.
-                if matches!(tr.t.state, OrderState::Submitted | OrderState::UnknownReconcile | OrderState::Signed) && target != OrderState::Observed && self.advance(tr, OrderState::Observed, detail.clone()).await? {
-                    self.notify(&tr.t, OrderState::Observed, format!("landed in slot {} (processed)", s.slot), None);
+                if matches!(
+                    tr.t.state,
+                    OrderState::Submitted | OrderState::UnknownReconcile | OrderState::Signed
+                ) && target != OrderState::Observed
+                    && self
+                        .advance(tr, OrderState::Observed, detail.clone())
+                        .await?
+                {
+                    self.notify(
+                        &tr.t,
+                        OrderState::Observed,
+                        format!("landed in slot {} (processed)", s.slot),
+                        None,
+                    );
                 }
                 if self.advance(tr, target, detail).await? {
                     let msg = match target {
                         OrderState::Observed => format!("landed in slot {} (processed)", s.slot),
                         OrderState::Confirmed => format!("confirmed in slot {}", s.slot),
                         OrderState::Finalized => format!("finalized in slot {}", s.slot),
-                        OrderState::FailedOnchain => format!("failed on-chain in slot {}: {}", s.slot, s.err.as_ref().map(|e| e.to_string()).unwrap_or_default()),
+                        OrderState::FailedOnchain => format!(
+                            "failed on-chain in slot {}: {}",
+                            s.slot,
+                            s.err.as_ref().map(|e| e.to_string()).unwrap_or_default()
+                        ),
                         _ => String::new(),
                     };
-                    if !matches!(target, OrderState::Confirmed | OrderState::Finalized | OrderState::FailedOnchain) {
+                    if !matches!(
+                        target,
+                        OrderState::Confirmed | OrderState::Finalized | OrderState::FailedOnchain
+                    ) {
                         self.notify(&tr.t, target, msg, None);
                     } else {
                         // Fill decode happens below; notify after so the message has real deltas.
-                        let fill = if !tr.fill_saved { self.save_fill(tr, failed).await } else { None };
+                        let fill = if !tr.fill_saved {
+                            self.save_fill(tr, failed).await
+                        } else {
+                            None
+                        };
                         self.notify(&tr.t, target, msg, fill);
                     }
                 } else if commitment >= Commitment::Confirmed && !tr.fill_saved {
@@ -223,8 +309,18 @@ impl Observer {
                     tr.missing_after_observed += 1;
                     if tr.missing_after_observed >= 3 {
                         // Observation dropped (minority fork / node disagreement).
-                        self.advance(tr, OrderState::Submitted, serde_json::json!({"reason": "observation dropped"})).await?;
-                        self.notify(&tr.t, OrderState::Submitted, "landing observation dropped (fork?); still watching".into(), None);
+                        self.advance(
+                            tr,
+                            OrderState::Submitted,
+                            serde_json::json!({"reason": "observation dropped"}),
+                        )
+                        .await?;
+                        self.notify(
+                            &tr.t,
+                            OrderState::Submitted,
+                            "landing observation dropped (fork?); still watching".into(),
+                            None,
+                        );
                     }
                 }
                 if let Some(h) = finalized_height {
@@ -244,7 +340,10 @@ impl Observer {
                     }
                 }
                 // Rebroadcast the same bytes (never re-sign) while still valid.
-                if !tr.t.recovered && tr.rebroadcasts < self.cfg.max_rebroadcasts && tr.last_rebroadcast.elapsed() >= self.cfg.rebroadcast_interval {
+                if !tr.t.recovered
+                    && tr.rebroadcasts < self.cfg.max_rebroadcasts
+                    && tr.last_rebroadcast.elapsed() >= self.cfg.rebroadcast_interval
+                {
                     if let Some(plan) = tr.t.plan.clone() {
                         tr.rebroadcasts += 1;
                         tr.last_rebroadcast = Instant::now();
@@ -256,7 +355,15 @@ impl Observer {
                             rebroadcast: true,
                         };
                         let at = Router::fan_out(&plan, &tr.t.wire, &ctx).await;
-                        let recs: Vec<AttemptRecord> = at.into_iter().map(|a| AttemptRecord { order_id: tr.t.order_id, signature: tr.t.signature.clone(), attempt: a, rebroadcast: true }).collect();
+                        let recs: Vec<AttemptRecord> = at
+                            .into_iter()
+                            .map(|a| AttemptRecord {
+                                order_id: tr.t.order_id,
+                                signature: tr.t.signature.clone(),
+                                attempt: a,
+                                rebroadcast: true,
+                            })
+                            .collect();
                         let _ = self.store.record_attempts(&recs).await;
                     }
                 }
@@ -266,7 +373,11 @@ impl Observer {
     }
 
     async fn save_fill(&self, tr: &mut Tracked, failed: bool) -> Option<FillRecord> {
-        let tx = match self.rpc.get_transaction(&tr.t.signature, Commitment::Confirmed).await {
+        let tx = match self
+            .rpc
+            .get_transaction(&tr.t.signature, Commitment::Confirmed)
+            .await
+        {
             Ok(Some(tx)) => tx,
             Ok(None) => return None, // not yet available from this node; retry next poll
             Err(e) => {
@@ -284,7 +395,8 @@ impl Observer {
             let pf = match tr.t.side {
                 Side::Buy if fill.token_delta_raw > 0 => Some(Fill {
                     qty_raw: fill.token_delta_raw as u128,
-                    lamports: ((-fill.sol_delta_lamports).max(0) as u128).saturating_sub(rent as u128),
+                    lamports: ((-fill.sol_delta_lamports).max(0) as u128)
+                        .saturating_sub(rent as u128),
                     fees_lamports: (fill.fee_lamports + fill.tip_lamports) as u128,
                     rent_lamports: rent as u128,
                 }),
@@ -297,7 +409,18 @@ impl Observer {
                 _ => None,
             };
             if let Some(pf) = pf {
-                if let Err(e) = self.store.apply_position_fill(tr.t.order_id, tr.t.user_id, tr.t.wallet_id, tr.t.mint, tr.t.side, &pf).await {
+                if let Err(e) = self
+                    .store
+                    .apply_position_fill(
+                        tr.t.order_id,
+                        tr.t.user_id,
+                        tr.t.wallet_id,
+                        tr.t.mint,
+                        tr.t.side,
+                        &pf,
+                    )
+                    .await
+                {
                     tracing::warn!(error = %e, "position update failed");
                 }
             }
@@ -306,10 +429,20 @@ impl Observer {
     }
 }
 
-pub fn compute_fill(tx: &TransactionDetails, wallet: &Pubkey, mint: &Pubkey, tip: u64, failed: bool) -> FillRecord {
+pub fn compute_fill(
+    tx: &TransactionDetails,
+    wallet: &Pubkey,
+    mint: &Pubkey,
+    tip: u64,
+    failed: bool,
+) -> FillRecord {
     let w = wallet.to_string();
     let m = mint.to_string();
-    let decimals = tx.token_balances.iter().find(|t| t.mint == m).map(|t| t.decimals);
+    let decimals = tx
+        .token_balances
+        .iter()
+        .find(|t| t.mint == m)
+        .map(|t| t.decimals);
     FillRecord {
         slot: tx.slot,
         success: !failed && tx.err.is_none(),
@@ -327,7 +460,11 @@ pub fn compute_fill(tx: &TransactionDetails, wallet: &Pubkey, mint: &Pubkey, tip
 pub fn created_token_account_rent(tx: &TransactionDetails, wallet: &Pubkey, mint: &Pubkey) -> u64 {
     let w = wallet.to_string();
     let m = mint.to_string();
-    for t in tx.token_balances.iter().filter(|t| t.mint == m && t.owner.as_deref() == Some(w.as_str())) {
+    for t in tx
+        .token_balances
+        .iter()
+        .filter(|t| t.mint == m && t.owner.as_deref() == Some(w.as_str()))
+    {
         let i = t.account_index as usize;
         if let (Some(pre), Some(post)) = (tx.pre_balances.get(i), tx.post_balances.get(i)) {
             if *pre == 0 && *post > 0 {

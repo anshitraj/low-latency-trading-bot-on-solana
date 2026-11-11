@@ -43,7 +43,9 @@ Benchmarks live in the `trader-benchmarks` crate (cargo run -p trader-benchmarks
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt().with_env_filter(std::env::var("RUST_LOG").unwrap_or_else(|_| "warn".into())).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(std::env::var("RUST_LOG").unwrap_or_else(|_| "warn".into()))
+        .init();
     let (cmd, a) = args();
     match cmd.as_str() {
         "clone-pump-accounts" => localnet::clone_pump_accounts(&a).await,

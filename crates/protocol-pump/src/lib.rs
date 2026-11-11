@@ -24,13 +24,18 @@ use solana_pubkey::Pubkey;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
+use trader_domain::Commitment;
 use trader_domain::{money::price_impact_bps, DexKind, Lamports, MarketRef, Side};
 use trader_execution::guard::{IxView, ProgramRule};
-use trader_execution::protocol::{ProtocolAdapter, ProtocolError, ProtocolQuote, QuoteRequest, SwapBuild};
+use trader_execution::protocol::{
+    ProtocolAdapter, ProtocolError, ProtocolQuote, QuoteRequest, SwapBuild,
+};
 use trader_execution::risk::screen_mint;
-use trader_market_data::token::{associated_token_address, parse_mint, parse_token_account, MintInfo, SPL_TOKEN_PROGRAM, TOKEN_2022_PROGRAM};
+use trader_market_data::token::{
+    associated_token_address, parse_mint, parse_token_account, MintInfo, SPL_TOKEN_PROGRAM,
+    TOKEN_2022_PROGRAM,
+};
 use trader_market_data::{RpcClient, TokenBalanceChange};
-use trader_domain::Commitment;
 
 pub const PUMP_PROGRAM_ID: Pubkey = constants::pump::PROGRAM_ID;
 pub const PUMP_FEE_PROGRAM_ID: Pubkey = constants::FEE_PROGRAM_ID;
@@ -69,12 +74,22 @@ pub struct PumpAdapter {
 
 impl PumpAdapter {
     pub fn new(rpc: RpcClient) -> Self {
-        Self { rpc: Some(rpc), sdk: PumpSdk::new(), cache: Default::default(), compute_units: DEFAULT_COMPUTE_UNITS }
+        Self {
+            rpc: Some(rpc),
+            sdk: PumpSdk::new(),
+            cache: Default::default(),
+            compute_units: DEFAULT_COMPUTE_UNITS,
+        }
     }
 
     /// Offline adapter (fixtures / benchmarks): state is injected with `insert_snapshot`.
     pub fn offline() -> Self {
-        Self { rpc: None, sdk: PumpSdk::new(), cache: Default::default(), compute_units: DEFAULT_COMPUTE_UNITS }
+        Self {
+            rpc: None,
+            sdk: PumpSdk::new(),
+            cache: Default::default(),
+            compute_units: DEFAULT_COMPUTE_UNITS,
+        }
     }
 
     pub fn with_compute_units(mut self, cu: u32) -> Self {
@@ -112,9 +127,12 @@ impl PumpAdapter {
             return Err(bad("bonding curve not owned by pump program"));
         }
         let global = decode_global(global.1).map_err(|e| bad(&format!("global: {e}")))?;
-        let fee_config = decode_fee_config(fee_config.1).map_err(|e| bad(&format!("fee_config: {e}")))?;
-        let curve_acc = decode_bonding_curve(curve.1).map_err(|e| bad(&format!("bonding curve: {e}")))?;
-        let mint_info = parse_mint(mint_acct.0, mint_acct.1).map_err(|e| bad(&format!("mint: {e}")))?;
+        let fee_config =
+            decode_fee_config(fee_config.1).map_err(|e| bad(&format!("fee_config: {e}")))?;
+        let curve_acc =
+            decode_bonding_curve(curve.1).map_err(|e| bad(&format!("bonding curve: {e}")))?;
+        let mint_info =
+            parse_mint(mint_acct.0, mint_acct.1).map_err(|e| bad(&format!("mint: {e}")))?;
         Ok(CurveSnapshot {
             global,
             fee_config,
@@ -128,7 +146,10 @@ impl PumpAdapter {
     }
 
     pub async fn fetch(&self, mint: &Pubkey) -> Result<Option<CurveSnapshot>, ProtocolError> {
-        let rpc = self.rpc.as_ref().ok_or_else(|| ProtocolError::StateUnavailable("offline adapter".into()))?;
+        let rpc = self
+            .rpc
+            .as_ref()
+            .ok_or_else(|| ProtocolError::StateUnavailable("offline adapter".into()))?;
         let bc = pda::pump::bonding_curve(mint).0;
         let keys = [
             pda::pump::global().0,
@@ -146,12 +167,24 @@ impl PumpAdapter {
             None => return Ok(None), // not a pump coin
             Some(a) => a,
         };
-        let global = accts[0].as_ref().ok_or_else(|| ProtocolError::StateUnavailable("pump global missing".into()))?;
-        let fee = accts[1].as_ref().ok_or_else(|| ProtocolError::StateUnavailable("pump fee_config missing".into()))?;
-        let mint_acct = accts[3].as_ref().ok_or_else(|| ProtocolError::StateUnavailable("mint missing".into()))?;
-        let ata_idx = if mint_acct.owner == TOKEN_2022_PROGRAM { 5 } else { 4 };
+        let global = accts[0]
+            .as_ref()
+            .ok_or_else(|| ProtocolError::StateUnavailable("pump global missing".into()))?;
+        let fee = accts[1]
+            .as_ref()
+            .ok_or_else(|| ProtocolError::StateUnavailable("pump fee_config missing".into()))?;
+        let mint_acct = accts[3]
+            .as_ref()
+            .ok_or_else(|| ProtocolError::StateUnavailable("mint missing".into()))?;
+        let ata_idx = if mint_acct.owner == TOKEN_2022_PROGRAM {
+            5
+        } else {
+            4
+        };
         let base_ata_amount = match &accts[ata_idx] {
-            Some(a) => parse_token_account(&a.owner, &a.data).map(|t| t.amount).unwrap_or(0),
+            Some(a) => parse_token_account(&a.owner, &a.data)
+                .map(|t| t.amount)
+                .unwrap_or(0),
             None => 0,
         };
         let snap = Self::decode_snapshot(
@@ -175,15 +208,26 @@ impl PumpAdapter {
             .ok_or_else(|| ProtocolError::StateUnavailable("no cached pump state".into()))?;
         let age = s.fetched_at.elapsed();
         if age > req.max_state_age {
-            return Err(ProtocolError::Stale(format!("{} ms > {} ms", age.as_millis(), req.max_state_age.as_millis())));
+            return Err(ProtocolError::Stale(format!(
+                "{} ms > {} ms",
+                age.as_millis(),
+                req.max_state_age.as_millis()
+            )));
         }
         Ok(s)
     }
 
     fn check_supported(s: &CurveSnapshot) -> Result<(), ProtocolError> {
-        let unsupported = |r: &str| Err(ProtocolError::Unsupported { adapter: "pump", reason: r.to_string() });
+        let unsupported = |r: &str| {
+            Err(ProtocolError::Unsupported {
+                adapter: "pump",
+                reason: r.to_string(),
+            })
+        };
         if s.curve.complete {
-            return unsupported("curve complete (migrated to PumpSwap); PumpSwap adapter not enabled");
+            return unsupported(
+                "curve complete (migrated to PumpSwap); PumpSwap adapter not enabled",
+            );
         }
         if s.curve.quote_mint != Pubkey::default() && s.curve.quote_mint != constants::NATIVE_MINT {
             return unsupported("non-SOL quote mint");
@@ -193,11 +237,18 @@ impl PumpAdapter {
         }
         if s.curve.is_cashback_coin {
             // pump-rust-client fixtures: "v3 / pool v2 trades refuse cashback coins".
-            return unsupported("legacy cashback coin: v3 trades refuse it and the legacy v2 path is not enabled");
+            return unsupported(
+                "legacy cashback coin: v3 trades refuse it and the legacy v2 path is not enabled",
+            );
         }
         let risk = screen_mint(&s.mint, None);
         if risk.blocked() {
-            let reasons: Vec<String> = risk.flags.iter().filter(|f| f.level == trader_execution::RiskLevel::Block).map(|f| f.message.clone()).collect();
+            let reasons: Vec<String> = risk
+                .flags
+                .iter()
+                .filter(|f| f.level == trader_execution::RiskLevel::Block)
+                .map(|f| f.message.clone())
+                .collect();
             return unsupported(&format!("risk screen blocked: {}", reasons.join("; ")));
         }
         Ok(())
@@ -218,7 +269,12 @@ impl PumpAdapter {
     }
 
     fn buyback_recipient(global: &Global, user: &Pubkey) -> Option<Pubkey> {
-        let mut c: Vec<Pubkey> = global.buyback_fee_recipients.iter().copied().filter(|p| *p != Pubkey::default()).collect();
+        let mut c: Vec<Pubkey> = global
+            .buyback_fee_recipients
+            .iter()
+            .copied()
+            .filter(|p| *p != Pubkey::default())
+            .collect();
         c.sort();
         c.dedup();
         if c.is_empty() {
@@ -230,7 +286,11 @@ impl PumpAdapter {
     }
 
     /// Decode actual fill from confirmed tx balances (token delta + SOL delta).
-    pub fn decode_fill(tx: &trader_market_data::TransactionDetails, user: &Pubkey, mint: &Pubkey) -> (i128, Option<i128>) {
+    pub fn decode_fill(
+        tx: &trader_market_data::TransactionDetails,
+        user: &Pubkey,
+        mint: &Pubkey,
+    ) -> (i128, Option<i128>) {
         let token = tx.token_delta(&user.to_string(), &mint.to_string());
         let sol = tx.lamport_delta(&user.to_string());
         (token, sol)
@@ -245,7 +305,11 @@ struct PumpRule;
 
 impl ProgramRule for PumpRule {
     fn check(&self, ix: &IxView<'_>, wallet: &Pubkey) -> Result<(), String> {
-        let disc: [u8; 8] = ix.data.get(..8).and_then(|d| d.try_into().ok()).ok_or("short data")?;
+        let disc: [u8; 8] = ix
+            .data
+            .get(..8)
+            .and_then(|d| d.try_into().ok())
+            .ok_or("short data")?;
         if disc != DISC_BUY_EXACT_QUOTE_IN_V3 && disc != DISC_SELL_V3 && disc != DISC_BUY_V3 {
             return Err("only buy_v3 / buy_exact_quote_in_v3 / sell_v3 are allowed".into());
         }
@@ -264,19 +328,29 @@ impl ProtocolAdapter for PumpAdapter {
     fn name(&self) -> &'static str {
         "pump"
     }
-    fn program_rules(&self) -> Vec<(Pubkey, &'static str, Option<Arc<dyn ProgramRule>>)> {
+    fn program_rules(&self) -> Vec<trader_execution::protocol::ProgramRuleSpec> {
         vec![(PUMP_PROGRAM_ID, "pump", Some(Arc::new(PumpRule)))]
     }
 
     async fn resolve_market(&self, mint: &Pubkey) -> Result<Option<MarketRef>, ProtocolError> {
         if self.rpc.is_none() {
             // Offline (fixtures/benchmarks): only injected snapshots exist.
-            return Ok(self.cache.read().get(mint).map(|s| MarketRef { dex: DexKind::PumpBondingCurve, market: s.bonding_curve, base_mint: *mint, quote_mint: constants::NATIVE_MINT }));
+            return Ok(self.cache.read().get(mint).map(|s| MarketRef {
+                dex: DexKind::PumpBondingCurve,
+                market: s.bonding_curve,
+                base_mint: *mint,
+                quote_mint: constants::NATIVE_MINT,
+            }));
         }
         match self.fetch(mint).await? {
             None => Ok(None),
             Some(s) => {
-                let m = MarketRef { dex: DexKind::PumpBondingCurve, market: s.bonding_curve, base_mint: *mint, quote_mint: constants::NATIVE_MINT };
+                let m = MarketRef {
+                    dex: DexKind::PumpBondingCurve,
+                    market: s.bonding_curve,
+                    base_mint: *mint,
+                    quote_mint: constants::NATIVE_MINT,
+                };
                 self.cache.write().insert(*mint, s);
                 Ok(Some(m))
             }
@@ -285,7 +359,9 @@ impl ProtocolAdapter for PumpAdapter {
 
     async fn refresh(&self, mint: &Pubkey) -> Result<(), ProtocolError> {
         match self.fetch(mint).await? {
-            None => Err(ProtocolError::StateUnavailable("bonding curve not found".into())),
+            None => Err(ProtocolError::StateUnavailable(
+                "bonding curve not found".into(),
+            )),
             Some(s) => {
                 let mut w = self.cache.write();
                 if w.get(mint).map(|o| o.slot <= s.slot).unwrap_or(true) {
@@ -307,12 +383,30 @@ impl ProtocolAdapter for PumpAdapter {
             Side::Buy => {
                 let qt = self
                     .sdk
-                    .buy_quote_bonding_curve_v3_sol_in(&s.global, &s.fee_config, &s.curve, s.mint.supply, TransferFee::NONE, s.base_ata_amount, req.amount_in, req.slippage_bps)
+                    .buy_quote_bonding_curve_v3_sol_in(
+                        &s.global,
+                        &s.fee_config,
+                        &s.curve,
+                        s.mint.supply,
+                        TransferFee::NONE,
+                        s.base_ata_amount,
+                        req.amount_in,
+                        req.slippage_bps,
+                    )
                     .map_err(q)?;
                 let probe = req.amount_in.min(SPOT_PROBE_LAMPORTS);
                 let sp = self
                     .sdk
-                    .buy_quote_bonding_curve_v3_sol_in(&s.global, &s.fee_config, &s.curve, s.mint.supply, TransferFee::NONE, s.base_ata_amount, probe, 0)
+                    .buy_quote_bonding_curve_v3_sol_in(
+                        &s.global,
+                        &s.fee_config,
+                        &s.curve,
+                        s.mint.supply,
+                        TransferFee::NONE,
+                        s.base_ata_amount,
+                        probe,
+                        0,
+                    )
                     .ok()
                     .map(|p| (probe, p.amount));
                 (qt, sp)
@@ -320,12 +414,28 @@ impl ProtocolAdapter for PumpAdapter {
             Side::Sell => {
                 let qt = self
                     .sdk
-                    .sell_quote_bonding_curve(&s.global, &s.fee_config, &s.curve, s.mint.supply, TransferFee::NONE, req.amount_in, req.slippage_bps)
+                    .sell_quote_bonding_curve(
+                        &s.global,
+                        &s.fee_config,
+                        &s.curve,
+                        s.mint.supply,
+                        TransferFee::NONE,
+                        req.amount_in,
+                        req.slippage_bps,
+                    )
                     .map_err(q)?;
                 let probe = (req.amount_in / 1000).max(1);
                 let sp = self
                     .sdk
-                    .sell_quote_bonding_curve(&s.global, &s.fee_config, &s.curve, s.mint.supply, TransferFee::NONE, probe, 0)
+                    .sell_quote_bonding_curve(
+                        &s.global,
+                        &s.fee_config,
+                        &s.curve,
+                        s.mint.supply,
+                        TransferFee::NONE,
+                        probe,
+                        0,
+                    )
                     .ok()
                     .map(|p| (probe, p.amount));
                 (qt, sp)
@@ -341,19 +451,32 @@ impl ProtocolAdapter for PumpAdapter {
         });
         let fee_bps = self.fee_bps(&s);
         let protocol_fee = match (req.side, fee_bps) {
-            (Side::Buy, Some(b)) => Some(Lamports(((req.amount_in as u128 * b as u128).div_ceil(10_000)) as u64)),
-            (Side::Sell, Some(b)) => Some(Lamports(((quote.amount as u128 * b as u128).div_ceil(10_000)) as u64)),
+            (Side::Buy, Some(b)) => Some(Lamports(
+                ((req.amount_in as u128 * b as u128).div_ceil(10_000)) as u64,
+            )),
+            (Side::Sell, Some(b)) => Some(Lamports(
+                ((quote.amount as u128 * b as u128).div_ceil(10_000)) as u64,
+            )),
             _ => None,
         };
         let mut warnings = vec![];
         if quote.input_amount_used < req.amount_in && req.side == Side::Buy {
-            warnings.push("partial fill: curve completes; remainder buys from post-migration pool".into());
+            warnings.push(
+                "partial fill: curve completes; remainder buys from post-migration pool".into(),
+            );
         }
         if fee_bps.is_some() {
-            warnings.push("protocol/creator fee shown is an estimate from the pump-fees tier table".into());
+            warnings.push(
+                "protocol/creator fee shown is an estimate from the pump-fees tier table".into(),
+            );
         }
         Ok(ProtocolQuote {
-            market: MarketRef { dex: DexKind::PumpBondingCurve, market: s.bonding_curve, base_mint: req.mint, quote_mint: constants::NATIVE_MINT },
+            market: MarketRef {
+                dex: DexKind::PumpBondingCurve,
+                market: s.bonding_curve,
+                base_mint: req.mint,
+                quote_mint: constants::NATIVE_MINT,
+            },
             side: req.side,
             amount_in: req.amount_in,
             input_used: quote.input_amount_used,
@@ -392,11 +515,19 @@ impl ProtocolAdapter for PumpAdapter {
         }))
     }
 
-    fn user_rent_candidates(&self, user: &Pubkey, _mint: &Pubkey, _side: Side) -> Vec<(Pubkey, Lamports)> {
+    fn user_rent_candidates(
+        &self,
+        user: &Pubkey,
+        _mint: &Pubkey,
+        _side: Side,
+    ) -> Vec<(Pubkey, Lamports)> {
         // Measured on localnet with pump.so (pump-rust-client 0.5.0): the first
         // v3 trade creates `user_volume_accumulator` (owner pump, 137 bytes,
         // 1_844_400 lamports) paid by the user.
-        vec![(pda::pump::user_volume_accumulator(user).0, trader_domain::fees::rent_exempt_minimum(USER_VOLUME_ACCUMULATOR_LEN))]
+        vec![(
+            pda::pump::user_volume_accumulator(user).0,
+            trader_domain::fees::rent_exempt_minimum(USER_VOLUME_ACCUMULATOR_LEN),
+        )]
     }
 
     fn build_swap(&self, quote: &ProtocolQuote, user: &Pubkey) -> Result<SwapBuild, ProtocolError> {
@@ -406,8 +537,9 @@ impl ProtocolAdapter for PumpAdapter {
             .get(&quote.market.base_mint)
             .cloned()
             .ok_or_else(|| ProtocolError::StateUnavailable("no cached pump state".into()))?;
-        let buyback = Self::buyback_recipient(&s.global, user)
-            .ok_or_else(|| ProtocolError::StateUnavailable("global has no buyback fee recipients".into()))?;
+        let buyback = Self::buyback_recipient(&s.global, user).ok_or_else(|| {
+            ProtocolError::StateUnavailable("global has no buyback fee recipients".into())
+        })?;
         let ixs: Vec<Instruction> = match quote.side {
             Side::Buy => self.sdk.buy_exact_quote_in_v3_instructions(
                 quote.market.base_mint,
@@ -443,7 +575,10 @@ mod tests {
         use anchor_lang::Discriminator;
         use pump_rust_client::pump::client::args;
         assert_eq!(args::BuyV3::DISCRIMINATOR, DISC_BUY_V3);
-        assert_eq!(args::BuyExactQuoteInV3::DISCRIMINATOR, DISC_BUY_EXACT_QUOTE_IN_V3);
+        assert_eq!(
+            args::BuyExactQuoteInV3::DISCRIMINATOR,
+            DISC_BUY_EXACT_QUOTE_IN_V3
+        );
         assert_eq!(args::SellV3::DISCRIMINATOR, DISC_SELL_V3);
     }
 
@@ -452,8 +587,20 @@ mod tests {
         let sdk = PumpSdk::new();
         let user = Pubkey::new_unique();
         let mint = Pubkey::new_unique();
-        let ixs = sdk.buy_exact_quote_in_v3_instructions(mint, constants::NATIVE_MINT, TOKEN_2022_PROGRAM, SPL_TOKEN_PROGRAM, user, Pubkey::new_unique(), 1_000, 1);
-        let trade = ixs.iter().find(|i| i.program_id == PUMP_PROGRAM_ID).expect("pump ix");
+        let ixs = sdk.buy_exact_quote_in_v3_instructions(
+            mint,
+            constants::NATIVE_MINT,
+            TOKEN_2022_PROGRAM,
+            SPL_TOKEN_PROGRAM,
+            user,
+            Pubkey::new_unique(),
+            1_000,
+            1,
+        );
+        let trade = ixs
+            .iter()
+            .find(|i| i.program_id == PUMP_PROGRAM_ID)
+            .expect("pump ix");
         assert_eq!(trade.accounts[V3_USER_INDEX].pubkey, user);
         assert!(trade.accounts[V3_USER_INDEX].is_signer);
         assert_eq!(trade.accounts.len(), 17);
@@ -462,12 +609,20 @@ mod tests {
         for i in ixs.iter().filter(|i| i.program_id != PUMP_PROGRAM_ID) {
             assert_eq!(i.program_id, trader_market_data::token::ATA_PROGRAM);
         }
-        let view = IxView { program: PUMP_PROGRAM_ID, accounts: trade.accounts.iter().map(|a| a.pubkey).collect(), data: &trade.data };
+        let view = IxView {
+            program: PUMP_PROGRAM_ID,
+            accounts: trade.accounts.iter().map(|a| a.pubkey).collect(),
+            data: &trade.data,
+        };
         assert!(PumpRule.check(&view, &user).is_ok());
         assert!(PumpRule.check(&view, &Pubkey::new_unique()).is_err());
         let mut bad = trade.data.clone();
         bad[0] ^= 1;
-        let view = IxView { program: PUMP_PROGRAM_ID, accounts: trade.accounts.iter().map(|a| a.pubkey).collect(), data: &bad };
+        let view = IxView {
+            program: PUMP_PROGRAM_ID,
+            accounts: trade.accounts.iter().map(|a| a.pubkey).collect(),
+            data: &bad,
+        };
         assert!(PumpRule.check(&view, &user).is_err());
     }
 
@@ -476,13 +631,28 @@ mod tests {
         let a = PumpAdapter::offline();
         let u = Pubkey::new_unique();
         let c = a.user_rent_candidates(&u, &Pubkey::new_unique(), Side::Buy);
-        assert_eq!(c, vec![(pda::pump::user_volume_accumulator(&u).0, Lamports(1_844_400))]);
+        assert_eq!(
+            c,
+            vec![(
+                pda::pump::user_volume_accumulator(&u).0,
+                Lamports(1_844_400)
+            )]
+        );
     }
 
     #[test]
     fn offline_quote_without_state_fails_closed() {
         let a = PumpAdapter::offline();
-        let r = QuoteRequest { mint: Pubkey::new_unique(), side: Side::Buy, amount_in: 1, slippage_bps: 100, max_state_age: std::time::Duration::from_secs(1) };
-        assert!(matches!(a.quote_exact_in(&r), Err(ProtocolError::StateUnavailable(_))));
+        let r = QuoteRequest {
+            mint: Pubkey::new_unique(),
+            side: Side::Buy,
+            amount_in: 1,
+            slippage_bps: 100,
+            max_state_age: std::time::Duration::from_secs(1),
+        };
+        assert!(matches!(
+            a.quote_exact_in(&r),
+            Err(ProtocolError::StateUnavailable(_))
+        ));
     }
 }

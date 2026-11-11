@@ -44,8 +44,19 @@ use OrderState::*;
 
 impl OrderState {
     pub const ALL: [OrderState; 13] = [
-        Created, Quoted, AwaitingAuth, Signing, Signed, Submitted, Observed, Confirmed, Finalized,
-        FailedOnchain, Expired, Rejected, UnknownReconcile,
+        Created,
+        Quoted,
+        AwaitingAuth,
+        Signing,
+        Signed,
+        Submitted,
+        Observed,
+        Confirmed,
+        Finalized,
+        FailedOnchain,
+        Expired,
+        Rejected,
+        UnknownReconcile,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -72,7 +83,10 @@ impl OrderState {
 
     /// A signed transaction for this order may exist on the network.
     pub fn may_be_in_flight(self) -> bool {
-        matches!(self, Signed | Submitted | Observed | Confirmed | UnknownReconcile)
+        matches!(
+            self,
+            Signed | Submitted | Observed | Confirmed | UnknownReconcile
+        )
     }
 
     pub fn has_landed(self) -> bool {
@@ -96,12 +110,31 @@ impl OrderState {
             Signing => matches!(to, Signed | Rejected),
             // Rejected only when no sender accepted it ambiguously or otherwise
             // (all definitive refusals / never handed off).
-            Signed => matches!(to, Submitted | Rejected | Expired | UnknownReconcile | Observed | Confirmed | Finalized | FailedOnchain),
-            Submitted => matches!(to, Observed | Confirmed | Finalized | FailedOnchain | Expired | UnknownReconcile),
+            Signed => matches!(
+                to,
+                Submitted
+                    | Rejected
+                    | Expired
+                    | UnknownReconcile
+                    | Observed
+                    | Confirmed
+                    | Finalized
+                    | FailedOnchain
+            ),
+            Submitted => matches!(
+                to,
+                Observed | Confirmed | Finalized | FailedOnchain | Expired | UnknownReconcile
+            ),
             // Observed on an abandoned fork -> back to Submitted.
-            Observed => matches!(to, Confirmed | Finalized | FailedOnchain | Submitted | Expired | UnknownReconcile),
+            Observed => matches!(
+                to,
+                Confirmed | Finalized | FailedOnchain | Submitted | Expired | UnknownReconcile
+            ),
             Confirmed => matches!(to, Finalized | UnknownReconcile),
-            UnknownReconcile => matches!(to, Submitted | Observed | Confirmed | Finalized | FailedOnchain | Expired),
+            UnknownReconcile => matches!(
+                to,
+                Submitted | Observed | Confirmed | Finalized | FailedOnchain | Expired
+            ),
             Finalized | FailedOnchain | Expired | Rejected => false,
         }
     }
@@ -199,9 +232,29 @@ mod tests {
     #[test]
     fn happy_paths() {
         for path in [
-            vec![Created, Quoted, AwaitingAuth, Signing, Signed, Submitted, Observed, Confirmed, Finalized],
+            vec![
+                Created,
+                Quoted,
+                AwaitingAuth,
+                Signing,
+                Signed,
+                Submitted,
+                Observed,
+                Confirmed,
+                Finalized,
+            ],
             vec![Created, Quoted, Signing, Signed, Submitted, Finalized],
-            vec![Created, Quoted, AwaitingAuth, Quoted, AwaitingAuth, Signing, Signed, Submitted, FailedOnchain],
+            vec![
+                Created,
+                Quoted,
+                AwaitingAuth,
+                Quoted,
+                AwaitingAuth,
+                Signing,
+                Signed,
+                Submitted,
+                FailedOnchain,
+            ],
             vec![Signed, Submitted, Observed, Submitted, Expired],
             vec![Signed, UnknownReconcile, Confirmed, Finalized],
         ] {
@@ -242,9 +295,17 @@ mod tests {
     fn transition_table_size_is_pinned() {
         let n: usize = OrderState::ALL
             .iter()
-            .map(|f| OrderState::ALL.iter().filter(|t| f.can_transition_to(**t)).count())
+            .map(|f| {
+                OrderState::ALL
+                    .iter()
+                    .filter(|t| f.can_transition_to(**t))
+                    .count()
+            })
             .sum();
-        assert_eq!(n, 38, "transition table changed; update tests + docs/EXECUTION_ENGINE.md");
+        assert_eq!(
+            n, 38,
+            "transition table changed; update tests + docs/EXECUTION_ENGINE.md"
+        );
     }
 
     #[test]
@@ -264,7 +325,10 @@ mod tests {
     fn strings_and_status() {
         for s in OrderState::ALL {
             assert_eq!(s.as_str().parse::<OrderState>().unwrap(), s);
-            assert_eq!(serde_json::to_string(&s).unwrap(), format!("\"{}\"", s.as_str()));
+            assert_eq!(
+                serde_json::to_string(&s).unwrap(),
+                format!("\"{}\"", s.as_str())
+            );
             let msg = user_status(s);
             if !matches!(s, Confirmed | Finalized) {
                 assert!(!msg.contains("filled"), "{s}: {msg}");

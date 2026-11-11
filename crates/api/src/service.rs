@@ -60,16 +60,32 @@ impl ServiceError {
     }
 }
 
-pub async fn ensure_tg_user(st: &AppState, telegram_id: i64, username: Option<String>) -> Result<User, ServiceError> {
-    Ok(st.app.upsert_telegram_user(telegram_id, username, st.cfg.beta_allowed(telegram_id)).await?)
+pub async fn ensure_tg_user(
+    st: &AppState,
+    telegram_id: i64,
+    username: Option<String>,
+) -> Result<User, ServiceError> {
+    Ok(st
+        .app
+        .upsert_telegram_user(telegram_id, username, st.cfg.beta_allowed(telegram_id))
+        .await?)
 }
 
 pub async fn settings(st: &AppState, user: &User) -> Result<UserSettings, ServiceError> {
-    Ok(st.app.get_settings(user.id).await?.unwrap_or_else(|| UserSettings::defaults_for(vec![trader_domain::SenderKind::Rpc])))
+    Ok(st
+        .app
+        .get_settings(user.id)
+        .await?
+        .unwrap_or_else(|| UserSettings::defaults_for(vec![trader_domain::SenderKind::Rpc])))
 }
 
 pub async fn default_wallet(st: &AppState, user: &User) -> Result<Option<Wallet>, ServiceError> {
-    Ok(st.app.list_wallets(user.id).await?.into_iter().find(|w| w.network == st.cfg.mode))
+    Ok(st
+        .app
+        .list_wallets(user.id)
+        .await?
+        .into_iter()
+        .find(|w| w.network == st.cfg.mode))
 }
 
 pub async fn create_wallet(st: &AppState, user: &User) -> Result<Wallet, ServiceError> {
@@ -79,14 +95,21 @@ pub async fn create_wallet(st: &AppState, user: &User) -> Result<Wallet, Service
     if let Some(w) = default_wallet(st, user).await? {
         return Ok(w);
     }
-    let kek = st.kek.as_ref().ok_or_else(|| ServiceError::Internal("no KEK configured".into()))?;
-    crate::providers::create_managed_wallet(&st.app, kek, user.id, st.cfg.mode).await.map_err(ServiceError::Internal)
+    let kek = st
+        .kek
+        .as_ref()
+        .ok_or_else(|| ServiceError::Internal("no KEK configured".into()))?;
+    crate::providers::create_managed_wallet(&st.app, kek, user.id, st.cfg.mode)
+        .await
+        .map_err(ServiceError::Internal)
 }
 
 pub fn parse_mint_arg(s: &str) -> Result<Pubkey, ServiceError> {
-    trader_domain::pubkey::parse(s).map_err(|e| ServiceError::BadRequest(format!("invalid mint: {e}")))
+    trader_domain::pubkey::parse(s)
+        .map_err(|e| ServiceError::BadRequest(format!("invalid mint: {e}")))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn build_intent(
     st: &AppState,
     user: &User,
@@ -112,7 +135,11 @@ pub async fn build_intent(
         mint,
         amount,
         slippage: s.slippage,
-        fees: FeePreference { compute_unit_price_micro_lamports: s.compute_unit_price_micro_lamports, max_priority_fee: s.max_priority_fee, tip: s.tip },
+        fees: FeePreference {
+            compute_unit_price_micro_lamports: s.compute_unit_price_micro_lamports,
+            max_priority_fee: s.max_priority_fee,
+            tip: s.tip,
+        },
         senders,
         idempotency_key,
         requires_approval: require_approval.unwrap_or(s.confirm_trades),
@@ -120,7 +147,12 @@ pub async fn build_intent(
     })
 }
 
-pub async fn submit(st: &AppState, user: &User, intent: TradeIntent, trace: Option<trader_domain::LatencyTrace>) -> Result<Order, ServiceError> {
+pub async fn submit(
+    st: &AppState,
+    user: &User,
+    intent: TradeIntent,
+    trace: Option<trader_domain::LatencyTrace>,
+) -> Result<Order, ServiceError> {
     if !user.beta_allowed {
         return Err(ServiceError::NotAllowlisted);
     }
@@ -137,7 +169,11 @@ pub async fn submit(st: &AppState, user: &User, intent: TradeIntent, trace: Opti
     Ok(o)
 }
 
-pub async fn preview(st: &AppState, user: &User, intent: &TradeIntent) -> Result<Quote, ServiceError> {
+pub async fn preview(
+    st: &AppState,
+    user: &User,
+    intent: &TradeIntent,
+) -> Result<Quote, ServiceError> {
     let wallet = st.app.get_wallet(intent.wallet_id).await?;
     if wallet.user_id != user.id {
         return Err(ServiceError::Forbidden);
@@ -147,7 +183,11 @@ pub async fn preview(st: &AppState, user: &User, intent: &TradeIntent) -> Result
 }
 
 pub async fn order_for_user(st: &AppState, user: &User, id: Uuid) -> Result<Order, ServiceError> {
-    let o = st.orders.get_order(id).await.map_err(|_| ServiceError::NotFound)?;
+    let o = st
+        .orders
+        .get_order(id)
+        .await
+        .map_err(|_| ServiceError::NotFound)?;
     if o.user_id != user.id {
         return Err(ServiceError::NotFound); // do not reveal existence
     }
@@ -174,22 +214,58 @@ pub async fn token_info(st: &AppState, mint: Pubkey) -> TokenInfo {
         Ok((_, Some(acc))) => match parse_mint(&acc.owner, &acc.data) {
             Ok(m) => {
                 let top10 = match st.rpc.get_token_largest_accounts(&mint).await {
-                    Ok(v) if m.supply > 0 => Some((v.iter().take(10).map(|(_, a)| *a as u128).sum::<u128>() * 10_000 / m.supply as u128) as u32),
+                    Ok(v) if m.supply > 0 => Some(
+                        (v.iter().take(10).map(|(_, a)| *a as u128).sum::<u128>() * 10_000
+                            / m.supply as u128) as u32,
+                    ),
                     _ => None,
                 };
                 let r = screen_mint(&m, top10);
                 (
-                    Some(json!({"decimals": m.decimals, "supply": m.supply.to_string(), "mint_authority": m.mint_authority.map(|p| p.to_string()), "freeze_authority": m.freeze_authority.map(|p| p.to_string()), "token_program": m.program.id().to_string(), "extensions": m.extensions.iter().map(|e| format!("{e:?}")).collect::<Vec<_>>(), "top10_includes_curve_or_pool": true})),
+                    Some(
+                        json!({"decimals": m.decimals, "supply": m.supply.to_string(), "mint_authority": m.mint_authority.map(|p| p.to_string()), "freeze_authority": m.freeze_authority.map(|p| p.to_string()), "token_program": m.program.id().to_string(), "extensions": m.extensions.iter().map(|e| format!("{e:?}")).collect::<Vec<_>>(), "top10_includes_curve_or_pool": true}),
+                    ),
                     Some(r),
                 )
             }
-            Err(e) => (None, Some(trader_execution::RiskReport { flags: vec![trader_execution::RiskFlag { code: "not_a_mint", level: trader_execution::RiskLevel::Block, message: e.to_string() }], top10_holder_bps: None, source: "on-chain" })),
+            Err(e) => (
+                None,
+                Some(trader_execution::RiskReport {
+                    flags: vec![trader_execution::RiskFlag {
+                        code: "not_a_mint",
+                        level: trader_execution::RiskLevel::Block,
+                        message: e.to_string(),
+                    }],
+                    top10_holder_bps: None,
+                    source: "on-chain",
+                }),
+            ),
         },
         _ => (None, None),
     };
     match st.engine.describe_market(&mint).await {
-        Ok((name, market)) => TokenInfo { mint: mint.to_string(), network: st.cfg.mode, supported: true, adapter: Some(name), market, mint_info, risk, unsupported_reason: None, disclaimer: RISK_DISCLAIMER },
-        Err(e) => TokenInfo { mint: mint.to_string(), network: st.cfg.mode, supported: false, adapter: None, market: None, mint_info, risk, unsupported_reason: Some(e.to_string()), disclaimer: RISK_DISCLAIMER },
+        Ok((name, market)) => TokenInfo {
+            mint: mint.to_string(),
+            network: st.cfg.mode,
+            supported: true,
+            adapter: Some(name),
+            market,
+            mint_info,
+            risk,
+            unsupported_reason: None,
+            disclaimer: RISK_DISCLAIMER,
+        },
+        Err(e) => TokenInfo {
+            mint: mint.to_string(),
+            network: st.cfg.mode,
+            supported: false,
+            adapter: None,
+            market: None,
+            mint_info,
+            risk,
+            unsupported_reason: Some(e.to_string()),
+            disclaimer: RISK_DISCLAIMER,
+        },
     }
 }
 
@@ -197,14 +273,42 @@ pub async fn portfolio(st: &AppState, user: &User) -> Result<Value, ServiceError
     let mut out = vec![];
     for w in st.app.list_wallets(user.id).await? {
         let pk = trader_domain::pubkey::parse(&w.pubkey).map_err(ServiceError::Internal)?;
-        let sol = st.rpc.get_balance(&pk, Commitment::Confirmed).await.ok().map(|(l, _)| Lamports(l));
+        let sol = st
+            .rpc
+            .get_balance(&pk, Commitment::Confirmed)
+            .await
+            .ok()
+            .map(|(l, _)| Lamports(l));
         let mut positions = vec![];
-        for (mint, p) in st.orders.list_positions(w.id).await.map_err(|e| ServiceError::Internal(e.to_string()))? {
+        for (mint, p) in st
+            .orders
+            .list_positions(w.id)
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?
+        {
             // Unrealized PnL uses an executable sell quote for the full size; no quote => null (never fabricated).
             let est = if p.qty_raw > 0 {
-                let intent = build_intent(st, user, &w, Side::Sell, mint, AmountSpec::ExactTokenIn { raw: p.qty_raw.min(u64::MAX as u128) as u64 }, format!("pv:{}", Uuid::new_v4()), Some(true)).await.ok();
+                let intent = build_intent(
+                    st,
+                    user,
+                    &w,
+                    Side::Sell,
+                    mint,
+                    AmountSpec::ExactTokenIn {
+                        raw: p.qty_raw.min(u64::MAX as u128) as u64,
+                    },
+                    format!("pv:{}", Uuid::new_v4()),
+                    Some(true),
+                )
+                .await
+                .ok();
                 match intent {
-                    Some(i) => st.engine.preview(&i, &pk).await.ok().map(|q| q.expected_out as u128),
+                    Some(i) => st
+                        .engine
+                        .preview(&i, &pk)
+                        .await
+                        .ok()
+                        .map(|q| q.expected_out as u128),
                     None => None,
                 }
             } else {
@@ -229,7 +333,9 @@ pub async fn portfolio(st: &AppState, user: &User) -> Result<Value, ServiceError
 }
 
 pub async fn airdrop_mock(st: &AppState, user: &User) -> Result<Lamports, ServiceError> {
-    let w = default_wallet(st, user).await?.ok_or(ServiceError::NoWallet)?;
+    let w = default_wallet(st, user)
+        .await?
+        .ok_or(ServiceError::NoWallet)?;
     let pk = trader_domain::pubkey::parse(&w.pubkey).map_err(ServiceError::Internal)?;
     match (&st.mock, st.cfg.mode) {
         (Some(m), Network::Mock) => {
@@ -237,16 +343,29 @@ pub async fn airdrop_mock(st: &AppState, user: &User) -> Result<Lamports, Servic
             Ok(Lamports(2_000_000_000))
         }
         (_, Network::Localnet | Network::Devnet) => {
-            let amt = if st.cfg.mode == Network::Devnet { 1_000_000_000 } else { 5_000_000_000 };
-            st.rpc.request_airdrop(&pk, amt).await.map_err(|e| ServiceError::BadRequest(format!("airdrop failed: {e}")))?;
+            let amt = if st.cfg.mode == Network::Devnet {
+                1_000_000_000
+            } else {
+                5_000_000_000
+            };
+            st.rpc
+                .request_airdrop(&pk, amt)
+                .await
+                .map_err(|e| ServiceError::BadRequest(format!("airdrop failed: {e}")))?;
             Ok(Lamports(amt))
         }
-        _ => Err(ServiceError::BadRequest("airdrop is only available on mock/localnet/devnet".into())),
+        _ => Err(ServiceError::BadRequest(
+            "airdrop is only available on mock/localnet/devnet".into(),
+        )),
     }
 }
 
 pub fn provider_health(st: &AppState) -> Value {
-    let bh = st.engine.blockhash.get(std::time::Duration::from_secs(3600)).ok();
+    let bh = st
+        .engine
+        .blockhash
+        .get(std::time::Duration::from_secs(3600))
+        .ok();
     let senders: Vec<Value> = st.engine.router.all().iter().map(|s| json!({"kind": s.inner.kind().as_str(), "endpoint": s.inner.endpoint(), "health": s.health.snapshot()})).collect();
     json!({
         "mode": st.cfg.mode,

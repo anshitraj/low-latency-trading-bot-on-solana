@@ -40,10 +40,16 @@ impl Lamports {
         format_units(self.0, SOL_DECIMALS)
     }
     pub fn checked_add(self, o: Lamports) -> Result<Lamports, MoneyError> {
-        self.0.checked_add(o.0).map(Lamports).ok_or(MoneyError::Overflow)
+        self.0
+            .checked_add(o.0)
+            .map(Lamports)
+            .ok_or(MoneyError::Overflow)
     }
     pub fn checked_sub(self, o: Lamports) -> Result<Lamports, MoneyError> {
-        self.0.checked_sub(o.0).map(Lamports).ok_or(MoneyError::Underflow)
+        self.0
+            .checked_sub(o.0)
+            .map(Lamports)
+            .ok_or(MoneyError::Underflow)
     }
     pub fn saturating_sub(self, o: Lamports) -> Lamports {
         Lamports(self.0.saturating_sub(o.0))
@@ -95,7 +101,8 @@ pub mod u64_string {
                 if v.is_empty() || !v.bytes().all(|b| b.is_ascii_digit()) {
                     return Err(E::custom("amount string must contain only digits"));
                 }
-                v.parse::<u64>().map_err(|_| E::custom("amount overflows u64"))
+                v.parse::<u64>()
+                    .map_err(|_| E::custom("amount overflows u64"))
             }
         }
         d.deserialize_any(V)
@@ -183,7 +190,9 @@ pub fn parse_units(s: &str, decimals: u8) -> Result<u64, MoneyError> {
     };
     let mut frac_val: u128 = 0;
     if !frac_part.is_empty() {
-        frac_val = frac_part.parse::<u128>().map_err(|_| MoneyError::Overflow)?;
+        frac_val = frac_part
+            .parse::<u128>()
+            .map_err(|_| MoneyError::Overflow)?;
         frac_val *= 10u128.pow((decimals as usize - frac_part.len()) as u32);
     }
     let total = int_val
@@ -264,20 +273,34 @@ mod tests {
         assert_eq!(Lamports::from_sol_str("1").unwrap().0, 1_000_000_000);
         assert_eq!(Lamports::from_sol_str(".5").unwrap().0, 500_000_000);
         assert_eq!(Lamports::from_sol_str("0.000000001").unwrap().0, 1);
-        assert_eq!(Lamports::from_sol_str("1.500000000000").unwrap().0, 1_500_000_000);
-        assert_eq!(Lamports::from_sol_str("18446744073.709551615").unwrap().0, u64::MAX);
+        assert_eq!(
+            Lamports::from_sol_str("1.500000000000").unwrap().0,
+            1_500_000_000
+        );
+        assert_eq!(
+            Lamports::from_sol_str("18446744073.709551615").unwrap().0,
+            u64::MAX
+        );
     }
 
     #[test]
     fn parse_rejects_bad_input() {
-        for bad in ["", " ", ".", "-1", "+1", "1e9", "1.2.3", "abc", "0x10", "1,5", "NaN", "inf"] {
-            assert!(Lamports::from_sol_str(bad).is_err(), "should reject {bad:?}");
+        for bad in [
+            "", " ", ".", "-1", "+1", "1e9", "1.2.3", "abc", "0x10", "1,5", "NaN", "inf",
+        ] {
+            assert!(
+                Lamports::from_sol_str(bad).is_err(),
+                "should reject {bad:?}"
+            );
         }
         assert_eq!(
             Lamports::from_sol_str("0.0000000001"),
             Err(MoneyError::TooManyDecimals { max: 9 })
         );
-        assert_eq!(Lamports::from_sol_str("18446744073.709551616"), Err(MoneyError::Overflow));
+        assert_eq!(
+            Lamports::from_sol_str("18446744073.709551616"),
+            Err(MoneyError::Overflow)
+        );
         assert_eq!(parse_positive_units("0.000", 9), Err(MoneyError::Zero));
     }
 
@@ -297,7 +320,10 @@ mod tests {
         assert_eq!(min_out_after_slippage(999, s), 989); // 989.01 floors
         assert_eq!(max_in_after_slippage(1000, s), 1010);
         assert_eq!(max_in_after_slippage(999, s), 1009); // 1008.99 ceils
-        assert_eq!(min_out_after_slippage(u64::MAX, Bps::new(0).unwrap()), u64::MAX);
+        assert_eq!(
+            min_out_after_slippage(u64::MAX, Bps::new(0).unwrap()),
+            u64::MAX
+        );
         assert_eq!(max_in_after_slippage(u64::MAX, s), u64::MAX);
         assert_eq!(min_out_after_slippage(1000, Bps::MAX), 0);
     }
@@ -320,8 +346,14 @@ mod tests {
     fn lamports_json_is_string_and_rejects_float() {
         let j = serde_json::to_string(&Lamports(42)).unwrap();
         assert_eq!(j, "\"42\"");
-        assert_eq!(serde_json::from_str::<Lamports>("\"42\"").unwrap(), Lamports(42));
-        assert_eq!(serde_json::from_str::<Lamports>("42").unwrap(), Lamports(42));
+        assert_eq!(
+            serde_json::from_str::<Lamports>("\"42\"").unwrap(),
+            Lamports(42)
+        );
+        assert_eq!(
+            serde_json::from_str::<Lamports>("42").unwrap(),
+            Lamports(42)
+        );
         assert!(serde_json::from_str::<Lamports>("42.0").is_err());
         assert!(serde_json::from_str::<Lamports>("-1").is_err());
         assert!(serde_json::from_str::<Lamports>("\"1e3\"").is_err());

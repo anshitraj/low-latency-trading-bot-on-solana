@@ -22,7 +22,8 @@ use trader_domain::Side;
 use trader_market_data::token::{associated_token_address, SPL_TOKEN_PROGRAM};
 
 const SYSTEM: Pubkey = solana_pubkey::pubkey!("11111111111111111111111111111111");
-const COMPUTE_BUDGET: Pubkey = solana_pubkey::pubkey!("ComputeBudget111111111111111111111111111111");
+const COMPUTE_BUDGET: Pubkey =
+    solana_pubkey::pubkey!("ComputeBudget111111111111111111111111111111");
 const ATA: Pubkey = solana_pubkey::pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 pub const MOCK_GENESIS: &str = "MockGenesis1111111111111111111111111111111";
 
@@ -56,7 +57,13 @@ pub struct ChainConfig {
 
 impl Default for ChainConfig {
     fn default() -> Self {
-        Self { slot_ms: 20, land_delay_slots: 1, confirm_after: 2, finalize_after: 4, blockhash_validity: 150 }
+        Self {
+            slot_ms: 20,
+            land_delay_slots: 1,
+            confirm_after: 2,
+            finalize_after: 4,
+            blockhash_validity: 150,
+        }
     }
 }
 
@@ -116,10 +123,20 @@ impl MockChain {
     pub async fn start(cfg: ChainConfig, dex: MockDex) -> Self {
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", l.local_addr().unwrap());
-        let mut led = Ledger { slot: 1, ..Default::default() };
+        let mut led = Ledger {
+            slot: 1,
+            ..Default::default()
+        };
         led.blockhashes.insert(hash_for_slot(1), 1);
-        let chain = Self { inner: Arc::new(Mutex::new(led)), cfg, dex, url };
-        let app = Router::new().route("/", post(handle)).with_state(chain.clone());
+        let chain = Self {
+            inner: Arc::new(Mutex::new(led)),
+            cfg,
+            dex,
+            url,
+        };
+        let app = Router::new()
+            .route("/", post(handle))
+            .with_state(chain.clone());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         let c2 = chain.clone();
         tokio::spawn(async move {
@@ -142,10 +159,18 @@ impl MockChain {
         let mut g = self.inner.lock();
         g.tokens.insert((*owner, *mint), amount);
         g.decimals.insert(*mint, decimals);
-        g.ata_index.insert(associated_token_address(owner, mint, &SPL_TOKEN_PROGRAM), (*owner, *mint));
+        g.ata_index.insert(
+            associated_token_address(owner, mint, &SPL_TOKEN_PROGRAM),
+            (*owner, *mint),
+        );
     }
     pub fn token(&self, owner: &Pubkey, mint: &Pubkey) -> u64 {
-        self.inner.lock().tokens.get(&(*owner, *mint)).copied().unwrap_or(0)
+        self.inner
+            .lock()
+            .tokens
+            .get(&(*owner, *mint))
+            .copied()
+            .unwrap_or(0)
     }
     pub fn push_fault(&self, f: Fault) {
         self.inner.lock().faults.push_back(f);
@@ -156,7 +181,11 @@ impl MockChain {
     /// Signatures that executed successfully (each at most once by construction).
     pub fn landed_ok(&self) -> Vec<String> {
         let g = self.inner.lock();
-        g.landed_sigs.iter().filter(|s| g.txs.get(*s).map(|t| t.err.is_none()).unwrap_or(false)).cloned().collect()
+        g.landed_sigs
+            .iter()
+            .filter(|s| g.txs.get(*s).map(|t| t.err.is_none()).unwrap_or(false))
+            .cloned()
+            .collect()
     }
     pub fn slot(&self) -> u64 {
         self.inner.lock().slot
@@ -170,7 +199,12 @@ impl MockChain {
         let validity = self.cfg.blockhash_validity;
         g.blockhashes.retain(|_, s| *s + validity + 50 >= slot);
         // fork: hide then re-land
-        let relands: Vec<String> = g.reorg_relands.iter().filter(|(s, _)| *s <= slot).map(|(_, sig)| sig.clone()).collect();
+        let relands: Vec<String> = g
+            .reorg_relands
+            .iter()
+            .filter(|(s, _)| *s <= slot)
+            .map(|(_, sig)| sig.clone())
+            .collect();
         g.reorg_relands.retain(|(s, _)| *s > slot);
         for sig in relands {
             if let Some(t) = g.txs.get_mut(&sig) {
@@ -179,7 +213,9 @@ impl MockChain {
             }
         }
         let due: Vec<Pending> = {
-            let (due, rest): (Vec<Pending>, Vec<Pending>) = std::mem::take(&mut g.pending).into_iter().partition(|p| p.land_at <= slot);
+            let (due, rest): (Vec<Pending>, Vec<Pending>) = std::mem::take(&mut g.pending)
+                .into_iter()
+                .partition(|p| p.land_at <= slot);
             g.pending = rest;
             due
         };
@@ -187,7 +223,9 @@ impl MockChain {
             if g.txs.contains_key(&p.sig) {
                 continue;
             }
-            let Ok(tx) = bincode::deserialize::<VersionedTransaction>(&p.wire) else { continue };
+            let Ok(tx) = bincode::deserialize::<VersionedTransaction>(&p.wire) else {
+                continue;
+            };
             let bh_slot = g.blockhashes.get(tx.message.recent_blockhash()).copied();
             match bh_slot {
                 Some(s) if s + validity >= slot => {}
@@ -223,8 +261,12 @@ fn parse_compute(tx: &VersionedTransaction) -> (u64, u64) {
     for ix in tx.message.instructions() {
         if keys[ix.program_id_index as usize] == COMPUTE_BUDGET {
             match ix.data.first() {
-                Some(2) if ix.data.len() == 5 => limit = u32::from_le_bytes(ix.data[1..5].try_into().unwrap()) as u64,
-                Some(3) if ix.data.len() == 9 => price = u64::from_le_bytes(ix.data[1..9].try_into().unwrap()),
+                Some(2) if ix.data.len() == 5 => {
+                    limit = u32::from_le_bytes(ix.data[1..5].try_into().unwrap()) as u64
+                }
+                Some(3) if ix.data.len() == 9 => {
+                    price = u64::from_le_bytes(ix.data[1..9].try_into().unwrap())
+                }
                 _ => {}
             }
         }
@@ -234,15 +276,26 @@ fn parse_compute(tx: &VersionedTransaction) -> (u64, u64) {
 
 /// Execute against the ledger. `commit=false` = preflight simulation.
 /// Returns None if the fee payer cannot pay the fee (tx not included).
-fn execute(g: &mut Ledger, dex: &MockDex, tx: &VersionedTransaction, slot: u64, force_fail: bool, commit: bool) -> Option<TxRecord> {
+fn execute(
+    g: &mut Ledger,
+    dex: &MockDex,
+    tx: &VersionedTransaction,
+    slot: u64,
+    force_fail: bool,
+    commit: bool,
+) -> Option<TxRecord> {
     let keys: Vec<Pubkey> = tx.message.static_account_keys().to_vec();
     let payer = keys[0];
     let (limit, price) = parse_compute(tx);
-    let fee = 5_000 * tx.signatures.len() as u64 + (limit as u128 * price as u128).div_ceil(1_000_000) as u64;
+    let fee = 5_000 * tx.signatures.len() as u64
+        + (limit as u128 * price as u128).div_ceil(1_000_000) as u64;
     if g.lamports.get(&payer).copied().unwrap_or(0) < fee {
         return None;
     }
-    let pre: Vec<u64> = keys.iter().map(|k| g.lamports.get(k).copied().unwrap_or(0)).collect();
+    let pre: Vec<u64> = keys
+        .iter()
+        .map(|k| g.lamports.get(k).copied().unwrap_or(0))
+        .collect();
     let mut lam = g.lamports.clone();
     let mut tok = g.tokens.clone();
     let mut pools = dex.pools.read().clone();
@@ -321,22 +374,42 @@ fn execute(g: &mut Ledger, dex: &MockDex, tx: &VersionedTransaction, slot: u64, 
     let user = payer;
     let token_pre: Vec<(String, String, u64, u8)> = touched_mints
         .iter()
-        .map(|m| (user.to_string(), m.to_string(), g.tokens.get(&(user, *m)).copied().unwrap_or(0), g.decimals.get(m).copied().unwrap_or(6)))
+        .map(|m| {
+            (
+                user.to_string(),
+                m.to_string(),
+                g.tokens.get(&(user, *m)).copied().unwrap_or(0),
+                g.decimals.get(m).copied().unwrap_or(6),
+            )
+        })
         .collect();
     if err.is_some() {
         lam = after_fee; // revert instruction effects, keep fee
         tok = g.tokens.clone();
         pools = dex.pools.read().clone();
     }
-    let post: Vec<u64> = keys.iter().map(|k| lam.get(k).copied().unwrap_or(0)).collect();
+    let post: Vec<u64> = keys
+        .iter()
+        .map(|k| lam.get(k).copied().unwrap_or(0))
+        .collect();
     let token_post: Vec<(String, String, u64, u8)> = touched_mints
         .iter()
-        .map(|m| (user.to_string(), m.to_string(), tok.get(&(user, *m)).copied().unwrap_or(0), g.decimals.get(m).copied().unwrap_or(6)))
+        .map(|m| {
+            (
+                user.to_string(),
+                m.to_string(),
+                tok.get(&(user, *m)).copied().unwrap_or(0),
+                g.decimals.get(m).copied().unwrap_or(6),
+            )
+        })
         .collect();
     if commit {
         g.lamports = lam;
         for m in &touched_mints {
-            g.ata_index.insert(associated_token_address(&user, m, &SPL_TOKEN_PROGRAM), (user, *m));
+            g.ata_index.insert(
+                associated_token_address(&user, m, &SPL_TOKEN_PROGRAM),
+                (user, *m),
+            );
         }
         g.tokens = tok;
         *dex.pools.write() = pools;
@@ -356,10 +429,16 @@ fn execute(g: &mut Ledger, dex: &MockDex, tx: &VersionedTransaction, slot: u64, 
 }
 
 fn ok(v: Value) -> (StatusCode, Json<Value>) {
-    (StatusCode::OK, Json(json!({"jsonrpc":"2.0","id":1,"result":v})))
+    (
+        StatusCode::OK,
+        Json(json!({"jsonrpc":"2.0","id":1,"result":v})),
+    )
 }
 fn rpc_err(code: i64, msg: &str, data: Value) -> (StatusCode, Json<Value>) {
-    (StatusCode::OK, Json(json!({"jsonrpc":"2.0","id":1,"error":{"code":code,"message":msg,"data":data}})))
+    (
+        StatusCode::OK,
+        Json(json!({"jsonrpc":"2.0","id":1,"error":{"code":code,"message":msg,"data":data}})),
+    )
 }
 
 fn token_account_data(mint: &Pubkey, owner: &Pubkey, amount: u64) -> Vec<u8> {
@@ -391,10 +470,15 @@ async fn handle(State(c): State<MockChain>, Json(body): Json<Value>) -> (StatusC
         }
         "getLatestBlockhash" => {
             let s = c.slot();
-            ok(json!({"context":{"slot":s},"value":{"blockhash": hash_for_slot(s).to_string(), "lastValidBlockHeight": s + c.cfg.blockhash_validity}}))
+            ok(
+                json!({"context":{"slot":s},"value":{"blockhash": hash_for_slot(s).to_string(), "lastValidBlockHeight": s + c.cfg.blockhash_validity}}),
+            )
         }
         "getBalance" => {
-            let k: Pubkey = params[0].as_str().and_then(|s| s.parse().ok()).unwrap_or_default();
+            let k: Pubkey = params[0]
+                .as_str()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or_default();
             ok(json!({"context":{"slot":c.slot()},"value": c.balance(&k)}))
         }
         "getMultipleAccounts" => {
@@ -426,7 +510,13 @@ async fn handle(State(c): State<MockChain>, Json(body): Json<Value>) -> (StatusC
             let skip_preflight = params[1]["skipPreflight"].as_bool().unwrap_or(false);
             let (tx, sig) = match trader_execution::verify_wire(&wire) {
                 Ok(x) => x,
-                Err(e) => return rpc_err(-32003, &format!("Transaction signature verification failure: {e}"), Value::Null),
+                Err(e) => {
+                    return rpc_err(
+                        -32003,
+                        &format!("Transaction signature verification failure: {e}"),
+                        Value::Null,
+                    )
+                }
             };
             let sig = sig.to_string();
             let fault = {
@@ -436,14 +526,26 @@ async fn handle(State(c): State<MockChain>, Json(body): Json<Value>) -> (StatusC
             };
             let landed = c.inner.lock().txs.contains_key(&sig);
             if landed && !skip_preflight {
-                return rpc_err(-32002, "Transaction simulation failed: This transaction has already been processed", json!({"err":"AlreadyProcessed"}));
+                return rpc_err(
+                    -32002,
+                    "Transaction simulation failed: This transaction has already been processed",
+                    json!({"err":"AlreadyProcessed"}),
+                );
             }
             if !skip_preflight && !matches!(fault, Some(Fault::FailOnchain)) {
                 let mut g = c.inner.lock();
                 let slot = g.slot;
-                let valid = g.blockhashes.get(tx.message.recent_blockhash()).map(|s| *s + c.cfg.blockhash_validity >= slot).unwrap_or(false);
+                let valid = g
+                    .blockhashes
+                    .get(tx.message.recent_blockhash())
+                    .map(|s| *s + c.cfg.blockhash_validity >= slot)
+                    .unwrap_or(false);
                 if !valid {
-                    return rpc_err(-32002, "Transaction simulation failed: Blockhash not found", json!({"err":"BlockhashNotFound"}));
+                    return rpc_err(
+                        -32002,
+                        "Transaction simulation failed: Blockhash not found",
+                        json!({"err":"BlockhashNotFound"}),
+                    );
                 }
                 match execute(&mut g, &c.dex, &tx, slot, false, false) {
                     None => return rpc_err(-32002, "Transaction simulation failed: Attempt to debit an account but found no record of a prior credit.", json!({"err":"AccountNotFound"})),
@@ -455,7 +557,13 @@ async fn handle(State(c): State<MockChain>, Json(body): Json<Value>) -> (StatusC
                 let mut g = c.inner.lock();
                 if !g.pending.iter().any(|p| p.sig == sig) && !g.txs.contains_key(&sig) {
                     let land_at = g.slot + c.cfg.land_delay_slots;
-                    g.pending.push(Pending { sig: sig.clone(), wire: wire.clone(), land_at, force_fail, reorg });
+                    g.pending.push(Pending {
+                        sig: sig.clone(),
+                        wire: wire.clone(),
+                        land_at,
+                        force_fail,
+                        reorg,
+                    });
                 }
             };
             match fault {
@@ -463,12 +571,17 @@ async fn handle(State(c): State<MockChain>, Json(body): Json<Value>) -> (StatusC
                     enqueue(false, false);
                     ok(json!(sig))
                 }
-                Some(Fault::RateLimit) => (StatusCode::TOO_MANY_REQUESTS, Json(json!({"error":"rate limited"}))),
+                Some(Fault::RateLimit) => (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(json!({"error":"rate limited"})),
+                ),
                 Some(Fault::Http500Forwarded) => {
                     enqueue(false, false);
                     (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({})))
                 }
-                Some(Fault::Http500NotForwarded) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({}))),
+                Some(Fault::Http500NotForwarded) => {
+                    (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({})))
+                }
                 Some(Fault::DelayAck(d)) => {
                     enqueue(false, false);
                     tokio::time::sleep(d).await;
@@ -527,7 +640,10 @@ async fn handle(State(c): State<MockChain>, Json(body): Json<Value>) -> (StatusC
             }
         }
         "requestAirdrop" => {
-            let k: Pubkey = params[0].as_str().and_then(|s| s.parse().ok()).unwrap_or_default();
+            let k: Pubkey = params[0]
+                .as_str()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or_default();
             c.fund(&k, params[1].as_u64().unwrap_or(0));
             ok(json!("MockAirdrop1111111111111111111111111111111111111111111111111111111111111111111111111"))
         }

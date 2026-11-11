@@ -26,7 +26,11 @@ pub enum RpcError {
     #[error("http status {status}: {body}")]
     Http { status: u16, body: String },
     #[error("rpc error {code}: {message}")]
-    Rpc { code: i64, message: String, data: Option<Value> },
+    Rpc {
+        code: i64,
+        message: String,
+        data: Option<Value>,
+    },
     #[error("decode error: {0}")]
     Decode(String),
 }
@@ -40,7 +44,15 @@ impl RpcError {
     /// (so a send may have been forwarded). Callers must not treat these as
     /// "transaction rejected".
     pub fn is_ambiguous(&self) -> bool {
-        matches!(self, RpcError::Transport(_) | RpcError::Timeout(_) | RpcError::Http { status: 500..=599, .. })
+        matches!(
+            self,
+            RpcError::Transport(_)
+                | RpcError::Timeout(_)
+                | RpcError::Http {
+                    status: 500..=599,
+                    ..
+                }
+        )
     }
     pub fn is_retryable(&self) -> bool {
         self.is_rate_limited() || self.is_ambiguous()
@@ -57,7 +69,11 @@ pub struct RpcConfig {
 
 impl RpcConfig {
     pub fn new(url: impl Into<String>) -> Self {
-        Self { url: url.into(), timeout: Duration::from_secs(5), headers: vec![] }
+        Self {
+            url: url.into(),
+            timeout: Duration::from_secs(5),
+            headers: vec![],
+        }
     }
 }
 
@@ -162,7 +178,11 @@ impl RpcClient {
             .timeout(cfg.timeout)
             .build()
             .map_err(|e| RpcError::Transport(e.to_string()))?;
-        Ok(Self { http, cfg, id: std::sync::Arc::new(AtomicU64::new(1)) })
+        Ok(Self {
+            http,
+            cfg,
+            id: std::sync::Arc::new(AtomicU64::new(1)),
+        })
     }
 
     pub fn host(&self) -> String {
@@ -195,14 +215,24 @@ impl RpcClient {
             let body = String::from_utf8_lossy(&bytes[..bytes.len().min(512)]).to_string();
             return Err(RpcError::Http { status, body });
         }
-        let env: RpcEnvelope = serde_json::from_slice(&bytes).map_err(|e| RpcError::Decode(e.to_string()))?;
+        let env: RpcEnvelope =
+            serde_json::from_slice(&bytes).map_err(|e| RpcError::Decode(e.to_string()))?;
         if let Some(e) = env.error {
-            return Err(RpcError::Rpc { code: e.code, message: e.message, data: e.data });
+            return Err(RpcError::Rpc {
+                code: e.code,
+                message: e.message,
+                data: e.data,
+            });
         }
-        env.result.ok_or_else(|| RpcError::Decode("missing result".into()))
+        env.result
+            .ok_or_else(|| RpcError::Decode("missing result".into()))
     }
 
-    pub async fn call<T: DeserializeOwned>(&self, method: &str, params: Value) -> Result<T, RpcError> {
+    pub async fn call<T: DeserializeOwned>(
+        &self,
+        method: &str,
+        params: Value,
+    ) -> Result<T, RpcError> {
         let v = self.call_raw(method, params).await?;
         serde_json::from_value(v).map_err(|e| RpcError::Decode(format!("{method}: {e}")))
     }
@@ -216,11 +246,13 @@ impl RpcClient {
     }
 
     pub async fn get_slot(&self, c: Commitment) -> Result<u64, RpcError> {
-        self.call("getSlot", json!([{"commitment": c.as_str()}])).await
+        self.call("getSlot", json!([{"commitment": c.as_str()}]))
+            .await
     }
 
     pub async fn get_block_height(&self, c: Commitment) -> Result<u64, RpcError> {
-        self.call("getBlockHeight", json!([{"commitment": c.as_str()}])).await
+        self.call("getBlockHeight", json!([{"commitment": c.as_str()}]))
+            .await
     }
 
     /// Returns (blockhash, last_valid_block_height, context_slot).
@@ -236,7 +268,9 @@ impl RpcClient {
             context: Ctx,
             value: V,
         }
-        let r: R = self.call("getLatestBlockhash", json!([{"commitment": c.as_str()}])).await?;
+        let r: R = self
+            .call("getLatestBlockhash", json!([{"commitment": c.as_str()}]))
+            .await?;
         let h = Hash::from_str(&r.value.blockhash).map_err(|e| RpcError::Decode(e.to_string()))?;
         Ok((h, r.value.last_valid_block_height, r.context.slot))
     }
@@ -247,7 +281,12 @@ impl RpcClient {
             context: Ctx,
             value: u64,
         }
-        let r: R = self.call("getBalance", json!([key.to_string(), {"commitment": c.as_str()}])).await?;
+        let r: R = self
+            .call(
+                "getBalance",
+                json!([key.to_string(), {"commitment": c.as_str()}]),
+            )
+            .await?;
         Ok((r.value, r.context.slot))
     }
 
@@ -258,7 +297,9 @@ impl RpcClient {
         c: Commitment,
     ) -> Result<(u64, Vec<Option<AccountData>>), RpcError> {
         if keys.len() > 100 {
-            return Err(RpcError::Decode("getMultipleAccounts supports at most 100 keys".into()));
+            return Err(RpcError::Decode(
+                "getMultipleAccounts supports at most 100 keys".into(),
+            ));
         }
         let ks: Vec<String> = keys.iter().map(|k| k.to_string()).collect();
         #[derive(Deserialize)]
@@ -267,14 +308,27 @@ impl RpcClient {
             value: Vec<Option<RawAccount>>,
         }
         let r: R = self
-            .call("getMultipleAccounts", json!([ks, {"commitment": c.as_str(), "encoding": "base64"}]))
+            .call(
+                "getMultipleAccounts",
+                json!([ks, {"commitment": c.as_str(), "encoding": "base64"}]),
+            )
             .await?;
-        let accts = r.value.into_iter().map(|a| a.map(RawAccount::decode).transpose()).collect::<Result<_, _>>()?;
+        let accts = r
+            .value
+            .into_iter()
+            .map(|a| a.map(RawAccount::decode).transpose())
+            .collect::<Result<_, _>>()?;
         Ok((r.context.slot, accts))
     }
 
-    pub async fn get_account(&self, key: &Pubkey, c: Commitment) -> Result<(u64, Option<AccountData>), RpcError> {
-        let (slot, mut v) = self.get_multiple_accounts(std::slice::from_ref(key), c).await?;
+    pub async fn get_account(
+        &self,
+        key: &Pubkey,
+        c: Commitment,
+    ) -> Result<(u64, Option<AccountData>), RpcError> {
+        let (slot, mut v) = self
+            .get_multiple_accounts(std::slice::from_ref(key), c)
+            .await?;
         Ok((slot, v.pop().flatten()))
     }
 
@@ -299,7 +353,11 @@ impl RpcClient {
         self.call("sendTransaction", json!([b64, cfg])).await
     }
 
-    pub async fn simulate_transaction(&self, wire_tx: &[u8], c: Commitment) -> Result<Value, RpcError> {
+    pub async fn simulate_transaction(
+        &self,
+        wire_tx: &[u8],
+        c: Commitment,
+    ) -> Result<Value, RpcError> {
         let b64 = base64::engine::general_purpose::STANDARD.encode(wire_tx);
         self.call(
             "simulateTransaction",
@@ -314,7 +372,9 @@ impl RpcClient {
         search_history: bool,
     ) -> Result<(u64, Vec<Option<SignatureStatus>>), RpcError> {
         if sigs.len() > 256 {
-            return Err(RpcError::Decode("getSignatureStatuses supports at most 256".into()));
+            return Err(RpcError::Decode(
+                "getSignatureStatuses supports at most 256".into(),
+            ));
         }
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
@@ -330,7 +390,10 @@ impl RpcClient {
             value: Vec<Option<S>>,
         }
         let r: R = self
-            .call("getSignatureStatuses", json!([sigs, {"searchTransactionHistory": search_history}]))
+            .call(
+                "getSignatureStatuses",
+                json!([sigs, {"searchTransactionHistory": search_history}]),
+            )
             .await?;
         let v = r
             .value
@@ -340,16 +403,25 @@ impl RpcClient {
                     slot: s.slot,
                     confirmations: s.confirmations,
                     err: s.err.filter(|e| !e.is_null()),
-                    confirmation_status: s.confirmation_status.as_deref().and_then(parse_commitment),
+                    confirmation_status: s
+                        .confirmation_status
+                        .as_deref()
+                        .and_then(parse_commitment),
                 })
             })
             .collect();
         Ok((r.context.slot, v))
     }
 
-    pub async fn get_transaction(&self, sig: &str, c: Commitment) -> Result<Option<TransactionDetails>, RpcError> {
+    pub async fn get_transaction(
+        &self,
+        sig: &str,
+        c: Commitment,
+    ) -> Result<Option<TransactionDetails>, RpcError> {
         if c == Commitment::Processed {
-            return Err(RpcError::Decode("getTransaction requires confirmed or finalized".into()));
+            return Err(RpcError::Decode(
+                "getTransaction requires confirmed or finalized".into(),
+            ));
         }
         let v = self
             .call_raw(
@@ -364,11 +436,15 @@ impl RpcClient {
     }
 
     pub async fn request_airdrop(&self, key: &Pubkey, lamports: u64) -> Result<String, RpcError> {
-        self.call("requestAirdrop", json!([key.to_string(), lamports])).await
+        self.call("requestAirdrop", json!([key.to_string(), lamports]))
+            .await
     }
 
     /// Recent prioritization fees (micro-lamports per CU) for the given writable accounts.
-    pub async fn get_recent_prioritization_fees(&self, keys: &[Pubkey]) -> Result<Vec<(u64, u64)>, RpcError> {
+    pub async fn get_recent_prioritization_fees(
+        &self,
+        keys: &[Pubkey],
+    ) -> Result<Vec<(u64, u64)>, RpcError> {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct F {
@@ -376,12 +452,19 @@ impl RpcClient {
             prioritization_fee: u64,
         }
         let ks: Vec<String> = keys.iter().map(|k| k.to_string()).collect();
-        let v: Vec<F> = self.call("getRecentPrioritizationFees", json!([ks])).await?;
-        Ok(v.into_iter().map(|f| (f.slot, f.prioritization_fee)).collect())
+        let v: Vec<F> = self
+            .call("getRecentPrioritizationFees", json!([ks]))
+            .await?;
+        Ok(v.into_iter()
+            .map(|f| (f.slot, f.prioritization_fee))
+            .collect())
     }
 
     /// (address, raw amount) of the largest token holders.
-    pub async fn get_token_largest_accounts(&self, mint: &Pubkey) -> Result<Vec<(String, u64)>, RpcError> {
+    pub async fn get_token_largest_accounts(
+        &self,
+        mint: &Pubkey,
+    ) -> Result<Vec<(String, u64)>, RpcError> {
         #[derive(Deserialize)]
         struct A {
             address: String,
@@ -391,10 +474,22 @@ impl RpcClient {
         struct R {
             value: Vec<A>,
         }
-        let r: R = self.call("getTokenLargestAccounts", json!([mint.to_string(), {"commitment":"confirmed"}])).await?;
+        let r: R = self
+            .call(
+                "getTokenLargestAccounts",
+                json!([mint.to_string(), {"commitment":"confirmed"}]),
+            )
+            .await?;
         r.value
             .into_iter()
-            .map(|a| Ok((a.address, a.amount.parse().map_err(|_| RpcError::Decode("amount".into()))?)))
+            .map(|a| {
+                Ok((
+                    a.address,
+                    a.amount
+                        .parse()
+                        .map_err(|_| RpcError::Decode("amount".into()))?,
+                ))
+            })
             .collect()
     }
 
@@ -415,8 +510,18 @@ impl RpcClient {
         if let Some(u) = until {
             cfg["until"] = json!(u);
         }
-        let v: Vec<S> = self.call("getSignaturesForAddress", json!([addr.to_string(), cfg])).await?;
-        Ok(v.into_iter().map(|s| (s.signature, s.slot, s.err.map(|e| !e.is_null()).unwrap_or(false))).collect())
+        let v: Vec<S> = self
+            .call("getSignaturesForAddress", json!([addr.to_string(), cfg]))
+            .await?;
+        Ok(v.into_iter()
+            .map(|s| {
+                (
+                    s.signature,
+                    s.slot,
+                    s.err.map(|e| !e.is_null()).unwrap_or(false),
+                )
+            })
+            .collect())
     }
 }
 
@@ -436,7 +541,10 @@ struct RawAccount {
 impl RawAccount {
     fn decode(self) -> Result<AccountData, RpcError> {
         if self.data.1 != "base64" {
-            return Err(RpcError::Decode(format!("unexpected encoding {}", self.data.1)));
+            return Err(RpcError::Decode(format!(
+                "unexpected encoding {}",
+                self.data.1
+            )));
         }
         let data = base64::engine::general_purpose::STANDARD
             .decode(self.data.0)
@@ -482,7 +590,9 @@ fn redact(s: &str) -> String {
 pub fn parse_transaction(v: &Value) -> Result<TransactionDetails, RpcError> {
     let d = |m: &str| RpcError::Decode(format!("getTransaction: {m}"));
     let meta = v.get("meta").ok_or_else(|| d("meta"))?;
-    let msg = v.pointer("/transaction/message").ok_or_else(|| d("message"))?;
+    let msg = v
+        .pointer("/transaction/message")
+        .ok_or_else(|| d("message"))?;
     let mut account_keys: Vec<String> = msg
         .get("accountKeys")
         .and_then(|a| a.as_array())
@@ -549,9 +659,15 @@ pub fn parse_transaction(v: &Value) -> Result<TransactionDetails, RpcError> {
         }
     }
     Ok(TransactionDetails {
-        slot: v.get("slot").and_then(|s| s.as_u64()).ok_or_else(|| d("slot"))?,
+        slot: v
+            .get("slot")
+            .and_then(|s| s.as_u64())
+            .ok_or_else(|| d("slot"))?,
         block_time: v.get("blockTime").and_then(|b| b.as_i64()),
-        fee: meta.get("fee").and_then(|f| f.as_u64()).ok_or_else(|| d("fee"))?,
+        fee: meta
+            .get("fee")
+            .and_then(|f| f.as_u64())
+            .ok_or_else(|| d("fee"))?,
         err: meta.get("err").cloned().filter(|e| !e.is_null()),
         account_keys,
         pre_balances: u64s("preBalances"),
@@ -561,7 +677,11 @@ pub fn parse_transaction(v: &Value) -> Result<TransactionDetails, RpcError> {
         log_messages: meta
             .get("logMessages")
             .and_then(|l| l.as_array())
-            .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(str::to_string))
+                    .collect()
+            })
             .unwrap_or_default(),
     })
 }
@@ -616,9 +736,15 @@ mod tests {
         assert!(e.is_rate_limited() && !e.is_ambiguous());
         let e = c.get_block_height(Commitment::Confirmed).await.unwrap_err();
         assert!(e.is_ambiguous());
-        let e = c.get_balance(&Pubkey::new_unique(), Commitment::Confirmed).await.unwrap_err();
+        let e = c
+            .get_balance(&Pubkey::new_unique(), Commitment::Confirmed)
+            .await
+            .unwrap_err();
         assert!(matches!(e, RpcError::Timeout(_)), "{e:?}");
-        let e = c.send_transaction(&[1, 2, 3], false, Some(0), Commitment::Processed).await.unwrap_err();
+        let e = c
+            .send_transaction(&[1, 2, 3], false, Some(0), Commitment::Processed)
+            .await
+            .unwrap_err();
         assert!(matches!(e, RpcError::Rpc { code: -32002, .. }));
         assert!(!e.is_retryable());
         assert_eq!(hits.load(Ordering::SeqCst), 5);
@@ -649,7 +775,13 @@ mod tests {
 
     #[test]
     fn redacts_query() {
-        assert_eq!(redact("error sending request for url (https://x.io/?api-key=SECRET)"), "error sending request for url (https://x.io/?<redacted>)");
-        assert_eq!(url_host("https://mainnet.helius-rpc.com/?api-key=abc"), "mainnet.helius-rpc.com");
+        assert_eq!(
+            redact("error sending request for url (https://x.io/?api-key=SECRET)"),
+            "error sending request for url (https://x.io/?<redacted>)"
+        );
+        assert_eq!(
+            url_host("https://mainnet.helius-rpc.com/?api-key=abc"),
+            "mainnet.helius-rpc.com"
+        );
     }
 }

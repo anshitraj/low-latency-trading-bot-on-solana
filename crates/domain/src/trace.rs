@@ -68,10 +68,18 @@ impl Default for LatencyTrace {
 
 impl LatencyTrace {
     pub fn start() -> Self {
-        Self { origin: Instant::now(), wall_start: Utc::now(), stamps: Vec::with_capacity(12) }
+        Self {
+            origin: Instant::now(),
+            wall_start: Utc::now(),
+            stamps: Vec::with_capacity(12),
+        }
     }
     pub fn starting_at(origin: Instant, wall_start: DateTime<Utc>) -> Self {
-        Self { origin, wall_start, stamps: Vec::with_capacity(12) }
+        Self {
+            origin,
+            wall_start,
+            stamps: Vec::with_capacity(12),
+        }
     }
     /// Records the first occurrence of a stage only.
     pub fn mark(&mut self, stage: Stage) {

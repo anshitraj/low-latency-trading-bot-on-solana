@@ -14,9 +14,17 @@ async fn main() -> anyhow::Result<()> {
     let bind = cfg.bind.clone();
     let built = state::build(cfg).await?;
     let st = spawn_background(built).await;
-    if let (Some(tg), Some(url), Some(secret)) = (&st.tg, &st.cfg.public_url, &st.cfg.webhook_secret) {
+    if let (Some(tg), Some(url), Some(secret)) =
+        (&st.tg, &st.cfg.public_url, &st.cfg.webhook_secret)
+    {
         if std::env::var("TELEGRAM_SET_WEBHOOK").as_deref() == Ok("true") {
-            match tg.set_webhook(&format!("{}/telegram/webhook", url.trim_end_matches('/')), secret).await {
+            match tg
+                .set_webhook(
+                    &format!("{}/telegram/webhook", url.trim_end_matches('/')),
+                    secret,
+                )
+                .await
+            {
                 Ok(()) => tracing::info!("telegram webhook registered"),
                 Err(e) => tracing::error!(error = %e, "setWebhook failed"),
             }
@@ -25,10 +33,13 @@ async fn main() -> anyhow::Result<()> {
     let app = routes::router(st);
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     tracing::info!(addr = %listener.local_addr()?, "listening");
-    axum::serve(listener, app).with_graceful_shutdown(async {
-        let _ = tokio::signal::ctrl_c().await;
-        tracing::info!("shutdown signal: draining (in-flight orders are reconciled on next start)");
-    })
-    .await?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async {
+            let _ = tokio::signal::ctrl_c().await;
+            tracing::info!(
+                "shutdown signal: draining (in-flight orders are reconciled on next start)"
+            );
+        })
+        .await?;
     Ok(())
 }

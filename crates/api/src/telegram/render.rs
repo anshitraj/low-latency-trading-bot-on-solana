@@ -20,14 +20,18 @@ pub fn sol(l: u64) -> String {
 pub fn explorer(network: Network, sig: &str) -> Option<String> {
     match network {
         Network::Mainnet => Some(format!("https://explorer.solana.com/tx/{sig}")),
-        Network::Devnet => Some(format!("https://explorer.solana.com/tx/{sig}?cluster=devnet")),
+        Network::Devnet => Some(format!(
+            "https://explorer.solana.com/tx/{sig}?cluster=devnet"
+        )),
         _ => None,
     }
 }
 
 pub fn mode_banner(n: Network) -> String {
     match n {
-        Network::Mock => "🧪 <b>MOCK MODE</b> — simulated chain, not real funds or prices.\n".into(),
+        Network::Mock => {
+            "🧪 <b>MOCK MODE</b> — simulated chain, not real funds or prices.\n".into()
+        }
         Network::Localnet => "🧪 <b>LOCALNET</b> — local test validator, not real funds.\n".into(),
         Network::Devnet => "🧪 <b>DEVNET</b> — test network, tokens have no value.\n".into(),
         Network::Testnet => "🧪 <b>TESTNET</b>\n".into(),
@@ -37,17 +41,31 @@ pub fn mode_banner(n: Network) -> String {
 
 pub fn quote_block(q: &Quote) -> String {
     let (inp, out) = match q.side {
-        Side::Buy => (format!("{} SOL", sol(q.in_amount)), format!("{} tokens", format_units(q.expected_out, q.out_decimals))),
-        Side::Sell => (format!("{} tokens", format_units(q.in_amount, q.in_decimals)), format!("{} SOL", sol(q.expected_out))),
+        Side::Buy => (
+            format!("{} SOL", sol(q.in_amount)),
+            format!("{} tokens", format_units(q.expected_out, q.out_decimals)),
+        ),
+        Side::Sell => (
+            format!("{} tokens", format_units(q.in_amount, q.in_decimals)),
+            format!("{} SOL", sol(q.expected_out)),
+        ),
     };
     let min = match q.side {
         Side::Buy => format!("{} tokens", format_units(q.min_out, q.out_decimals)),
         Side::Sell => format!("{} SOL", sol(q.min_out)),
     };
-    let impact = q.price_impact_bps.map(|b| format!("{}.{:02}%", b / 100, b % 100)).unwrap_or_else(|| "unknown".into());
+    let impact = q
+        .price_impact_bps
+        .map(|b| format!("{}.{:02}%", b / 100, b % 100))
+        .unwrap_or_else(|| "unknown".into());
     let src = match &q.source {
-        trader_domain::QuoteSource::OnChain => format!("on-chain state @ slot {} ({} ms old)", q.context_slot, q.state_age_ms),
-        trader_domain::QuoteSource::ExternalApi { provider } => format!("external: {}", esc(provider)),
+        trader_domain::QuoteSource::OnChain => format!(
+            "on-chain state @ slot {} ({} ms old)",
+            q.context_slot, q.state_age_ms
+        ),
+        trader_domain::QuoteSource::ExternalApi { provider } => {
+            format!("external: {}", esc(provider))
+        }
         trader_domain::QuoteSource::Mock => "MOCK pool (not real)".into(),
     };
     let mut s = format!(
@@ -73,7 +91,10 @@ pub fn quote_block(q: &Quote) -> String {
 
 pub fn fill_block(f: &FillRecord, side: Side) -> String {
     let dec = f.token_decimals.unwrap_or(6);
-    let tok = format_units(f.token_delta_raw.unsigned_abs().min(u64::MAX as u128) as u64, dec);
+    let tok = format_units(
+        f.token_delta_raw.unsigned_abs().min(u64::MAX as u128) as u64,
+        dec,
+    );
     let sold = f.sol_delta_lamports.unsigned_abs().min(u64::MAX as u128) as u64;
     match (f.success, side) {
         (true, Side::Buy) => format!("Received <b>{tok}</b> tokens · SOL debited {} (incl. fees/rent) · network fee {} SOL · slot {}", sol(sold), sol(f.fee_lamports), f.slot),
@@ -84,14 +105,25 @@ pub fn fill_block(f: &FillRecord, side: Side) -> String {
 
 pub fn order_status(o: &Order, network: Network, detail: &str) -> String {
     let side = o.intent.side;
-    let mut s = format!("{}<b>{} {}</b> · <code>{}</code>\nStatus: <b>{}</b> — {}", mode_banner(network), if side == Side::Buy { "BUY" } else { "SELL" }, esc(&short(&o.intent.mint.to_string())), o.state.as_str(), user_status(o.state), esc(detail));
+    let mut s = format!(
+        "{}<b>{} {}</b> · <code>{}</code>\nStatus: <b>{}</b> — {}",
+        mode_banner(network),
+        if side == Side::Buy { "BUY" } else { "SELL" },
+        esc(&short(&o.intent.mint.to_string())),
+        o.state.as_str(),
+        user_status(o.state),
+        esc(detail)
+    );
     if let Some(sig) = o.signed.as_ref().map(|s| s.signature.clone()) {
         s.push_str(&format!("\nSignature: <code>{}</code>", esc(&sig)));
         if let Some(url) = explorer(network, &sig) {
             s.push_str(&format!("\n<a href=\"{}\">View on explorer</a>", esc(&url)));
         }
     }
-    if matches!(o.state, OrderState::Confirmed | OrderState::Finalized | OrderState::FailedOnchain) {
+    if matches!(
+        o.state,
+        OrderState::Confirmed | OrderState::Finalized | OrderState::FailedOnchain
+    ) {
         if let Some(f) = &o.fill {
             s.push('\n');
             s.push_str(&fill_block(f, side));
