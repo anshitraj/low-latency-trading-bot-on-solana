@@ -1,0 +1,41 @@
+# Local development stack.
+#   docker compose up -d postgres          # just the database
+#   docker compose --profile app up --build  # database + API (+ Mini App) in mock mode
+# Redis is intentionally absent: nothing in this build needs it yet (rate
+# limits/queues are in-process and bounded). See docs/ARCHITECTURE.md.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: trader
+      POSTGRES_PASSWORD: trader
+      POSTGRES_DB: trader
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trader -d trader"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    profiles: [app]
+    build: .
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      TRADER_MODE: ${TRADER_MODE:-mock}
+      DATABASE_URL: postgres://trader:trader@postgres:5432/trader
+      RPC_URL: ${RPC_URL:-}
+      KEK_BASE64: ${KEK_BASE64:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
+      RUST_LOG: info,sqlx=warn
+    ports: ["127.0.0.1:8080:8080"]
+    restart: unless-stopped
+
+volumes:
+  pgdata: {}

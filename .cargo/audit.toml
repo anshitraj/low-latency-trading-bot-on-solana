@@ -1,0 +1,14 @@
+# cargo-audit configuration. Every ignore is justified and tracked in
+# docs/KNOWN_LIMITATIONS.md (section "Dependency advisories").
+[advisories]
+ignore = [
+  # Lockfile-only: sqlx lists optional MySQL/SQLite drivers in Cargo.lock;
+  # neither is compiled (cargo tree -i rsa / -i libsqlite3-sys prints nothing).
+  "RUSTSEC-2023-0071", # rsa (sqlx-mysql, not built)
+  "RUSTSEC-2026-0459", # libsqlite3-sys (sqlx-sqlite, not built)
+  # Solana 2.x crate line (pinned for pump-rust-client/anchor 0.31 type
+  # compatibility). Our signing uses solana-keypair's matched keypair, so the
+  # mismatched-public-key oracle is not reachable. Upgrade path: ADR 0005.
+  "RUSTSEC-2022-0093", # ed25519-dalek 1.0.1 via solana-keypair 2.2
+  "RUSTSEC-2024-0344", # curve25519-dalek 3.2.0 via ed25519-dalek 1.0.1
+]

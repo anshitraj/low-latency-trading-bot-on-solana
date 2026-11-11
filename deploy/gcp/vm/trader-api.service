@@ -1,0 +1,20 @@
+[Unit]
+Description=trader-api (Solana trading bot API + Telegram webhook + Mini App)
+After=docker.service network-online.target
+Requires=docker.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+RuntimeDirectory=trader
+RuntimeDirectoryMode=0700
+# Secrets fetched from Secret Manager into tmpfs (/run/trader) at start.
+ExecStartPre=/opt/trader/fetch-secrets.sh
+ExecStart=/usr/bin/docker compose -f /opt/trader/docker-compose.prod.yml --env-file /run/trader/env up --remove-orphans
+ExecStop=/usr/bin/docker compose -f /opt/trader/docker-compose.prod.yml stop -t 30
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

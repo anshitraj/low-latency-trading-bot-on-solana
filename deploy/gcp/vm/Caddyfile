@@ -1,0 +1,28 @@
+# /etc/caddy/Caddyfile — replace bot.example.com with your domain (A record -> VM IP).
+bot.example.com {
+	encode zstd gzip
+	# Private endpoints are never exposed publicly.
+	@private path /metrics /v1/provider-health
+	respond @private 404
+	reverse_proxy 127.0.0.1:8080
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 20MiB
+			roll_keep 5
+		}
+		# Never log query strings or auth headers.
+		format filter {
+			wrap json
+			fields {
+				request>uri query delete
+				request>headers>Authorization delete
+				request>headers>X-Telegram-Bot-Api-Secret-Token delete
+			}
+		}
+	}
+}
