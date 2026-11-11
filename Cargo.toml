@@ -5,6 +5,11 @@ members = [
     "crates/market-data",
     "crates/wallets",
     "crates/execution",
+    "crates/router",
+    "crates/sender-rpc",
+    "crates/sender-jito",
+    "crates/sender-tpu",
+    "crates/protocol-pump",
 ]
 
 [workspace.package]

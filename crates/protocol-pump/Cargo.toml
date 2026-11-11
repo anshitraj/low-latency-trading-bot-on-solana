@@ -1,0 +1,22 @@
+[package]
+name = "trader-protocol-pump"
+description = "Pump bonding-curve adapter built on the official pump-rust-client (IDL-generated builders + on-chain fee resolution)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+trader-domain = { workspace = true }
+trader-market-data = { workspace = true }
+trader-execution = { workspace = true }
+pump-rust-client = { workspace = true }
+anchor-lang = "=0.31.1"
+solana-pubkey = { workspace = true }
+solana-instruction = { workspace = true }
+async-trait = { workspace = true }
+parking_lot = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
