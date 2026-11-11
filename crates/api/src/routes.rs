@@ -210,7 +210,7 @@ pub fn router(st: AppState) -> Router {
 
 async fn health(State(st): State<AppState>) -> Json<Value> {
     Json(
-        json!({"status": "ok", "mode": st.cfg.mode, "version": env!("CARGO_PKG_VERSION"), "mainnet_trading_enabled": st.cfg.mainnet_trading_enabled}),
+        json!({"status": "ok", "mode": st.cfg.mode, "version": env!("CARGO_PKG_VERSION"), "mainnet_trading_enabled": st.cfg.mainnet_trading_enabled, "mock_demo_mint": st.mock.as_ref().map(|m| m.demo_mint.to_string())}),
     )
 }
 

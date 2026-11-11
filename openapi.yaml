@@ -1,0 +1,308 @@
+openapi: 3.1.0
+info:
+  title: Solana Trader API
+  version: 0.1.0
+  description: |
+    Private-beta trading API backing the Telegram bot and Mini App.
+    All amounts are integers in base units serialized as decimal STRINGS
+    (lamports for SOL, raw units for tokens). Never send floats.
+    Auth: `Authorization: Bearer <session token>` from POST /v1/auth/telegram.
+    Errors: `{"error": {"code": "...", "message": "..."}}`.
+servers:
+  - url: /
+components:
+  securitySchemes:
+    session:
+      type: http
+      scheme: bearer
+    admin:
+      type: http
+      scheme: bearer
+      description: ADMIN_TOKEN; endpoints return 404 without it.
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, examples: [bad_request, unauthorized, not_found, policy_violation, unsupported_market, rate_limited, not_allowlisted, no_wallet, busy, not_implemented] }
+            message: { type: string }
+    Network: { type: string, enum: [mock, localnet, devnet, testnet, mainnet] }
+    OrderState:
+      type: string
+      enum: [CREATED, QUOTED, AWAITING_AUTH, SIGNING, SIGNED, SUBMITTED, OBSERVED, CONFIRMED, FINALIZED, FAILED_ONCHAIN, EXPIRED, REJECTED, UNKNOWN_RECONCILE]
+    Lamports: { type: string, pattern: '^[0-9]+$', description: u64 lamports as decimal string }
+    U64String: { type: string, pattern: '^[0-9]+$' }
+    User:
+      type: object
+      required: [id, telegram_id, created_at, beta_allowed]
+      properties:
+        id: { type: string, format: uuid }
+        telegram_id: { type: integer }
+        username: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
+        beta_allowed: { type: boolean }
+    Wallet:
+      type: object
+      required: [id, user_id, network, pubkey, signer_kind, label, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        network: { $ref: '#/components/schemas/Network' }
+        pubkey: { type: string }
+        signer_kind: { type: string, enum: [mock, managed_local, kms, external] }
+        label: { type: string }
+        created_at: { type: string, format: date-time }
+    CostEstimate:
+      type: object
+      required: [base_fee, priority_fee, tip, rent_deposit, protocol_fee]
+      properties:
+        base_fee: { $ref: '#/components/schemas/Lamports' }
+        priority_fee: { $ref: '#/components/schemas/Lamports' }
+        tip: { $ref: '#/components/schemas/Lamports' }
+        rent_deposit: { $ref: '#/components/schemas/Lamports' }
+        protocol_fee: { $ref: '#/components/schemas/Lamports' }
+    QuoteSource:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [on_chain, external_api, mock] }
+        provider: { type: string }
+    Quote:
+      type: object
+      required: [id, network, side, in_amount, in_decimals, expected_out, out_decimals, min_out, max_in, costs, max_total_debit, context_slot, state_age_ms, created_at, expires_at, source, warnings, market]
+      properties:
+        id: { type: string, format: uuid }
+        network: { $ref: '#/components/schemas/Network' }
+        side: { type: string, enum: [buy, sell] }
+        market:
+          type: object
+          properties:
+            dex: { type: string }
+            market: { type: string }
+            base_mint: { type: string }
+            quote_mint: { type: string }
+        in_amount: { $ref: '#/components/schemas/U64String' }
+        in_decimals: { type: integer }
+        expected_out: { $ref: '#/components/schemas/U64String' }
+        out_decimals: { type: integer }
+        min_out: { $ref: '#/components/schemas/U64String' }
+        max_in: { $ref: '#/components/schemas/U64String' }
+        price_impact_bps: { type: [integer, 'null'] }
+        costs: { $ref: '#/components/schemas/CostEstimate' }
+        max_total_debit: { $ref: '#/components/schemas/Lamports' }
+        context_slot: { type: integer }
+        state_age_ms: { type: integer }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        source: { $ref: '#/components/schemas/QuoteSource' }
+        warnings: { type: array, items: { type: string } }
+    SignedRecord:
+      type: object
+      required: [signature, last_valid_block_height, senders]
+      properties:
+        signature: { type: string }
+        last_valid_block_height: { type: integer }
+        compute_unit_limit: { type: integer }
+        compute_unit_price_micro_lamports: { type: integer }
+        tip_lamports: { type: integer }
+        senders: { type: array, items: { type: string } }
+    FillRecord:
+      type: object
+      required: [slot, success, fee_lamports, sol_delta_lamports, token_delta_raw, tip_lamports]
+      properties:
+        slot: { type: integer }
+        success: { type: boolean }
+        error: { type: [string, 'null'] }
+        fee_lamports: { type: integer }
+        sol_delta_lamports: { type: integer, description: i128 (JSON number) }
+        token_delta_raw: { type: integer, description: i128 (JSON number) }
+        token_decimals: { type: [integer, 'null'] }
+        compute_units_consumed: { type: [integer, 'null'] }
+        tip_lamports: { type: integer }
+    Order:
+      type: object
+      required: [id, user_id, wallet_id, wallet, intent, state, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        wallet_id: { type: string, format: uuid }
+        wallet: { type: string }
+        intent:
+          type: object
+          properties:
+            side: { type: string, enum: [buy, sell] }
+            mint: { type: string }
+            network: { $ref: '#/components/schemas/Network' }
+            idempotency_key: { type: string }
+        state: { $ref: '#/components/schemas/OrderState' }
+        quote: { oneOf: [{ $ref: '#/components/schemas/Quote' }, { type: 'null' }] }
+        signed: { oneOf: [{ $ref: '#/components/schemas/SignedRecord' }, { type: 'null' }] }
+        fill: { oneOf: [{ $ref: '#/components/schemas/FillRecord' }, { type: 'null' }] }
+        reject_reason: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    OrderRequest:
+      type: object
+      required: [mint, side]
+      properties:
+        mint: { type: string, description: base58 mint address (identity; symbols are never trusted) }
+        side: { type: string, enum: [buy, sell] }
+        amount_sol: { type: string, description: 'buy only, decimal SOL e.g. "0.1" (max 9 decimals)' }
+        percent: { type: integer, minimum: 1, maximum: 100, description: sell % of spendable balance }
+        amount_raw: { type: string, description: sell exact raw token units }
+    UserSettings:
+      type: object
+      required: [buy_presets, sell_presets_bps, slippage, compute_unit_price_micro_lamports, max_priority_fee, tip, confirm_trades, senders]
+      properties:
+        buy_presets: { type: array, items: { $ref: '#/components/schemas/Lamports' } }
+        sell_presets_bps: { type: array, items: { type: integer } }
+        slippage: { type: integer, maximum: 10000 }
+        compute_unit_price_micro_lamports: { type: integer }
+        max_priority_fee: { $ref: '#/components/schemas/Lamports' }
+        tip: { $ref: '#/components/schemas/Lamports' }
+        confirm_trades: { type: boolean }
+        senders: { type: array, items: { type: string, enum: [rpc, jito, helius, tpu, mock] } }
+security:
+  - session: []
+paths:
+  /v1/health:
+    get:
+      security: []
+      summary: Liveness
+      responses:
+        '200': { description: ok, content: { application/json: { example: { status: ok, mode: mock, version: 0.1.0, mainnet_trading_enabled: false } } } }
+  /v1/ready:
+    get:
+      security: []
+      summary: Readiness (fresh blockhash + RPC reachable)
+      responses: { '200': { description: ready }, '503': { description: not ready } }
+  /metrics:
+    get:
+      security: [{ admin: [] }]
+      summary: Prometheus metrics (private)
+      responses: { '200': { description: text/plain metrics }, '404': { description: without admin token } }
+  /v1/provider-health:
+    get:
+      security: [{ admin: [] }]
+      responses: { '200': { description: sender/RPC/blockhash health } }
+  /v1/auth/telegram:
+    post:
+      security: []
+      summary: Exchange Telegram Mini App initData for a short-lived session
+      description: Server validates the HMAC per Telegram docs, enforces auth_date age, and accepts each initData once.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [init_data], properties: { init_data: { type: string } } } } }
+      responses:
+        '200':
+          description: session
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  expires_at: { type: string, format: date-time }
+                  user: { $ref: '#/components/schemas/User' }
+                  start_param: { type: [string, 'null'] }
+        '401': { description: invalid / expired / replayed initData, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /v1/me:
+    get:
+      responses: { '200': { description: user + settings + mode } }
+  /v1/wallets:
+    get:
+      responses: { '200': { description: wallets, content: { application/json: { schema: { type: object, properties: { wallets: { type: array, items: { $ref: '#/components/schemas/Wallet' } } } } } } } }
+    post:
+      summary: Create managed test wallet (idempotent per network)
+      responses: { '201': { description: created }, '403': { description: not allowlisted } }
+  /v1/portfolio:
+    get:
+      summary: Balances + weighted-average positions; unrealized PnL only from an executable sell quote (null otherwise)
+      responses: { '200': { description: portfolio } }
+  /v1/tokens/{mint}:
+    get:
+      security: []
+      parameters: [{ name: mint, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: token info (market, mint authorities, extensions, risk flags with provenance) }, '400': { description: invalid mint } }
+  /v1/tokens/{mint}/quote:
+    get:
+      parameters:
+        - { name: mint, in: path, required: true, schema: { type: string } }
+        - { name: side, in: query, required: true, schema: { type: string, enum: [buy, sell] } }
+        - { name: amount, in: query, schema: { type: string }, description: SOL for buys }
+        - { name: percent, in: query, schema: { type: integer } }
+      responses: { '200': { description: quote, content: { application/json: { schema: { type: object, properties: { quote: { $ref: '#/components/schemas/Quote' } } } } } } }
+  /v1/orders/preview:
+    post:
+      summary: Full quote with all costs; persists and signs nothing
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/OrderRequest' } } } }
+      responses: { '200': { description: quote }, '422': { description: policy violation / unsupported market } }
+  /v1/orders:
+    get:
+      responses: { '200': { description: recent orders, content: { application/json: { schema: { type: object, properties: { orders: { type: array, items: { $ref: '#/components/schemas/Order' } } } } } } } }
+    post:
+      summary: Create order (idempotent). Returns AWAITING_AUTH with the server quote; confirm with /approve.
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, maxLength: 120, pattern: '^[A-Za-z0-9:._-]+$' } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/OrderRequest' } } } }
+      responses:
+        '201': { description: order (same order for a repeated key), content: { application/json: { schema: { type: object, properties: { order: { $ref: '#/components/schemas/Order' } } } } } }
+        '400': { description: missing key / bad amount }
+        '429': { description: per-user rate limit }
+        '503': { description: engine queue full (nothing created) }
+  /v1/orders/{id}:
+    get:
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: order + status_text + immutable event journal }, '404': { description: not found or not yours } }
+  /v1/orders/{id}/approve:
+    post:
+      summary: Confirm an AWAITING_AUTH order (idempotent). Re-quotes if expired and refuses if worse than the approved minimum output.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: order } }
+  /v1/orders/{id}/cancel:
+    post:
+      summary: Cancel before signing (no-op afterwards; a signed tx may still land)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: order } }
+  /v1/transactions/{signature}:
+    get:
+      parameters: [{ name: signature, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: on-chain result for your order }, '404': { description: unknown or not yours } }
+  /v1/tracked-wallets:
+    get: { responses: { '200': { description: watchlist (alerts not implemented) } } }
+    post:
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [address], properties: { address: { type: string }, label: { type: string } } } } } }
+      responses: { '204': { description: added }, '409': { description: limit reached } }
+    delete:
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [address], properties: { address: { type: string } } } } } }
+      responses: { '204': { description: removed } }
+  /v1/copy-rules:
+    get: { responses: { '501': { description: not implemented in this build } } }
+    post: { responses: { '501': { description: not implemented in this build } } }
+    delete: { responses: { '501': { description: not implemented in this build } } }
+  /v1/referrals:
+    get: { responses: { '501': { description: not implemented (P2) } } }
+  /v1/settings:
+    get: { responses: { '200': { description: settings + effective wallet policy + available senders } } }
+    post:
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { settings: { $ref: '#/components/schemas/UserSettings' }, paused: { type: boolean, description: kill switch } } } } }
+      responses: { '200': { description: updated }, '400': { description: invalid settings } }
+  /v1/events:
+    get:
+      summary: Server-sent events of your order updates (Authorization header required)
+      responses: { '200': { description: text/event-stream, event `order` } }
+  /v1/dev/airdrop:
+    post:
+      summary: Test SOL (mock/localnet/devnet only)
+      responses: { '200': { description: requested }, '400': { description: not available on this network } }
+  /telegram/webhook:
+    post:
+      security: []
+      summary: Telegram Bot API webhook; requires X-Telegram-Bot-Api-Secret-Token
+      responses: { '200': { description: accepted or duplicate }, '401': { description: bad secret }, '503': { description: queue full; Telegram retries } }

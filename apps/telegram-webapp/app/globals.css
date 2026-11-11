@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0b0f14;
+  --color-panel: #121821;
+  --color-panel-2: #18202b;
+  --color-line: #253041;
+  --color-text: #e6edf3;
+  --color-muted: #9aa7b6;
+  --color-accent: #4cc2ff;
+  --color-buy: #2fd37a;
+  --color-sell: #ff6b6b;
+  --color-warn: #f4bf4f;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
