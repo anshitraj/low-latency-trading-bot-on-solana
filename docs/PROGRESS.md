@@ -11,11 +11,11 @@ Mainnet status: **DISABLED**. GCP: **nothing provisioned**. Cash/SOL spent: **$0
 - Telegram webhook bot, REST API, PgStore + migrations, outbox, Next.js Mini App, Playwright E2E.
 - Benchmarks (hot path, engine, load, faults), docs, GCP Terraform/scripts (not applied), CI workflow.
 
-### Bugs found by tests and fixed
+### Bugs found and fixed (source noted)
 1. Two distinct orders with identical parameters in the same blockhash window serialized to identical bytes (one would have been silently dropped by the cluster). Fix: unique compute-unit limit per (wallet, blockhash); regression test.
 2. Quotes under-stated max spend: Pump's first v3 trade creates a 137-byte `user_volume_accumulator` (1,844,400 lamports) paid by the user. Fix: `ProtocolAdapter::user_rent_candidates`, existence checked in the balance read; smoke asserts debit ≤ quoted max.
 3. Helius tip-account constant truncated during transcription — caught by the parse test.
-4. Position fills could double-apply after restart reconciliation. Fix: idempotent per order (`position_lots.order_id` unique / MemStore set).
+4. Found in code review: position fills could double-apply after restart reconciliation. Fix: idempotent per order (`position_lots.order_id` unique / MemStore set).
 5. Quadratic slowdowns (CU-uniqueness scan, MemStore usage scan) found by the engine benchmark at concurrency 1. Fixed to O(1).
 6. Found while reading the Pump SDK fixture notes (not by a test): v3 trades refuse legacy cashback coins → the adapter now refuses them instead of only warning.
 
