@@ -1,0 +1,82 @@
+{
+  "env": {
+    "arch": "x86_64",
+    "cpus": 20,
+    "generated_at": "2026-11-11T16:53:50.343663300+00:00",
+    "host": "ANSHITRAJ-PC",
+    "os": "windows",
+    "profile": "release"
+  },
+  "kind": "engine_warm_path",
+  "levels": [
+    {
+      "concurrency": 1,
+      "intent_to_signed_us": {
+        "max": 31407,
+        "mean": 4951,
+        "min": 288,
+        "n": 4000,
+        "p50": 2685,
+        "p90": 11975,
+        "p95": 13095,
+        "p99": 14863,
+        "unit": "us"
+      },
+      "orders": 4000,
+      "submitted": 4000,
+      "wall_ms": 20009
+    },
+    {
+      "concurrency": 10,
+      "intent_to_signed_us": {
+        "max": 8383,
+        "mean": 864,
+        "min": 305,
+        "n": 4000,
+        "p50": 720,
+        "p90": 1508,
+        "p95": 1781,
+        "p99": 2565,
+        "unit": "us"
+      },
+      "orders": 4000,
+      "submitted": 4000,
+      "wall_ms": 451
+    },
+    {
+      "concurrency": 50,
+      "intent_to_signed_us": {
+        "max": 11943,
+        "mean": 1291,
+        "min": 341,
+        "n": 4000,
+        "p50": 843,
+        "p90": 2661,
+        "p95": 3599,
+        "p99": 5863,
+        "unit": "us"
+      },
+      "orders": 4000,
+      "submitted": 4000,
+      "wall_ms": 420
+    },
+    {
+      "concurrency": 100,
+      "intent_to_signed_us": {
+        "max": 8767,
+        "mean": 995,
+        "min": 317,
+        "n": 4000,
+        "p50": 773,
+        "p90": 1898,
+        "p95": 2369,
+        "p99": 3579,
+        "unit": "us"
+      },
+      "orders": 4000,
+      "submitted": 4000,
+      "wall_ms": 302
+    }
+  ],
+  "note": "Real Engine with MemStore, cached Pump state (fixture), cached balances, ManagedLocal signer, MOCK sender. Excludes RPC, Postgres, KMS."
+}

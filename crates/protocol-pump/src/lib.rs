@@ -10,7 +10,8 @@
 //!
 //! Supported: SOL-quoted, non-mayhem curves that are not `complete`.
 //! Fail-closed (Unsupported): migrated curves (PumpSwap adapter not enabled),
-//! non-SOL quote mints, mayhem-mode coins, mints failing the risk screen.
+//! non-SOL quote mints, mayhem-mode coins, legacy cashback coins (v3 refuses
+//! them), and mints failing the risk screen.
 
 use async_trait::async_trait;
 use parking_lot::RwLock;
@@ -42,6 +43,8 @@ pub const DISC_SELL_V3: [u8; 8] = [28, 146, 222, 119, 38, 196, 105, 213];
 pub const V3_USER_INDEX: usize = 8;
 /// Compute units: measured on localnet (see docs/BENCHMARKS.md) plus margin.
 pub const DEFAULT_COMPUTE_UNITS: u32 = 150_000;
+/// Data length of the pump `UserVolumeAccumulator` account (observed on localnet).
+pub const USER_VOLUME_ACCUMULATOR_LEN: u64 = 137;
 /// Small reference trade used to estimate spot price for impact display.
 const SPOT_PROBE_LAMPORTS: u64 = 1_000_000;
 
@@ -188,6 +191,10 @@ impl PumpAdapter {
         if s.curve.is_mayhem_mode {
             return unsupported("mayhem-mode coin");
         }
+        if s.curve.is_cashback_coin {
+            // pump-rust-client fixtures: "v3 / pool v2 trades refuse cashback coins".
+            return unsupported("legacy cashback coin: v3 trades refuse it and the legacy v2 path is not enabled");
+        }
         let risk = screen_mint(&s.mint, None);
         if risk.blocked() {
             let reasons: Vec<String> = risk.flags.iter().filter(|f| f.level == trader_execution::RiskLevel::Block).map(|f| f.message.clone()).collect();
@@ -262,6 +269,10 @@ impl ProtocolAdapter for PumpAdapter {
     }
 
     async fn resolve_market(&self, mint: &Pubkey) -> Result<Option<MarketRef>, ProtocolError> {
+        if self.rpc.is_none() {
+            // Offline (fixtures/benchmarks): only injected snapshots exist.
+            return Ok(self.cache.read().get(mint).map(|s| MarketRef { dex: DexKind::PumpBondingCurve, market: s.bonding_curve, base_mint: *mint, quote_mint: constants::NATIVE_MINT }));
+        }
         match self.fetch(mint).await? {
             None => Ok(None),
             Some(s) => {
@@ -338,9 +349,6 @@ impl ProtocolAdapter for PumpAdapter {
         if quote.input_amount_used < req.amount_in && req.side == Side::Buy {
             warnings.push("partial fill: curve completes; remainder buys from post-migration pool".into());
         }
-        if s.curve.is_cashback_coin {
-            warnings.push("legacy cashback coin".into());
-        }
         if fee_bps.is_some() {
             warnings.push("protocol/creator fee shown is an estimate from the pump-fees tier table".into());
         }
@@ -362,6 +370,13 @@ impl ProtocolAdapter for PumpAdapter {
             compute_units: self.compute_units,
             warnings,
         })
+    }
+
+    fn user_rent_candidates(&self, user: &Pubkey, _mint: &Pubkey, _side: Side) -> Vec<(Pubkey, Lamports)> {
+        // Measured on localnet with pump.so (pump-rust-client 0.5.0): the first
+        // v3 trade creates `user_volume_accumulator` (owner pump, 137 bytes,
+        // 1_844_400 lamports) paid by the user.
+        vec![(pda::pump::user_volume_accumulator(user).0, trader_domain::fees::rent_exempt_minimum(USER_VOLUME_ACCUMULATOR_LEN))]
     }
 
     fn build_swap(&self, quote: &ProtocolQuote, user: &Pubkey) -> Result<SwapBuild, ProtocolError> {
@@ -434,6 +449,14 @@ mod tests {
         bad[0] ^= 1;
         let view = IxView { program: PUMP_PROGRAM_ID, accounts: trade.accounts.iter().map(|a| a.pubkey).collect(), data: &bad };
         assert!(PumpRule.check(&view, &user).is_err());
+    }
+
+    #[test]
+    fn rent_candidates_include_volume_accumulator() {
+        let a = PumpAdapter::offline();
+        let u = Pubkey::new_unique();
+        let c = a.user_rent_candidates(&u, &Pubkey::new_unique(), Side::Buy);
+        assert_eq!(c, vec![(pda::pump::user_volume_accumulator(&u).0, Lamports(1_844_400))]);
     }
 
     #[test]

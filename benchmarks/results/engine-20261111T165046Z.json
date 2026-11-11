@@ -1,0 +1,50 @@
+{
+  "env": {
+    "arch": "x86_64",
+    "cpus": 20,
+    "generated_at": "2026-11-11T16:50:46.775505800+00:00",
+    "host": "ANSHITRAJ-PC",
+    "os": "windows",
+    "profile": "release"
+  },
+  "kind": "engine_warm_path",
+  "levels": [
+    {
+      "concurrency": 1,
+      "intent_to_signed_us": {
+        "n": 0
+      },
+      "orders": 2000,
+      "submitted": 0,
+      "wall_ms": 26
+    },
+    {
+      "concurrency": 10,
+      "intent_to_signed_us": {
+        "n": 0
+      },
+      "orders": 2000,
+      "submitted": 0,
+      "wall_ms": 55
+    },
+    {
+      "concurrency": 50,
+      "intent_to_signed_us": {
+        "n": 0
+      },
+      "orders": 2000,
+      "submitted": 0,
+      "wall_ms": 58
+    },
+    {
+      "concurrency": 100,
+      "intent_to_signed_us": {
+        "n": 0
+      },
+      "orders": 2000,
+      "submitted": 0,
+      "wall_ms": 58
+    }
+  ],
+  "note": "Real Engine with MemStore, cached Pump state (fixture), cached balances, ManagedLocal signer, MOCK sender. Excludes RPC, Postgres, KMS."
+}

@@ -1,0 +1,42 @@
+[package]
+name = "trader-cli"
+description = "Operator/dev CLI: localnet setup (clone Pump config PDAs), coin creation, Pump smoke trades, fixture capture"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "trader-cli"
+path = "src/main.rs"
+
+[dependencies]
+trader-domain = { workspace = true }
+trader-market-data = { workspace = true }
+trader-wallets = { workspace = true }
+trader-execution = { workspace = true }
+trader-router = { workspace = true }
+trader-sender-rpc = { workspace = true }
+trader-orders = { workspace = true }
+trader-protocol-pump = { workspace = true }
+pump-rust-client = { workspace = true }
+solana-pubkey = { workspace = true }
+solana-keypair = { workspace = true }
+solana-signer = { workspace = true }
+solana-message = { workspace = true }
+solana-transaction = { workspace = true }
+solana-instruction = { workspace = true }
+solana-compute-budget-interface = { workspace = true }
+solana-hash = { workspace = true }
+bincode = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+base64 = { workspace = true }
+bs58 = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+parking_lot = { workspace = true }
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

@@ -13,6 +13,8 @@ members = [
     "crates/orders",
     "crates/testkit",
     "tests",
+    "crates/cli",
+    "benchmarks",
 ]
 
 [workspace.package]

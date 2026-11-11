@@ -93,4 +93,6 @@ pub struct WalletBalances {
     pub token_raw: Option<u64>,
     pub token_account_exists: bool,
     pub slot: u64,
+    /// Existence of the adapter's `user_rent_candidates`, same order.
+    pub extra_exists: Vec<bool>,
 }

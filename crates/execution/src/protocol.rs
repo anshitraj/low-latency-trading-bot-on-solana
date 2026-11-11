@@ -87,6 +87,14 @@ pub trait ProtocolAdapter: Send + Sync {
         Err(ProtocolError::Unsupported { adapter: self.name(), reason: "exact-out not supported".into() })
     }
 
+    /// Accounts this protocol may create *at the user's expense* when trading
+    /// `mint` (e.g. Pump's per-user volume accumulator), with their rent. The
+    /// engine checks existence in the same RPC round trip as balances and adds
+    /// the rent of missing ones to the quoted max spend.
+    fn user_rent_candidates(&self, _user: &Pubkey, _mint: &Pubkey, _side: Side) -> Vec<(Pubkey, Lamports)> {
+        vec![]
+    }
+
     /// Build swap instructions for a quote (no I/O). Thresholds come from the quote.
     fn build_swap(&self, quote: &ProtocolQuote, user: &Pubkey) -> Result<SwapBuild, ProtocolError>;
 }

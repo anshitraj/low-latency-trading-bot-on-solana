@@ -1,0 +1,71 @@
+{
+  "build_swap_ns": {
+    "max": 548863,
+    "mean": 104590,
+    "min": 83392,
+    "n": 20000,
+    "p50": 100607,
+    "p90": 112639,
+    "p95": 123903,
+    "p99": 236543,
+    "unit": "ns"
+  },
+  "compile_guard_sign_serialize_ns": {
+    "max": 622079,
+    "mean": 39975,
+    "min": 31200,
+    "n": 20000,
+    "p50": 37407,
+    "p90": 45023,
+    "p95": 55231,
+    "p99": 88127,
+    "unit": "ns"
+  },
+  "env": {
+    "arch": "x86_64",
+    "cpus": 20,
+    "generated_at": "2026-11-11T16:50:39.532879900+00:00",
+    "host": "ANSHITRAJ-PC",
+    "os": "windows",
+    "profile": "release"
+  },
+  "fixture": "E:\\solana-trading-bot\\benchmarks/../fixtures/pump/localnet_curve.json",
+  "iterations": 20000,
+  "kind": "hotpath_offline",
+  "note": "Pump quote (official SDK math) + v3 builder + compile/guard/ed25519 sign/serialize; in-memory signer, no network, no DB",
+  "quote_ns": {
+    "max": 181887,
+    "mean": 1445,
+    "min": 800,
+    "n": 20000,
+    "p50": 1200,
+    "p90": 1800,
+    "p95": 2401,
+    "p99": 4503,
+    "unit": "ns"
+  },
+  "total_ns": {
+    "max": 732671,
+    "mean": 146009,
+    "min": 115584,
+    "n": 20000,
+    "p50": 139391,
+    "p90": 159487,
+    "p95": 182143,
+    "p99": 316159,
+    "unit": "ns"
+  },
+  "tx_size_bytes_sample": [
+    787,
+    744,
+    787,
+    744,
+    787,
+    744,
+    787,
+    744,
+    787,
+    744
+  ],
+  "warmup": 1000
+}

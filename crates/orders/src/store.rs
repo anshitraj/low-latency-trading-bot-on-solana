@@ -58,6 +58,8 @@ struct MemInner {
     events: Vec<OrderEvent>,
     attempts: Vec<AttemptRecord>,
     positions: HashMap<(Uuid, Pubkey), Position>,
+    /// (wallet_id, day) -> (non-rejected trades, buy turnover)
+    daily: HashMap<(Uuid, chrono::NaiveDate), (u32, u64)>,
 }
 
 #[derive(Clone, Default)]
@@ -113,6 +115,13 @@ impl OrderStore for MemStore {
             updated_at: now(),
         };
         g.idem.insert(k, o.id);
+        let turnover = match o.intent.amount {
+            trader_domain::AmountSpec::ExactSolIn { lamports } => lamports.0,
+            _ => 0,
+        };
+        let d = g.daily.entry((o.wallet_id, o.created_at.date_naive())).or_default();
+        d.0 += 1;
+        d.1 = d.1.saturating_add(turnover);
         g.orders.insert(o.id, o.clone());
         g.events.push(OrderEvent { order_id: o.id, user_id: o.user_id, from: None, to: OrderState::Created, at: now(), detail: serde_json::json!({}) });
         Ok(CreateOutcome::Created(o))
@@ -184,8 +193,21 @@ impl OrderStore for MemStore {
 
     async fn reject(&self, id: Uuid, from: OrderState, reason: &str) -> Result<(), StoreError> {
         self.transition(id, from, OrderState::Rejected, serde_json::json!({"reason": reason})).await?;
-        if let Some(o) = self.inner.lock().orders.get_mut(&id) {
+        let mut g = self.inner.lock();
+        let mut key = None;
+        if let Some(o) = g.orders.get_mut(&id) {
             o.reject_reason = Some(reason.to_string());
+            let t = match o.intent.amount {
+                trader_domain::AmountSpec::ExactSolIn { lamports } => lamports.0,
+                _ => 0,
+            };
+            key = Some(((o.wallet_id, o.created_at.date_naive()), t));
+        }
+        if let Some((k, t)) = key {
+            if let Some(d) = g.daily.get_mut(&k) {
+                d.0 = d.0.saturating_sub(1);
+                d.1 = d.1.saturating_sub(t);
+            }
         }
         Ok(())
     }
@@ -206,14 +228,9 @@ impl OrderStore for MemStore {
         let g = self.inner.lock();
         let today = now().date_naive();
         let mut u = UsageSnapshot::default();
-        for o in g.orders.values().filter(|o| o.wallet_id == wallet_id && o.created_at.date_naive() == today) {
-            if matches!(o.state, OrderState::Rejected) {
-                continue;
-            }
-            u.trades_today += 1;
-            if let trader_domain::AmountSpec::ExactSolIn { lamports } = o.intent.amount {
-                u.turnover_today.0 = u.turnover_today.0.saturating_add(lamports.0);
-            }
+        if let Some((n, t)) = g.daily.get(&(wallet_id, today)) {
+            u.trades_today = *n;
+            u.turnover_today.0 = *t;
         }
         for ((w, _), p) in g.positions.iter() {
             if *w == wallet_id && p.realized_pnl_lamports < 0 {

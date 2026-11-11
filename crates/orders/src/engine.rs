@@ -62,7 +62,7 @@ pub trait SignerProvider: Send + Sync {
 
 #[async_trait]
 pub trait BalanceSource: Send + Sync {
-    async fn balances(&self, wallet: &Pubkey, mint: &Pubkey, token_program: &Pubkey) -> Result<WalletBalances, String>;
+    async fn balances(&self, wallet: &Pubkey, mint: &Pubkey, extra: &[Pubkey]) -> Result<WalletBalances, String>;
 }
 
 #[async_trait]
@@ -126,7 +126,8 @@ pub struct Engine {
     prepared: Mutex<HashMap<Uuid, Prepared>>,
     traces: Mutex<HashMap<Uuid, LatencyTrace>>,
     queue: Mutex<Option<mpsc::Sender<Uuid>>>,
-    recent_msgs: Mutex<HashMap<Pubkey, Vec<(solana_hash_compat::Hash, u32, Instant)>>>,
+    /// (wallet, blockhash) -> (next CU offset, first use).
+    recent_msgs: Mutex<HashMap<(Pubkey, solana_hash_compat::Hash), (u32, Instant)>>,
 }
 
 impl Engine {
@@ -240,13 +241,6 @@ impl Engine {
         Err(EngineError::NoMarket)
     }
 
-    fn token_program_hint(&self, adapter: usize, mint: &Pubkey) -> Pubkey {
-        // Adapters expose the base token program via a quote; default to 2022
-        // probe which BalanceSource handles for both programs.
-        let _ = (adapter, mint);
-        TOKEN_2022_PROGRAM
-    }
-
     async fn quote_with_refresh(&self, idx: usize, req: &QuoteRequest) -> Result<ProtocolQuote, EngineError> {
         let a = &self.adapters[idx];
         match a.quote_exact_in(req) {
@@ -262,11 +256,15 @@ impl Engine {
     /// Compute an executable quote for an intent with full cost breakdown.
     pub async fn prepare(&self, intent: &TradeIntent, wallet: &Pubkey, policy: &WalletPolicy) -> Result<(Quote, Prepared), EngineError> {
         let idx = self.adapter_for(&intent.mint).await?;
-        let balances = self
-            .balances
-            .balances(wallet, &intent.mint, &self.token_program_hint(idx, &intent.mint))
-            .await
-            .map_err(EngineError::Unavailable)?;
+        let candidates = self.adapters[idx].user_rent_candidates(wallet, &intent.mint, intent.side);
+        let extra: Vec<Pubkey> = candidates.iter().map(|c| c.0).collect();
+        let balances = self.balances.balances(wallet, &intent.mint, &extra).await.map_err(EngineError::Unavailable)?;
+        let protocol_rent: u64 = candidates
+            .iter()
+            .zip(balances.extra_exists.iter().chain(std::iter::repeat(&false)))
+            .filter(|(_, exists)| !**exists)
+            .map(|(c, _)| c.1 .0)
+            .sum();
         let amount_in = match &intent.amount {
             AmountSpec::ExactSolIn { lamports } => lamports.0,
             AmountSpec::SellPercent { bps } => {
@@ -291,7 +289,8 @@ impl Engine {
             slippage_bps: intent.slippage.get(),
             max_state_age: self.cfg.max_state_age,
         };
-        let pq = self.quote_with_refresh(idx, &req).await?;
+        let mut pq = self.quote_with_refresh(idx, &req).await?;
+        pq.rent_lamports = Lamports(pq.rent_lamports.0.saturating_add(protocol_rent));
         let quote = self.to_quote(intent, &pq, &balances, policy)?;
         Ok((quote, Prepared { adapter: idx, pq, balances, at: Instant::now() }))
     }
@@ -313,13 +312,12 @@ impl Engine {
     /// collision), which makes the message unique at zero extra bytes.
     fn unique_unit_limit(&self, wallet: &Pubkey, blockhash: &solana_hash_compat::Hash, base: u32) -> u32 {
         let mut g = self.recent_msgs.lock();
-        let v = g.entry(*wallet).or_default();
-        v.retain(|(_, _, at)| at.elapsed() < Duration::from_secs(120));
-        let mut limit = base;
-        while v.iter().any(|(h, l, _)| h == blockhash && *l == limit) {
-            limit += 1;
+        if g.len() > 4096 {
+            g.retain(|_, (_, at)| at.elapsed() < Duration::from_secs(120));
         }
-        v.push((*blockhash, limit, Instant::now()));
+        let e = g.entry((*wallet, *blockhash)).or_insert((0, Instant::now()));
+        let limit = base.saturating_add(e.0);
+        e.0 += 1;
         limit
     }
 
