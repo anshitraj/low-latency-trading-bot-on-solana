@@ -372,6 +372,26 @@ impl ProtocolAdapter for PumpAdapter {
         })
     }
 
+    fn describe(&self, mint: &Pubkey) -> Option<serde_json::Value> {
+        let s = self.cache.read().get(mint).cloned()?;
+        Some(serde_json::json!({
+            "dex": "pump_bonding_curve",
+            "bonding_curve": s.bonding_curve.to_string(),
+            "complete": s.curve.complete,
+            "liquidity_sol_lamports": s.curve.real_quote_reserves.to_string(),
+            "real_token_reserves": s.curve.real_token_reserves.to_string(),
+            "virtual_quote_reserves": s.curve.virtual_quote_reserves.to_string(),
+            "virtual_token_reserves": s.curve.virtual_token_reserves.to_string(),
+            "creator": s.curve.creator.to_string(),
+            "mint_supply": s.mint.supply.to_string(),
+            "decimals": s.mint.decimals,
+            "token_program": s.mint.program.id().to_string(),
+            "source": "on-chain (pump bonding curve account)",
+            "slot": s.slot,
+            "state_age_ms": s.fetched_at.elapsed().as_millis() as u64,
+        }))
+    }
+
     fn user_rent_candidates(&self, user: &Pubkey, _mint: &Pubkey, _side: Side) -> Vec<(Pubkey, Lamports)> {
         // Measured on localnet with pump.so (pump-rust-client 0.5.0): the first
         // v3 trade creates `user_volume_accumulator` (owner pump, 137 bytes,

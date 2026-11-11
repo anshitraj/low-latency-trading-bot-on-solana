@@ -393,6 +393,16 @@ impl Engine {
         Ok(policy)
     }
 
+    /// Resolve which adapter trades `mint` and describe the market from cache.
+    pub async fn describe_market(&self, mint: &Pubkey) -> Result<(&'static str, Option<serde_json::Value>), EngineError> {
+        let idx = self.adapter_for(mint).await?;
+        let a = &self.adapters[idx];
+        if a.describe(mint).is_none() {
+            let _ = a.refresh(mint).await;
+        }
+        Ok((a.name(), a.describe(mint)))
+    }
+
     /// `POST /v1/orders/preview`: full quote + costs, no persistence, no signing.
     pub async fn preview(&self, intent: &TradeIntent, wallet: &Pubkey) -> Result<Quote, EngineError> {
         let policy = self.policy_and_usage(intent).await?;

@@ -1,0 +1,60 @@
+[package]
+name = "trader-api"
+description = "Axum HTTP API, Telegram webhook bot, Mini App auth, Postgres store and service wiring"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "trader-api"
+path = "src/main.rs"
+
+[dependencies]
+trader-domain = { workspace = true }
+trader-market-data = { workspace = true }
+trader-wallets = { workspace = true }
+trader-execution = { workspace = true }
+trader-router = { workspace = true }
+trader-sender-rpc = { workspace = true }
+trader-sender-jito = { workspace = true }
+trader-sender-tpu = { workspace = true }
+trader-protocol-pump = { workspace = true }
+trader-orders = { workspace = true }
+trader-observability = { workspace = true }
+trader-testkit = { workspace = true }
+solana-pubkey = { workspace = true }
+solana-keypair = { workspace = true }
+solana-signer = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { version = "0.6", features = ["trace", "cors", "limit", "timeout", "fs", "set-header"] }
+sqlx = { workspace = true }
+reqwest = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+async-trait = { workspace = true }
+parking_lot = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }
+subtle = { workspace = true }
+hex = { workspace = true }
+base64 = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+rand = { workspace = true }
+url = { workspace = true }
+zeroize = { workspace = true }
+futures = { workspace = true }
+
+[dev-dependencies]
+tower = { workspace = true, features = ["util"] }
+url = { workspace = true }
+chrono = { workspace = true }
+parking_lot = { workspace = true }
+trader-domain = { workspace = true }

@@ -44,8 +44,11 @@ pub trait OrderStore: Send + Sync {
     async fn record_attempts(&self, recs: &[AttemptRecord]) -> Result<(), StoreError>;
     async fn save_fill(&self, id: Uuid, fill: &FillRecord) -> Result<(), StoreError>;
     async fn usage_today(&self, wallet_id: Uuid) -> Result<UsageSnapshot, StoreError>;
-    async fn apply_position_fill(&self, user_id: Uuid, wallet_id: Uuid, mint: Pubkey, side: Side, fill: &Fill) -> Result<Position, StoreError>;
+    /// Idempotent per order: a second call for the same order_id is a no-op
+    /// returning None (restart reconciliation can re-observe a fill).
+    async fn apply_position_fill(&self, order_id: Uuid, user_id: Uuid, wallet_id: Uuid, mint: Pubkey, side: Side, fill: &Fill) -> Result<Option<Position>, StoreError>;
     async fn get_position(&self, wallet_id: Uuid, mint: Pubkey) -> Result<Option<Position>, StoreError>;
+    async fn list_positions(&self, wallet_id: Uuid) -> Result<Vec<(Pubkey, Position)>, StoreError>;
     async fn events(&self, id: Uuid) -> Result<Vec<OrderEvent>, StoreError>;
     async fn find_by_signature(&self, sig: &str) -> Result<Option<Order>, StoreError>;
 }
@@ -60,6 +63,7 @@ struct MemInner {
     positions: HashMap<(Uuid, Pubkey), Position>,
     /// (wallet_id, day) -> (non-rejected trades, buy turnover)
     daily: HashMap<(Uuid, chrono::NaiveDate), (u32, u64)>,
+    applied_fills: std::collections::HashSet<Uuid>,
 }
 
 #[derive(Clone, Default)]
@@ -241,8 +245,11 @@ impl OrderStore for MemStore {
         Ok(u)
     }
 
-    async fn apply_position_fill(&self, _user_id: Uuid, wallet_id: Uuid, mint: Pubkey, side: Side, fill: &Fill) -> Result<Position, StoreError> {
+    async fn apply_position_fill(&self, order_id: Uuid, _user_id: Uuid, wallet_id: Uuid, mint: Pubkey, side: Side, fill: &Fill) -> Result<Option<Position>, StoreError> {
         let mut g = self.inner.lock();
+        if !g.applied_fills.insert(order_id) {
+            return Ok(None);
+        }
         let p = g.positions.entry((wallet_id, mint)).or_default();
         match side {
             Side::Buy => p.apply_buy(fill).map_err(|e| StoreError::Backend(e.to_string()))?,
@@ -250,7 +257,7 @@ impl OrderStore for MemStore {
                 p.apply_sell(fill).map_err(|e| StoreError::Backend(e.to_string()))?;
             }
         }
-        Ok(p.clone())
+        Ok(Some(p.clone()))
     }
 
     async fn get_position(&self, wallet_id: Uuid, mint: Pubkey) -> Result<Option<Position>, StoreError> {
@@ -259,6 +266,10 @@ impl OrderStore for MemStore {
 
     async fn events(&self, id: Uuid) -> Result<Vec<OrderEvent>, StoreError> {
         Ok(self.inner.lock().events.iter().filter(|e| e.order_id == id).cloned().collect())
+    }
+
+    async fn list_positions(&self, wallet_id: Uuid) -> Result<Vec<(Pubkey, Position)>, StoreError> {
+        Ok(self.inner.lock().positions.iter().filter(|((w, _), _)| *w == wallet_id).map(|((_, m), p)| (*m, p.clone())).collect())
     }
 
     async fn find_by_signature(&self, sig: &str) -> Result<Option<Order>, StoreError> {

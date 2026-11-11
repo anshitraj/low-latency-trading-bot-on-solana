@@ -149,6 +149,11 @@ impl ProtocolAdapter for MockDex {
             warnings: vec!["MOCK market".into()],
         })
     }
+    fn describe(&self, mint: &Pubkey) -> Option<serde_json::Value> {
+        let (p, slot, at) = *self.pools.read().get(mint)?;
+        Some(serde_json::json!({"dex": "MOCK", "liquidity_sol_lamports": p.sol_reserve.to_string(), "token_reserve": p.token_reserve.to_string(), "decimals": p.decimals, "source": "MOCK pool (not real market data)", "slot": slot, "state_age_ms": at.elapsed().as_millis() as u64}))
+    }
+
     fn build_swap(&self, q: &ProtocolQuote, user: &Pubkey) -> Result<SwapBuild, ProtocolError> {
         Ok(SwapBuild {
             instructions: vec![Instruction::new_with_bytes(

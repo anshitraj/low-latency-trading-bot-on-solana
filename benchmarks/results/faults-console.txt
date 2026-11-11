@@ -1,0 +1,4 @@
+{"duplicate_executions":0,"fault_pct":1,"injected":{"rate_limited":2,"timeout_after_forward":1},"landed_ok":198,"orders":200,"states":{"FINALIZED":198,"REJECTED":2}}
+{"duplicate_executions":0,"fault_pct":5,"injected":{"dropped":3,"http500_forwarded":2,"rate_limited":3,"timeout_after_forward":2},"landed_ok":197,"orders":200,"states":{"FINALIZED":197,"REJECTED":3}}
+{"duplicate_executions":0,"fault_pct":10,"injected":{"dropped":8,"http500_forwarded":6,"rate_limited":3,"timeout_after_forward":2},"landed_ok":197,"orders":200,"states":{"FINALIZED":197,"REJECTED":3}}
+saved E:\solana-trading-bot\benchmarks/results/faults-20261111T165759Z.json

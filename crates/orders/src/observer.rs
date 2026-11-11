@@ -297,7 +297,7 @@ impl Observer {
                 _ => None,
             };
             if let Some(pf) = pf {
-                if let Err(e) = self.store.apply_position_fill(tr.t.user_id, tr.t.wallet_id, tr.t.mint, tr.t.side, &pf).await {
+                if let Err(e) = self.store.apply_position_fill(tr.t.order_id, tr.t.user_id, tr.t.wallet_id, tr.t.mint, tr.t.side, &pf).await {
                     tracing::warn!(error = %e, "position update failed");
                 }
             }

@@ -1,0 +1,4 @@
+{"duplicates":0,"intent_to_finalized_us_mock_chain":{"max":123967,"mean":97847,"min":90944,"n":50,"p50":93951,"p90":108991,"p95":114751,"p99":123967,"unit":"us"},"landed_ok":50,"orders":50,"rate_per_min":100,"seconds":30,"states":{"FINALIZED":50},"wall_ms":29514}
+{"duplicates":0,"intent_to_finalized_us_mock_chain":{"max":125055,"mean":101125,"min":85888,"n":250,"p50":98239,"p90":111999,"p95":117887,"p99":123199,"unit":"us"},"landed_ok":250,"orders":250,"rate_per_min":500,"seconds":30,"states":{"FINALIZED":250},"wall_ms":29995}
+{"duplicates":0,"intent_to_finalized_us_mock_chain":{"max":132607,"mean":99666,"min":84480,"n":500,"p50":95551,"p90":109439,"p95":114751,"p99":124479,"unit":"us"},"landed_ok":500,"orders":500,"rate_per_min":1000,"seconds":30,"states":{"FINALIZED":500},"wall_ms":30060}
+saved E:\solana-trading-bot\benchmarks/results/load-20261111T165757Z.json

@@ -95,6 +95,11 @@ pub trait ProtocolAdapter: Send + Sync {
         vec![]
     }
 
+    /// Human-facing market facts from cached state (liquidity etc.), with provenance.
+    fn describe(&self, _mint: &Pubkey) -> Option<serde_json::Value> {
+        None
+    }
+
     /// Build swap instructions for a quote (no I/O). Thresholds come from the quote.
     fn build_swap(&self, quote: &ProtocolQuote, user: &Pubkey) -> Result<SwapBuild, ProtocolError>;
 }
