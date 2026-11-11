@@ -1,0 +1,84 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/domain",
+    "crates/market-data",
+    "crates/wallets",
+    "crates/execution",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "UNLICENSED"
+publish = false
+rust-version = "1.89"
+
+[workspace.dependencies]
+# --- Solana 2.x component crates. Pinned to the line used by anchor-lang 0.31.1,
+# which the official pump-rust-client 0.5.0 depends on, so Pubkey/Instruction
+# types are shared without conversion. See docs/DECISIONS/0005-solana-crate-line.md
+solana-pubkey = { version = "2.4", features = ["curve25519", "borsh"] }
+solana-instruction = { version = "2.3", features = ["std"] }
+solana-message = { version = "2.4", features = ["bincode"] }
+solana-transaction = { version = "2.2", features = ["bincode", "verify"] }
+solana-signature = { version = "2.3", features = ["verify"] }
+solana-keypair = "2.2"
+solana-signer = "2.2"
+solana-hash = "2.3"
+solana-compute-budget-interface = { version = "2.2", features = ["borsh"] }
+solana-system-interface = { version = "1.0", features = ["bincode"] }
+pump-rust-client = { version = "=0.5.0", default-features = false }
+
+tokio = { version = "1.44", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "http2"] }
+axum = { version = "0.8", features = ["ws", "macros"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors", "limit", "timeout"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+base64 = "0.22"
+bs58 = "0.5"
+hex = "0.4"
+hmac = "0.12"
+sha2 = "0.10"
+subtle = "2.6"
+rand = "0.8"
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+async-trait = "0.1"
+futures = "0.3"
+bincode = "1.3"
+aes-gcm = "0.10"
+zeroize = { version = "1.8", features = ["derive"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono", "json", "migrate", "macros"] }
+hdrhistogram = "7.5"
+url = "2"
+parking_lot = "0.12"
+
+trader-domain = { path = "crates/domain" }
+trader-market-data = { path = "crates/market-data" }
+trader-wallets = { path = "crates/wallets" }
+trader-execution = { path = "crates/execution" }
+trader-router = { path = "crates/router" }
+trader-sender-rpc = { path = "crates/sender-rpc" }
+trader-sender-jito = { path = "crates/sender-jito" }
+trader-sender-tpu = { path = "crates/sender-tpu" }
+trader-protocol-pump = { path = "crates/protocol-pump" }
+trader-protocol-raydium = { path = "crates/protocol-raydium" }
+trader-protocol-jupiter = { path = "crates/protocol-jupiter" }
+trader-orders = { path = "crates/orders" }
+trader-observability = { path = "crates/observability" }
+trader-api = { path = "crates/api" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+debug = 1
+
+[profile.dev.package."*"]
+opt-level = 1
