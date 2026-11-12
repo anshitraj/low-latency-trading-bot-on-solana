@@ -215,6 +215,44 @@ async fn token_balance(
         .unwrap_or(0))
 }
 
+/// Retry a read on rate limits / transient transport errors (public RPCs
+/// return 429 under bursts). Up to 6 attempts, 0.5 s doubling to 4 s.
+async fn retry<T, F, Fut>(what: &str, f: F) -> anyhow::Result<T>
+where
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = anyhow::Result<T>>,
+{
+    let mut wait = Duration::from_millis(500);
+    let mut last = None;
+    for _ in 0..6 {
+        match f().await {
+            Ok(v) => return Ok(v),
+            Err(e) => {
+                let msg = e.to_string();
+                let transient = msg.contains("429")
+                    || msg.contains("rate limit")
+                    || msg.contains("timeout")
+                    || msg.contains("transport");
+                if !transient {
+                    return Err(e);
+                }
+                eprintln!("{what}: {msg}; retrying in {} ms", wait.as_millis());
+                last = Some(e);
+                tokio::time::sleep(wait).await;
+                wait = (wait * 2).min(Duration::from_secs(4));
+            }
+        }
+    }
+    Err(last.unwrap_or_else(|| anyhow!("{what}: retries exhausted")))
+}
+
+async fn sol_balance(rpc: &RpcClient, wallet: &Pubkey) -> anyhow::Result<u64> {
+    retry("getBalance", || async {
+        Ok(rpc.get_balance(wallet, Commitment::Confirmed).await?.0)
+    })
+    .await
+}
+
 async fn exists(rpc: &RpcClient, key: &Pubkey) -> anyhow::Result<bool> {
     Ok(rpc
         .get_account(key, Commitment::Confirmed)
@@ -280,7 +318,14 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     if buy == 0 || buy > MAX_BUY_LAMPORTS {
         bail!("--buy-lamports must be 1..={MAX_BUY_LAMPORTS} (hard cap 0.001 SOL)");
     }
-    let iterations: usize = parse(a, "iterations", 1)?;
+    // --sell-only: one SELL of 100% of the held tokens (closes a position left
+    // open by an interrupted run). Requires --send for a real sell.
+    let sell_only = a.contains_key("sell-only");
+    let iterations: usize = if sell_only {
+        1
+    } else {
+        parse(a, "iterations", 1)?
+    };
     if iterations == 0 || iterations > MAX_ITERATIONS {
         bail!("--iterations must be 1..={MAX_ITERATIONS}");
     }
@@ -666,14 +711,23 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     let runs = iterations;
     'outer: for it in 0..runs {
         // Dry run simulates the buy only: a sell needs tokens the wallet does not hold.
-        let sides: &[Side] = if send {
+        let sides: &[Side] = if sell_only {
+            &[Side::Sell]
+        } else if send {
             &[Side::Buy, Side::Sell]
         } else {
             &[Side::Buy]
         };
         for &side in sides {
-            let sol_before = rpc.get_balance(&wallet, Commitment::Confirmed).await?.0;
-            let tok_before = token_balance(&rpc, &wallet, &mint, &token_program).await?;
+            let sol_before = sol_balance(&rpc, &wallet).await?;
+            let tok_before = retry("token balance", || {
+                token_balance(&rpc, &wallet, &mint, &token_program)
+            })
+            .await?;
+            if side == Side::Sell && tok_before == 0 {
+                failed = Some("nothing to sell: wallet holds 0 tokens of this mint".into());
+                break 'outer;
+            }
             let amount = match side {
                 Side::Buy => AmountSpec::ExactSolIn {
                     lamports: Lamports(buy),
@@ -685,7 +739,10 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
                 amount,
                 format!("canary-{run_tag}-{it}-{}", side.as_str()),
             );
-            let send_slot = rpc.get_slot(Commitment::Processed).await?;
+            let send_slot = retry("getSlot", || async {
+                Ok(rpc.get_slot(Commitment::Processed).await?)
+            })
+            .await?;
             let o = match engine
                 .submit(intent, wallet, Some(LatencyTrace::start()))
                 .await
@@ -698,8 +755,11 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
             };
             let o = wait_terminal(&store, o.id, Duration::from_secs(120)).await?;
             tokio::time::sleep(Duration::from_millis(800)).await;
-            let sol_after = rpc.get_balance(&wallet, Commitment::Confirmed).await?.0;
-            let tok_after = token_balance(&rpc, &wallet, &mint, &token_program).await?;
+            let sol_after = sol_balance(&rpc, &wallet).await?;
+            let tok_after = retry("token balance", || {
+                token_balance(&rpc, &wallet, &mint, &token_program)
+            })
+            .await?;
             let trace = observer
                 .traces
                 .lock()
@@ -785,6 +845,17 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     std::fs::write(&path, serde_json::to_vec_pretty(&report)?)?;
     println!("{}", json!({"report": path}));
     if let Some(f) = failed {
+        if send {
+            let held = token_balance(&rpc, &wallet, &mint, &token_program)
+                .await
+                .unwrap_or(0);
+            if held > 0 {
+                eprintln!(
+                    "position still open ({held} raw tokens). Close it with: trader-cli mainnet-canary --mint {mint} --senders {} --sell-only --send",
+                    sender_names.join(",")
+                );
+            }
+        }
         bail!("canary stopped: {f}");
     }
     if !send {

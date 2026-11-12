@@ -42,7 +42,7 @@ const HELP: &str = r#"trader-cli <command> [--flags]
       Real engine (PumpAdapter + RpcSender + observer) buy/sell on LOCALNET; verifies balances on-chain.
   keygen [--keypair <path>]
       Create a canary wallet file (default ~/.trader/canary-keypair.json). Prints the pubkey only.
-  mainnet-canary --mint <mint> [--buy-lamports 120000] [--iterations 1] [--cu-price 20000] [--poll-ms 400] [--no-ws] [--ws <url>] [--keypair <path>] [--send]
+  mainnet-canary --mint <mint> [--buy-lamports 120000] [--iterations 1] [--cu-price 20000] [--poll-ms 400] [--no-ws] [--ws <url>] [--keypair <path>] [--sell-only] [--send]
       MAINNET. Without --send: DRY RUN (full engine path, signature zeroed, simulateTransaction only;
       nothing broadcast). With --send: real buy -> sell-100% round trips; needs RPC_URL (mainnet),
       MAINNET_TRADING_ENABLED=I_UNDERSTAND_REAL_FUNDS_AT_RISK and typing a confirmation phrase.
