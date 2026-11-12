@@ -4,7 +4,8 @@
 //! - [`LeaderTracker`]: slot leaders (`getSlotLeaders`) and their QUIC TPU
 //!   addresses (`getClusterNodes`.tpuQuic). The current slot comes from the
 //!   WebSocket slot heartbeat when live, otherwise from `getSlot` plus elapsed
-//!   time at 400 ms/slot.
+//!   time at the measured slot time (`getRecentPerformanceSamples`; mainnet
+//!   ~210 ms/slot on 2026-11-12, not the historical 400 ms).
 //! - [`ConnCache`]: one QUIC connection per leader address, pre-warmed for
 //!   leaders of the next few slots so a send does not pay the handshake.
 //! - Each send writes the same signed bytes on a fresh unidirectional stream to
@@ -35,7 +36,10 @@ use trader_market_data::{AccountStream, RpcClient};
 use trader_router::{SendContext, SendOutcome, SenderHealth, TipPolicy, TransactionSender};
 
 pub const ALPN_TPU: &[u8] = b"solana-tpu";
-const SLOT_MS: u64 = 400;
+/// Fallback until measured.
+const DEFAULT_SLOT_MS: u64 = 400;
+/// Background refresh / pre-warm cadence.
+const TICK: Duration = Duration::from_millis(100);
 const LEADER_WINDOW: u64 = 256;
 const NODES_TTL: Duration = Duration::from_secs(60);
 
@@ -47,6 +51,8 @@ struct LeaderState {
     nodes_at: Option<Instant>,
     rpc_slot: u64,
     rpc_slot_at: Option<Instant>,
+    /// Measured slot time (ms); 0 = not measured yet.
+    ms_per_slot: u64,
 }
 
 pub struct LeaderTracker {
@@ -72,8 +78,18 @@ impl LeaderTracker {
             }
         }
         let st = self.st.read();
+        let ms = if st.ms_per_slot > 0 {
+            st.ms_per_slot
+        } else {
+            DEFAULT_SLOT_MS
+        };
         st.rpc_slot_at
-            .map(|t| st.rpc_slot + t.elapsed().as_millis() as u64 / SLOT_MS)
+            .map(|t| st.rpc_slot + t.elapsed().as_millis() as u64 / ms)
+    }
+
+    /// Measured slot time in ms (0 until the first measurement).
+    pub fn ms_per_slot(&self) -> u64 {
+        self.st.read().ms_per_slot
     }
 
     pub async fn refresh(&self) -> Result<(), String> {
@@ -82,7 +98,13 @@ impl LeaderTracker {
             .as_ref()
             .map(|s| s.is_live(Duration::from_millis(1_500)))
             .unwrap_or(false);
-        if !live {
+        let rpc_slot_stale = self
+            .st
+            .read()
+            .rpc_slot_at
+            .map(|t| t.elapsed() > Duration::from_secs(1))
+            .unwrap_or(true);
+        if !live && rpc_slot_stale {
             let slot = self
                 .rpc
                 .get_slot(Commitment::Processed)
@@ -131,9 +153,24 @@ impl LeaderTracker {
                     tpu.insert(pk, addr);
                 }
             }
+            // Slot time from the last performance sample (refreshed with the nodes).
+            let ms_per_slot = self
+                .rpc
+                .call::<Vec<Value>>("getRecentPerformanceSamples", json!([1]))
+                .await
+                .ok()
+                .and_then(|v| v.into_iter().next())
+                .and_then(|p| {
+                    let slots = p["numSlots"].as_u64()?;
+                    let secs = p["samplePeriodSecs"].as_u64()?;
+                    (slots > 0).then(|| secs * 1000 / slots)
+                });
             let mut st = self.st.write();
             st.tpu = tpu;
             st.nodes_at = Some(Instant::now());
+            if let Some(ms) = ms_per_slot.filter(|m| *m > 0) {
+                st.ms_per_slot = ms;
+            }
         }
         Ok(())
     }
@@ -323,7 +360,7 @@ impl TpuSender {
         });
         let bg = me.clone();
         tokio::spawn(async move {
-            let mut tick = tokio::time::interval(Duration::from_millis(SLOT_MS));
+            let mut tick = tokio::time::interval(TICK);
             tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             loop {
                 tick.tick().await;
@@ -409,8 +446,9 @@ impl TransactionSender for TpuSender {
         SenderHealth {
             configured: true,
             note: Some(format!(
-                "leaders_known={} open_conns={} last_error={:?}",
+                "leaders_known={} ms_per_slot={} open_conns={} last_error={:?}",
                 self.tracker.known_nodes(),
+                self.tracker.ms_per_slot(),
                 self.conns.open(),
                 self.last_error.lock().clone()
             )),

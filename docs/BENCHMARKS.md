@@ -202,6 +202,45 @@ order→signed 0.22–0.67 ms.
 Not measured yet: send round trip to a sender in Frankfurt (Helius/Jito), mainnet
 landing, Telegram tap → server.
 
+### 2g. MAINNET: first real trades (owner-run, 2026-11-12)
+`trader-cli mainnet-canary --senders tpu,jito --iterations 3 --send` on the GCP VM in
+Frankfurt, owner's disposable wallet, Helius RPC + WebSocket for reads, Jito Frankfurt
+(tip 1,000 lamports) and direct TPU QUIC for sending, coin
+`6caZsnv4PgEhKUKEV1aPQHq94PQi5HyufAt1oaU7pump` (bonding curve). Report:
+`benchmarks/results/mainnet-canary-send-20261112T105326Z.json`. **n = 6; a small sample.**
+
+Independently verified afterwards with the public RPC (`getSignatureStatuses`,
+`getTransaction`): 6/6 `finalized`, `err = null`, slots match the report, payer = canary wallet.
+
+| trade | landed slot − slot read before send | order→signed | signed→handed to senders | signed→bot saw it final |
+|---|---:|---:|---:|---:|
+| buy 1 | 2 | 0.233 ms | 6.8 ms | 780 ms |
+| sell 1 | 1 | 0.209 ms | 2.1 ms | 692 ms |
+| buy 2 | 2 | 0.208 ms | 2.1 ms | 716 ms |
+| sell 2 | 2 | 0.215 ms | 2.3 ms | 643 ms |
+| buy 3 | 2 | 0.210 ms | 2.3 ms | 1,458 ms |
+| sell 3 | 2 | 0.201 ms | 2.2 ms | 1,091 ms |
+
+- "Slot read before send" is the RPC's `processed` slot ~15 ms before submit; landing 1–2
+  slots later is ≈ 210–430 ms at the measured ~210 ms/slot.
+- "Bot saw it final" includes notification/poll delay: in this run the first observation
+  already returned `finalized` (Alpenglow finality, below), so this is an upper bound on
+  landing, not landing itself. The observer now stamps the WebSocket notification time
+  (not yet re-measured on mainnet).
+- Cost: 13,000,000 → 10,077,061 lamports: 2,860,040 rent now held by the new token account
+  (1,513,840) and Pump `user_volume_accumulator` (1,346,200); 62,899 lamports consumed
+  (6 × 8,000 fee, 6 × 1,000 Jito tip, Pump fees). Position closed (0 tokens left).
+
+**Mainnet facts measured the same day (they replace older assumptions in this doc):**
+- **Alpenglow is live** (activated epoch 1064, 2026-10-21, per solana.com/upgrades/alpenglow;
+  target ~150 ms finality, previously ~12.8 s). Public RPC: `finalized` slot within 0–4 slots
+  of `processed`.
+- **Slot time ≈ 210 ms** (97 slots in 20.3 s; `getRecentPerformanceSamples` 212–215 ms), not 400 ms.
+- **Rent is 5,080 lamports/byte** (`getMinimumBalanceForRentExemption`: 0 B → 650,240;
+  165 B → 1,488,440; 170 B → 1,513,840), not 6,960. The code now reads it at startup.
+- Local validator numbers in this file (sections 3, 2f) were measured with the older rules
+  (400 ms slots, ~13 s finality) and are not mainnet predictions.
+
 ### 2f. Send hop and direct TPU
 Read-only probe from the GCP VM (`trader-cli send-probe`; no transaction sent):
 
@@ -217,7 +256,7 @@ Local validator with the real `pump.so`, sending **only** over direct TPU QUIC
 (`localnet-canary-tpu-send-20261112.json`) and RPC+TPU (`localnet-canary-rpc-tpu-send-20261112.json`),
 WebSocket streaming + signature notifications on: 12/12 trades FINALIZED, balances
 verified, all 1 slot. Signed → handed to sender 0.0–1.7 ms. Signed → seen processed
-24–409 ms (where in the 400 ms slot it arrived; best cases 24, 35, 39 ms).
+24–409 ms (where in the local validator's 400 ms slot it arrived; best cases 24, 35, 39 ms).
 
 Mainnet dry runs with tipped senders (`mainnet-canary-dryrun-20261112T102819Z.json`, `…102827Z.json`):
 `--senders tpu,jito` (tip 1,000) and `--senders tpu,helius` (tip 5,000) simulate cleanly
@@ -287,7 +326,7 @@ landed once.
 | item | reason |
 |---|---|
 | Postgres on a GCP VM / Cloud SQL / Supabase | Only measured on WSL2 on the dev desktop; no cloud database authorized |
-| Mainnet landing, sender A/B (RPC vs Jito vs Helius vs TPU) | Needs real sends (owner runs `mainnet-canary --send`); not run yet |
+| Mainnet landing per sender (A/B: RPC vs Jito vs Helius vs TPU) | One combined run only (tpu+jito, n=6, section 2g); no per-sender attribution of which path landed first |
 | GCP region RTT (Frankfurt vs Singapore) | No GCP deployment authorized; script ready: `deploy/gcp/scripts/region-ab.sh` |
 | Telegram ingress→confirmation | Requires a real bot token + public HTTPS endpoint |
 | KMS signing overhead | KMS signer not implemented |

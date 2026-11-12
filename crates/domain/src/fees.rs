@@ -3,10 +3,15 @@
 //! Source: https://solana.com/docs/core/fees (accessed 2026-11-11)
 //! - base fee: 5000 lamports per signature
 //! - prioritization fee = ceil(compute_unit_limit * compute_unit_price_micro_lamports / 1_000_000)
-//! - rent-exempt minimum = (128 + data_len) * 3480 lamports/byte-year * 2 years
+//! - rent-exempt minimum = (128 + data_len) * lamports-per-byte (for the exemption period).
+//!   The rate is a cluster parameter: 6,960/byte (3,480 x 2 years) historically and on
+//!   local validators, 5,080/byte on mainnet as of 2026-11-12 (measured with
+//!   getMinimumBalanceForRentExemption). Processes call [`set_rent_lamports_per_byte`]
+//!   at startup with the live value (see `trader_market_data::rent::sync_rent`).
 
 use crate::money::{Lamports, MoneyError};
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub const BASE_FEE_LAMPORTS_PER_SIGNATURE: u64 = 5_000;
 pub const MICRO_LAMPORTS_PER_LAMPORT: u128 = 1_000_000;
@@ -19,10 +24,22 @@ pub const TOKEN_ACCOUNT_LEN: u64 = 165;
 /// Token-2022 account with the ImmutableOwner extension (what the ATA program creates).
 pub const TOKEN_2022_ATA_LEN: u64 = 170;
 
+static RENT_LAMPORTS_PER_BYTE: AtomicU64 =
+    AtomicU64::new(LAMPORTS_PER_BYTE_YEAR * EXEMPTION_THRESHOLD_YEARS);
+
+/// Set the cluster's rent-exempt lamports per byte (process-wide). Ignores 0.
+pub fn set_rent_lamports_per_byte(v: u64) {
+    if v > 0 {
+        RENT_LAMPORTS_PER_BYTE.store(v, Ordering::Relaxed);
+    }
+}
+
+pub fn rent_lamports_per_byte() -> u64 {
+    RENT_LAMPORTS_PER_BYTE.load(Ordering::Relaxed)
+}
+
 pub fn rent_exempt_minimum(data_len: u64) -> Lamports {
-    Lamports(
-        (ACCOUNT_STORAGE_OVERHEAD + data_len) * LAMPORTS_PER_BYTE_YEAR * EXEMPTION_THRESHOLD_YEARS,
-    )
+    Lamports((ACCOUNT_STORAGE_OVERHEAD + data_len) * rent_lamports_per_byte())
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

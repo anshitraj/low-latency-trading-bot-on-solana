@@ -262,7 +262,19 @@ impl Observer {
                 tr.missing_after_observed = 0;
                 let failed = s.err.is_some();
                 let commitment = s.confirmation_status.unwrap_or(Commitment::Processed);
+                // Prefer the WebSocket notification's arrival time (earlier and
+                // independent of the poll interval) when one was received.
+                let ws_seen = self
+                    .handle
+                    .stream
+                    .read()
+                    .as_ref()
+                    .and_then(|s| s.seen_signature(&tr.t.signature))
+                    .map(|(_, at)| at);
                 if let Some(t) = tr.t.trace.as_mut() {
+                    if let Some(at) = ws_seen {
+                        t.mark_at(Stage::FirstObservedProcessed, at);
+                    }
                     t.mark(Stage::FirstObservedProcessed);
                     if commitment >= Commitment::Confirmed {
                         t.mark(Stage::Confirmed);

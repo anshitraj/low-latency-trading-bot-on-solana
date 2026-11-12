@@ -51,11 +51,13 @@ must be mainnet. Each round trip is buy → sell 100%; the run stops at the firs
 that is not FINALIZED with balances independently verified. Report:
 `benchmarks/results/mainnet-canary-send-*.json` (contains the wallet address and signatures, which are public on-chain anyway).
 
-Cost (measured on localnet with the real `pump.so`, 2026-11-12): first buy of a coin
-locks 3,918,480 lamports of rent (token account 2,074,080 + Pump `user_volume_accumulator`
-1,844,400; recoverable only by closing those accounts, not automated yet); after that a
-120,000-lamport round trip loses ~19,000 lamports (2 × 8,000 tx fee at the default
-priority + Pump fees). Mainnet Pump fee tiers can differ from the devnet config used locally.
+Cost (measured on **mainnet**, 2026-11-12): the first buy with a new wallet locks 2,860,040
+lamports of rent (Token-2022 account 1,513,840 + Pump `user_volume_accumulator` 1,346,200 at
+5,080 lamports/byte; the canary reads the live rate) and each further coin adds one token
+account; recoverable only by closing those accounts (not automated yet). A 120,000-lamport
+round trip with `--senders tpu,jito` lost ~21,000 lamports (2 × 8,000 fee, 2 × 1,000 Jito
+tip, Pump fees). First run: 6/6 FINALIZED (BENCHMARKS.md 2g). Helius RPC key: store it as
+`RPC_URL` in `~/.trader/env` on the VM (mode 600), never in chat or the repo.
 
 The mint must be a Pump coin still on its bonding curve (not migrated, not mayhem mode);
 the adapter refuses others. `--localnet-test` runs the same command against a local

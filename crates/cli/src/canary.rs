@@ -65,8 +65,11 @@ pub const HELIUS_FRANKFURT: &str = "http://fra-sender.helius-rpc.com/fast?swqos_
 const MAINNET_ACK: &str = "I_UNDERSTAND_REAL_FUNDS_AT_RISK";
 /// Estimate only (the engine sets the real limit from the adapter).
 const EST_CU_LIMIT: u64 = 150_000;
-/// System-account rent-exempt minimum (0 data bytes); the fee payer must stay above it.
-const WALLET_RENT_FLOOR: u64 = 890_880;
+/// System-account rent-exempt minimum (0 data bytes); the fee payer must stay
+/// above it. Read from the cluster at startup (650,240 on mainnet 2026-11-12).
+fn wallet_rent_floor() -> u64 {
+    rent_exempt_minimum(0).0
+}
 
 pub fn default_keypair_path() -> PathBuf {
     let home = std::env::var("USERPROFILE")
@@ -309,6 +312,9 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     let genesis = rpc.get_genesis_hash().await?;
     net.verify_genesis(&genesis)
         .map_err(|e| anyhow!("refusing: {e}"))?;
+    let rent_per_byte = trader_market_data::rent::sync_rent(&rpc)
+        .await
+        .map_err(|e| anyhow!("reading rent rate: {e}"))?;
 
     let mint = Pubkey::from_str(
         a.get("mint")
@@ -434,7 +440,7 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     // Pump trade fees are well under 3% per side; 3% is a conservative ceiling.
     let est_loss_per_round_trip = 2 * fee_per_tx + buy * 6 / 100;
     let est_max_loss = iterations as u64 * est_loss_per_round_trip;
-    let need = WALLET_RENT_FLOOR + 100_000 + rent_new + buy + 2 * fee_per_tx + est_max_loss;
+    let need = wallet_rent_floor() + 100_000 + rent_new + buy + 2 * fee_per_tx + est_max_loss;
     if net == Network::Localnet && sol < need {
         crate::localnet::airdrop(&rpc, &wallet, 2_000_000_000).await?;
         sol = rpc.get_balance(&wallet, Commitment::Confirmed).await?.0;
@@ -455,6 +461,7 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         "tip_lamports_per_tx": tip,
         "est_fee_per_tx_lamports": fee_per_tx,
         "rent_locked_if_new_lamports": rent_new,
+        "rent_lamports_per_byte": rent_per_byte,
         "rent_note": "token account + Pump user_volume_accumulator rent stays in those accounts (recoverable by closing them; not automated yet)",
         "est_max_loss_lamports_excl_rent": est_max_loss,
         "min_wallet_balance_needed_lamports": need,
@@ -655,7 +662,7 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         max_order: Lamports(MAX_BUY_LAMPORTS),
         max_daily_turnover: Lamports(50_000_000),
         max_trades_per_day: 2 * MAX_ITERATIONS as u32 + 4,
-        min_sol_reserve: Lamports(WALLET_RENT_FLOOR + 100_000),
+        min_sol_reserve: Lamports(wallet_rent_floor() + 100_000),
         max_priority_fee: Lamports(50_000),
         max_tip: Lamports(tip),
         daily_loss_limit: Lamports(10_000_000),

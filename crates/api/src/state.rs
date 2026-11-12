@@ -217,6 +217,12 @@ pub async fn build(cfg: Config) -> anyhow::Result<Built> {
     let locks = WalletLocks::default();
     let blockhash = BlockhashService::new();
     blockhash.refresh_once(&rpc).await?;
+    if mock.is_none() {
+        match trader_market_data::rent::sync_rent(&rpc).await {
+            Ok(r) => tracing::info!(lamports_per_byte = r, "rent rate from cluster"),
+            Err(e) => tracing::warn!(error = %e, "rent rate not read; using default"),
+        }
+    }
     blockhash.spawn(rpc.clone(), Duration::from_millis(500));
     let observer = Arc::new(Observer::new(
         orders.clone(),

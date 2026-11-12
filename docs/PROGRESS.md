@@ -142,3 +142,16 @@ Measured from the VM: Helius FRA 1.43 ms, Jito FRA 2.27 ms, EU leaders' TPU 2.2 
 RPC 28 ms. Localnet: TPU-only and RPC+TPU 12/12 FINALIZED; best signed→seen 24–39 ms.
 Mainnet tipped dry runs OK. Not done: real mainnet sends (owner action), staked access,
 choosing Jito region by leader location. Canary key not yet on the VM (owner stopped the copy; nothing was uploaded).
+
+## 2026-11-12 — session 1, part 7 (first mainnet trades)
+Owner stored a Helius RPC key on the VM (`~/.trader/env`, mode 600; never in chat) and ran
+`mainnet-canary --senders tpu,jito --iterations 3 --send`. Result: 6/6 FINALIZED, balances
+verified, independently confirmed on-chain; order→signed 0.20–0.23 ms; signed→handed to
+senders 2.1–2.3 ms (first 6.8 ms); landed 1–2 slots after the pre-send slot read; 62,899
+lamports consumed plus 2,860,040 lamports of recoverable rent.
+
+What the run exposed: (1) mainnet now runs Alpenglow (finality target ~150 ms) and ~210 ms
+slots, so docs assuming 400 ms / 12.8 s were corrected; (2) rent is 5,080 lamports/byte, our
+hard-coded 6,960 over-estimated rent by ~37% (safe side) and is now read from the cluster;
+(3) the observer first saw each trade already finalized, so it now stamps the WebSocket
+notification time; (4) the TPU tracker measures slot time instead of assuming 400 ms.

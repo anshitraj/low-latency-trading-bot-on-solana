@@ -43,8 +43,10 @@ the leaders. Round trips (`benchmarks/results/gcp-vm/send-probe-20261112.json`):
 | public RPC `api.mainnet-beta.solana.com` | 28 ms | not for sending at speed |
 
 Jito and Helius use different tip accounts, so a transaction tips one of them; the router
-refuses incompatible combinations. Landing still waits for the leader's slot (~400 ms each);
-nobody can guarantee sub-slot landing.
+refuses incompatible combinations. Landing still waits for the leader's slot (mainnet
+≈ 210 ms/slot, measured 2026-11-12) and finality since Alpenglow targets ~150 ms; nobody can
+guarantee landing in a specific slot. First mainnet run: landed 1–2 slots after the pre-send
+slot read (BENCHMARKS.md 2g).
 
 Landing detection: each tracked signature gets a one-shot `signatureSubscribe` (processed);
 the notification wakes the observer immediately (polling stays as fallback).

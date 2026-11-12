@@ -1,6 +1,7 @@
 //! Data plane: RPC client, account decoders and slot-stamped caches.
 
 pub mod cache;
+pub mod rent;
 pub mod rpc;
 pub mod token;
 pub mod ws;

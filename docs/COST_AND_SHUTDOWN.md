@@ -7,7 +7,7 @@
 | Real cash | **$20 total**, owner-approved per use | SOL for mainnet micro-tests (fees, rent, tips) — none spent |
 | SOL fees for end users | paid by each tester from their own wallet | network fees, priority fees, tips, rent |
 
-**Actual spend:** GCP: `trader-vm` (c4-standard-4, europe-west3) running since 2026-11-12 ~09:26 UTC in `vps-sandbox`, paid from credits (~US$0.23/h estimate; check Billing → Reports). Cash: owner sent 0.013 SOL (~US$1) to the canary wallet; SOL spent so far: 0 (dry runs only).
+**Actual spend:** GCP: `trader-vm` (c4-standard-4, europe-west3) running since 2026-11-12 ~09:26 UTC in `vps-sandbox`, paid from credits (~US$0.23/h estimate; check Billing → Reports). Cash: owner sent 0.013 SOL (~US$1) to the canary wallet. After the first 6 mainnet trades: 10,077,061 lamports left; 2,860,040 held as account rent (recoverable by closing the accounts) and 62,899 lamports actually consumed (~US$0.005).
 Devnet reads (public RPC) and local validator runs cost nothing.
 
 ## Estimate (europe-west3, on-demand) — ESTIMATE, verify in the GCP Pricing Calculator
@@ -31,7 +31,7 @@ c4-standard-4 at a different (region-dependent) rate, so treat as approximate.
 Even a second always-on VM for the full month stays under ≈ $400 — well inside
 the $1,200 plan. Mainnet SOL costs (if authorized): ~5,000–10,000 lamports per
 trade attempt in base+priority fees, plus refundable ATA rent (~0.002 SOL) and
-pump's user volume accumulator rent (~0.0018 SOL, first trade), plus optional
+pump's user volume accumulator rent (1,346,200 lamports at mainnet's 5,080 lamports/byte, first trade), plus optional
 tips (Helius ≥0.000005 or ≥0.001 SOL; Jito ≥0.000001 SOL). Swap principal is
 the tester's own money.
 
