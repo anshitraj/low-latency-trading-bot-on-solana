@@ -12,6 +12,8 @@ Status labels: **implemented/tested**, **implemented/untested**, **gated**, **no
 | Sign-once, same-bytes fan-out, rebroadcast, block-height expiry | implemented/tested | mock chain + localnet |
 | Sent tx observed even if the SUBMITTED write fails; reservation released when nothing was forwarded | implemented, **not test-covered** | reviewed; no failing-store harness yet. Found by the Postgres pool-overcommit benchmark |
 | Mainnet canary CLI (`trader-cli mainnet-canary`) | implemented; dry run + send verified on **localnet** only | 3 send round trips + 1 dry run on real `pump.so` (`benchmarks/results/localnet-canary-*-20261112.json`): 6/6 FINALIZED and verified, dry-run signature never reached the chain. Mainnet **dry run** passed 2026-11-12 (`benchmarks/results/mainnet-canary-dryrun-20261112T084645Z.json`, `…084841Z`: simulation err=null, ~69,700 CU; signature absent from chain, balance unchanged). Mainnet `--send` not yet run. No close-account / sweep command yet: rent and leftover SOL stay in the canary wallet |
+| WebSocket streaming of coin state + balances | implemented/tested | unit tests (parse, seed/ack rules); localnet send loop 6/6 with streamed balances; mainnet read-only + dry run. Reconnect path not fault-injected yet. Public RPC WS limits unknown |
+| GCP VM (Frankfurt) | provisioned by gcloud in `vps-sandbox` | benchmarks only so far; API/bot not deployed there; no Telegram webhook/HTTPS yet |
 | Async pre-sign commits (`synchronous_commit=off` before SIGNED) | implemented/tested | commit modes asserted on Postgres; crash-loss window argued in DATABASE.md, crash itself not simulated |
 | Restart reconciliation | implemented/tested (mock) | recovered orders are observed, never rebroadcast |
 | Pump bonding-curve buy/sell (v3) | implemented/tested on localnet | real `pump.so`; **no devnet/mainnet fill yet** |
@@ -61,5 +63,6 @@ See `docs/BENCHMARKS.md` "NOT MEASURED": no mainnet landing data, no sender comp
 
 ## Environment notes
 - Agave 4.2 `solana-test-validator` cannot create a ledger on native Windows ("Access is denied" unpacking genesis); use WSL2/Linux (`scripts/localnet-wsl.sh`).
+- Stopping the Windows-side task that started `scripts/localnet-wsl.sh` does **not** stop `solana-test-validator` inside WSL; kill it there (`pkill -x solana-test-val`) or the next start fails on port 9900 and can kill a running test.
 - Docker is not required: `scripts/postgres-wsl.sh` runs Postgres in WSL2. The compose file and Dockerfile were never exercised.
 - WSL idle-terminates a distro ~60 s after the last `wsl.exe` client exits; the Postgres script keeps a hidden keepalive running until `scripts/postgres-wsl.sh down`. The keepalive does not survive a reboot, sleep or `wsl --shutdown` (observed overnight: tests then time out after 10 s); rerun `scripts/postgres-wsl.sh up` (idempotent).

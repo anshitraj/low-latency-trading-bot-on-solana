@@ -5,6 +5,7 @@
 //!   trader-bench engine   [--iterations N] [--concurrency 1,10,50,100]
 //!   trader-bench load     [--rates 100,500,1000] [--seconds 20]
 //!   trader-bench faults   [--rates 1,5,10] [--orders 100]
+//!   trader-bench live     --mint <pump mint> [--rpc URL] [--ws URL] [--no-ws] [--iterations 100] [--gap-ms 500] [--wallet <pubkey>]
 //!
 //! Results: benchmarks/results/<kind>-<timestamp>.json
 
@@ -621,6 +622,238 @@ async fn faults(a: &HashMap<String, String>) {
     save("faults", &v);
 }
 
+struct LivePol;
+#[async_trait]
+impl PolicySource for LivePol {
+    async fn policy(&self, _: Uuid) -> Result<WalletPolicy, String> {
+        Ok(WalletPolicy {
+            max_order: Lamports(10_000_000_000),
+            max_daily_turnover: Lamports(u64::MAX / 2),
+            max_trades_per_day: u32::MAX,
+            mainnet_enabled: true,
+            allowed_senders: vec![SenderKind::Mock],
+            ..Default::default()
+        })
+    }
+}
+
+struct OneSigner(Arc<dyn TxSigner>);
+#[async_trait]
+impl SignerProvider for OneSigner {
+    async fn signer_for(&self, _: Uuid) -> Result<Arc<dyn TxSigner>, String> {
+        Ok(self.0.clone())
+    }
+}
+
+/// LIVE, read-only: real cluster Pump state (default mainnet public RPC),
+/// optionally streamed over WebSocket; real ed25519 signing with a throwaway
+/// key; MOCK sender (nothing is broadcast) and cached balances (no funds).
+/// `--no-ws` uses the RPC path with a one-slot state age so each order refetches.
+/// `--wallet <pubkey>` also times a balance read for that public address
+/// (RPC vs stream).
+async fn live(a: &HashMap<String, String>) {
+    use trader_market_data::{ws_url_from_http, AccountStream, RpcClient, RpcConfig};
+    let rpc_url = a
+        .get("rpc")
+        .cloned()
+        .unwrap_or_else(|| "https://api.mainnet-beta.solana.com".into());
+    let mint = Pubkey::from_str(a.get("mint").expect("--mint required")).unwrap();
+    let n: usize = a
+        .get("iterations")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(100);
+    let gap = Duration::from_millis(a.get("gap-ms").and_then(|s| s.parse().ok()).unwrap_or(500));
+    let use_ws = !a.contains_key("no-ws");
+    let mut cfg = RpcConfig::new(rpc_url.clone());
+    cfg.timeout = Duration::from_secs(10);
+    let rpc = RpcClient::new(cfg).unwrap();
+    let mut adapter = PumpAdapter::new(rpc.clone());
+    let stream = if use_ws {
+        let url = a
+            .get("ws")
+            .cloned()
+            .unwrap_or_else(|| ws_url_from_http(&rpc_url));
+        let s = AccountStream::spawn(url);
+        adapter = adapter.with_stream(s.clone());
+        Some(s)
+    } else {
+        None
+    };
+    let adapter = Arc::new(adapter);
+    let mut warm_ms = None;
+    if let Some(s) = &stream {
+        let t = Instant::now();
+        while !s.is_live(Duration::from_millis(1500)) && t.elapsed() < Duration::from_secs(15) {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(
+            s.is_live(Duration::from_millis(1500)),
+            "ws stream not live (no slot heartbeat)"
+        );
+        let t = Instant::now();
+        let ok = adapter.prewarm(&mint).await.expect("prewarm");
+        assert!(ok, "subscription not acknowledged");
+        warm_ms = Some(t.elapsed().as_secs_f64() * 1e3);
+        assert!(
+            adapter.snapshot_from_stream(&mint).is_some(),
+            "stream snapshot incomplete"
+        );
+    }
+    let bh = BlockhashService::new();
+    bh.refresh_once(&rpc).await.unwrap();
+    bh.spawn(rpc.clone(), Duration::from_secs(2));
+    let mut router = Router::new();
+    router.add(ManagedSender::new(
+        Arc::new(MockSender::new(SenderKind::Mock, MockBehavior::Accept)),
+        Duration::from_secs(1),
+        None,
+    ));
+    let store: Arc<dyn OrderStore> = Arc::new(MemStore::new());
+    let store_view = store.clone();
+    let (tx, _rx) = tokio::sync::broadcast::channel(65_536);
+    let observer = trader_orders::Observer::new(
+        store.clone(),
+        RpcClient::new(RpcConfig::new("http://127.0.0.1:9")).unwrap(),
+        WalletLocks::default(),
+        tx.clone(),
+        Default::default(),
+    );
+    let kp = Keypair::new();
+    let wallet = kp.pubkey();
+    let e = Engine::new(
+        EngineConfig {
+            // Orders are labelled Localnet so every mainnet gate (e.g. "no mock
+            // sender on mainnet") stays intact; market state still comes from the
+            // live cluster. The only sender is the in-memory mock: nothing leaves.
+            network: Network::Localnet,
+            max_state_age: if use_ws {
+                Duration::from_secs(2)
+            } else {
+                Duration::from_millis(400)
+            },
+            ..Default::default()
+        },
+        store,
+        vec![adapter.clone()],
+        router,
+        bh,
+        WalletLocks::default(),
+        Arc::new(OneSigner(Arc::new(ManagedLocalSigner::new(
+            kp,
+            Network::Localnet,
+        )))),
+        Arc::new(CachedBalances),
+        Arc::new(LivePol),
+        observer.handle.clone(),
+        tx,
+    );
+    let tag = Uuid::new_v4().simple().to_string();
+    let (mut h_signed, mut h_req) = (hist(), hist());
+    let mut stream_hits = 0;
+    let mut failures: Vec<String> = vec![];
+    for i in 0..n {
+        if adapter.snapshot_from_stream(&mint).is_some() {
+            stream_hits += 1;
+        }
+        let it = TradeIntent {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            wallet_id: Uuid::new_v4(),
+            network: Network::Localnet,
+            side: Side::Buy,
+            mint,
+            amount: AmountSpec::ExactSolIn {
+                lamports: Lamports(120_000),
+            },
+            slippage: Bps::new(500).unwrap(),
+            fees: FeePreference {
+                compute_unit_price_micro_lamports: 20_000,
+                max_priority_fee: Lamports(50_000),
+                tip: Lamports(0),
+            },
+            senders: vec![SenderKind::Mock],
+            idempotency_key: format!("live-{tag}-{i}"),
+            requires_approval: false,
+            created_at: chrono::Utc::now(),
+        };
+        match e.submit(it, wallet, Some(LatencyTrace::start())).await {
+            Ok(o) => {
+                if let Some(t) = e.take_trace(o.id) {
+                    if let Some(us) = t.between_us(Stage::IntentAccepted, Stage::Signed) {
+                        h_signed.record(us.max(1)).unwrap();
+                    }
+                    match t.us(Stage::SendStart) {
+                        Some(us) => h_req.record(us.max(1)).unwrap(),
+                        None if failures.len() < 3 => {
+                            let cur = store_view.get_order(o.id).await.ok();
+                            failures.push(format!(
+                                "{:?} {:?}",
+                                cur.as_ref().map(|c| c.state),
+                                cur.and_then(|c| c.reject_reason)
+                            ))
+                        }
+                        None => {}
+                    }
+                }
+            }
+            Err(err) if failures.len() < 3 => failures.push(err.to_string()),
+            Err(_) => {}
+        }
+        tokio::time::sleep(gap).await;
+    }
+    // Balance read for a public address: RPC round trip vs stream (no I/O).
+    let mut bal = json!(null);
+    if let Some(w) = a.get("wallet").map(|s| Pubkey::from_str(s).unwrap()) {
+        let rb = trader_orders::balances::RpcBalances { rpc: rpc.clone() };
+        let mut h_rpc = hist();
+        for _ in 0..20 {
+            let t = Instant::now();
+            rb.balances(&w, &mint, &[]).await.unwrap();
+            h_rpc
+                .record((t.elapsed().as_micros() as u64).max(1))
+                .unwrap();
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+        let mut ws_summary = json!(null);
+        if let Some(s) = &stream {
+            let sb = trader_orders::balances::StreamBalances::new(rpc.clone(), s.clone());
+            assert!(
+                sb.prewarm(&w, &mint, &[]).await,
+                "balance stream warm failed"
+            );
+            let mut h_ws = hist();
+            for _ in 0..200 {
+                let t = Instant::now();
+                sb.from_stream(&w, &mint, &[])
+                    .expect("stream balances")
+                    .unwrap();
+                h_ws.record((t.elapsed().as_nanos() as u64 / 1000).max(1))
+                    .unwrap();
+            }
+            ws_summary = summary(&h_ws, "us");
+        }
+        bal = json!({"rpc_balances_us": summary(&h_rpc, "us"), "stream_balances_us": ws_summary});
+    }
+    let v = json!({
+        "kind": if use_ws { "live_ws" } else { "live_rpc" },
+        "rpc_host": rpc.host(),
+        "mint": mint.to_string(),
+        "env": env_info(),
+        "note": "LIVE cluster Pump state; real signing with a throwaway key; MOCK sender (nothing broadcast); cached balances",
+        "iterations": n,
+        "gap_ms": gap.as_millis() as u64,
+        "stream_warmup_ms": warm_ms,
+        "stream_hits_before_submit": stream_hits,
+        "ws_reconnects": stream.as_ref().map(|s| s.reconnects()),
+        "intent_to_signed_us": summary(&h_signed, "us"),
+        "request_to_send_start_us": summary(&h_req, "us"),
+        "balances": bal,
+        "sample_failures": failures,
+    });
+    println!("{}", serde_json::to_string_pretty(&v).unwrap());
+    save(if use_ws { "live-ws" } else { "live-rpc" }, &v);
+}
+
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
     let (cmd, a) = args();
@@ -629,8 +862,9 @@ async fn main() {
         "engine" => engine(&a).await,
         "load" => load(&a).await,
         "faults" => faults(&a).await,
+        "live" => live(&a).await,
         _ => println!(
-            "usage: trader-bench hotpath|engine|load|faults [--flags]  (see source header)"
+            "usage: trader-bench hotpath|engine|load|faults|live [--flags]  (see source header)"
         ),
     }
 }

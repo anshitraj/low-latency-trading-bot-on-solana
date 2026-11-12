@@ -7,7 +7,7 @@
 | Real cash | **$20 total**, owner-approved per use | SOL for mainnet micro-tests (fees, rent, tips) — none spent |
 | SOL fees for end users | paid by each tester from their own wallet | network fees, priority fees, tips, rent |
 
-**Actual spend this session: GCP $0 (nothing provisioned), cash $0, SOL $0.**
+**Actual spend:** GCP: `trader-vm` (c4-standard-4, europe-west3) running since 2026-11-12 ~09:26 UTC in `vps-sandbox`, paid from credits (~US$0.23/h estimate; check Billing → Reports). Cash: owner sent 0.013 SOL (~US$1) to the canary wallet; SOL spent so far: 0 (dry runs only).
 Devnet reads (public RPC) and local validator runs cost nothing.
 
 ## Estimate (europe-west3, on-demand) — ESTIMATE, verify in the GCP Pricing Calculator

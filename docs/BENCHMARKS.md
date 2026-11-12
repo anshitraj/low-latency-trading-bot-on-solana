@@ -166,6 +166,42 @@ production disk can do the same.
 create, quote, sign, and the durable SIGNED write — meets p50 < 5 ms and p99 < 15 ms
 in 2 of 3 runs. 50–100 simultaneous orders do not meet p99 < 15 ms on this disk.
 
+### 2d. Same benchmarks on the GCP VM (Frankfurt)
+`trader-vm`: c4-standard-4 (4 vCPU, 15 GB), europe-west3-a, Ubuntu 24.04,
+hyperdisk-balanced 50 GB, Postgres 16 on the same VM. Files: `benchmarks/results/gcp-vm/`.
+
+| | desktop (2b/2c) | **GCP VM** |
+|---|---|---|
+| RPC round trip to `api.mainnet-beta.solana.com` (reused connection) | ~75 ms | p50 23.4 ms (min 4.7, max 45.2; n=11) |
+| Engine, in-memory store, 1 wallet: accepted→signed p50 / p99 | 0.20 / 0.25 ms | **0.08 / 0.10 ms** |
+| Engine + Postgres, 1 wallet: request→send p50 / p99 | 2.0–2.1 / 3.3–3.9 ms (colocated WSL) | **1.60 / 2.68 ms** |
+| Engine + Postgres, 10 wallets, pools 48+32: request→send p50 / p99 | 5.8–6.1 / 10–12 ms | **2.67 / 5.46 ms** |
+| 50 / 100 wallets (48+32): request→send p50 | 18–19 / 37–39 ms | 11.7 / 22.3 ms |
+| `pgbench` 1 client, write txn with fsync | 1.31 ms avg | 0.84 ms avg |
+
+### 2e. Live mainnet Pump state, WebSocket stream vs RPC reads — `trader-bench live`
+Read-only: real mainnet bonding-curve state for `6caZsnv4PgEhKUKEV1aPQHq94PQi5HyufAt1oaU7pump`
+(public RPC), real ed25519 signing with a throwaway key, **mock sender (nothing
+broadcast)**, cached balances; orders labelled localnet so mainnet gates stay on.
+100 orders, 500 ms apart. Files: `benchmarks/results/gcp-vm/live-ws-20261112T094736Z.json`,
+`live-rpc-20261112T094833Z.json`.
+
+| on the GCP VM | order accepted→signed p50 / p95 / p99 / max |
+|---|---|
+| **WebSocket stream** (100/100 quotes from pushed state, 0 reconnects, warm-up 104 ms) | **0.204 / 0.229 / 0.235 / 0.239 ms** |
+| RPC reads (state refetched when older than one slot) | 24.7 / 60.1 / 88.4 / 111.9 ms |
+| wallet balance read (public address) | stream 0.007 ms vs RPC 20.3 ms p50 |
+
+Mainnet **dry run** through `mainnet-canary` with streaming (desktop, owner-funded
+wallet, `mainnet-canary-dryrun-20261112T094741Z.json`): order→signed 0.22–0.45 ms over
+5 simulated buys (was 173–178 ms without streaming); every simulation err=null, ~69,800 CU.
+Localnet send loop with streaming (`localnet-canary-ws-send-20261112.json`): 6/6
+FINALIZED, balances verified, all 1 slot, sell size taken from streamed balances;
+order→signed 0.22–0.67 ms.
+
+Not measured yet: send round trip to a sender in Frankfurt (Helius/Jito), mainnet
+landing, Telegram tap → server.
+
 ### 3. Real Pump program on a local validator — `trader-cli smoke-pump --iterations 10`
 Official `pump.so` (pump-rust-client 0.5.0 artifacts) + admin PDAs cloned from
 devnet, `solana-test-validator` 4.2 in WSL2, full engine → `RpcSender`

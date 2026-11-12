@@ -12,6 +12,10 @@ pub struct Config {
     pub mode: Network,
     pub bind: String,
     pub rpc_url: Option<String>,
+    /// WebSocket RPC URL; default derived from RPC_URL (http->ws, https->wss).
+    pub ws_url: Option<String>,
+    /// Stream coin state + wallet balances over WebSocket (default on outside mock).
+    pub ws_streaming: bool,
     pub database_url: Option<String>,
     pub bot_token: Option<String>,
     pub webhook_secret: Option<String>,
@@ -51,6 +55,7 @@ impl std::fmt::Debug for Config {
                     .map(trader_market_data::rpc::url_host),
             )
             .field("database", &self.database_url.is_some())
+            .field("ws_streaming", &self.ws_streaming)
             .field("telegram", &self.bot_token.is_some())
             .field("webhook_secret", &self.webhook_secret.is_some())
             .field("kek", &self.kek.is_some())
@@ -86,6 +91,8 @@ impl Config {
             mode,
             bind: env("BIND_ADDR").unwrap_or_else(|| "127.0.0.1:8080".into()),
             rpc_url: env("RPC_URL"),
+            ws_url: env("WS_URL"),
+            ws_streaming: env("WS_STREAMING").as_deref() != Some("false"),
             database_url: env("DATABASE_URL"),
             bot_token: env("TELEGRAM_BOT_TOKEN"),
             webhook_secret: env("TELEGRAM_WEBHOOK_SECRET"),
@@ -168,6 +175,8 @@ impl Config {
             mode: Network::Mock,
             bind: "127.0.0.1:0".into(),
             rpc_url: None,
+            ws_url: None,
+            ws_streaming: false,
             database_url: None,
             bot_token: None,
             webhook_secret: None,

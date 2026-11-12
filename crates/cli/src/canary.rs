@@ -24,7 +24,7 @@ use std::io::{IsTerminal, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use trader_domain::fees::{
     rent_exempt_minimum, BASE_FEE_LAMPORTS_PER_SIGNATURE, TOKEN_2022_ATA_LEN, TOKEN_ACCOUNT_LEN,
@@ -38,8 +38,9 @@ use trader_execution::{BlockhashService, WalletLocks};
 use trader_market_data::token::{
     associated_token_address, parse_token_account, TOKEN_2022_PROGRAM,
 };
-use trader_market_data::{RpcClient, RpcConfig};
-use trader_orders::balances::RpcBalances;
+use trader_market_data::{ws_url_from_http, AccountStream, RpcClient, RpcConfig};
+use trader_orders::balances::{RpcBalances, StreamBalances};
+use trader_orders::BalanceSource;
 use trader_orders::{Engine, EngineConfig, MemStore, Observer, ObserverConfig, Order, OrderStore};
 use trader_protocol_pump::PumpAdapter;
 use trader_router::{
@@ -257,7 +258,7 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         .cloned()
         .or_else(|| std::env::var("RPC_URL").ok().filter(|s| !s.is_empty()))
         .ok_or_else(|| anyhow!("set RPC_URL to a mainnet RPC endpoint (or pass --rpc)"))?;
-    let mut cfg = RpcConfig::new(url);
+    let mut cfg = RpcConfig::new(url.clone());
     cfg.timeout = Duration::from_secs(20);
     let rpc = RpcClient::new(cfg)?;
     let genesis = rpc.get_genesis_hash().await?;
@@ -332,7 +333,8 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         "mint": mint.to_string(),
         "token_program": token_program.to_string(),
         "buy_lamports_per_iteration": buy,
-        "iterations": if send { iterations } else { 1 },
+        "iterations": iterations,
+        "websocket": !a.contains_key("no-ws"),
         "cu_price_micro_lamports": cu_price,
         "est_fee_per_tx_lamports": fee_per_tx,
         "rent_locked_if_new_lamports": rent_new,
@@ -369,6 +371,48 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     let signer: Arc<dyn TxSigner> = Arc::new(ManagedLocalSigner::new(kp, net));
     let store = Arc::new(MemStore::new());
     let locks = WalletLocks::default();
+    // WebSocket account stream (default on): coin state and wallet balances are
+    // pushed by the RPC, so a warm order needs no read round trip before signing.
+    let stream = if a.contains_key("no-ws") {
+        None
+    } else {
+        Some(AccountStream::spawn(
+            a.get("ws")
+                .cloned()
+                .unwrap_or_else(|| ws_url_from_http(&url)),
+        ))
+    };
+    let mut adapter = PumpAdapter::new(rpc.clone());
+    if let Some(s) = &stream {
+        adapter = adapter.with_stream(s.clone());
+    }
+    let adapter = Arc::new(adapter);
+    let stream_bal = stream
+        .as_ref()
+        .map(|s| Arc::new(StreamBalances::new(rpc.clone(), s.clone())));
+    let balances: Arc<dyn BalanceSource> = match &stream_bal {
+        Some(b) => b.clone(),
+        None => Arc::new(RpcBalances { rpc: rpc.clone() }),
+    };
+    let mut ws_info = json!(null);
+    if let (Some(s), Some(sb)) = (&stream, &stream_bal) {
+        let t = Instant::now();
+        while !s.is_live(Duration::from_millis(1500)) && t.elapsed() < Duration::from_secs(10) {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        let live = s.is_live(Duration::from_millis(1500));
+        let coin_warm = adapter.prewarm(&mint).await.unwrap_or(false);
+        let balances_warm = sb.prewarm(&wallet, &mint, &[uva]).await;
+        ws_info = json!({
+            "host": s.host(),
+            "live": live,
+            "coin_warm": coin_warm,
+            "balances_warm": balances_warm,
+            "warmup_ms": t.elapsed().as_millis() as u64,
+            "note": "if not warm the engine falls back to RPC reads",
+        });
+        println!("{}", json!({ "websocket": ws_info }));
+    }
     let blockhash = BlockhashService::new();
     blockhash.refresh_once(&rpc).await?;
     blockhash.spawn(rpc.clone(), Duration::from_secs(2));
@@ -422,12 +466,12 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
             ..Default::default()
         },
         store.clone(),
-        vec![Arc::new(PumpAdapter::new(rpc.clone()))],
+        vec![adapter.clone()],
         router,
         blockhash,
         locks,
         Arc::new(OneSigner(signer)),
-        Arc::new(RpcBalances { rpc: rpc.clone() }),
+        balances,
         Arc::new(FixedPolicy(Mutex::new(policy))),
         observer.handle.clone(),
         tx,
@@ -457,7 +501,7 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
 
     let mut rows = vec![];
     let mut failed: Option<String> = None;
-    let runs = if send { iterations } else { 1 };
+    let runs = iterations;
     'outer: for it in 0..runs {
         // Dry run simulates the buy only: a sell needs tokens the wallet does not hold.
         let sides: &[Side] = if send {
@@ -561,6 +605,7 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         "plan": plan,
         "rows": rows,
         "simulations": sims,
+        "websocket": ws_info,
         "failure": failed,
     });
     let path = a.get("report").cloned().unwrap_or_else(|| {

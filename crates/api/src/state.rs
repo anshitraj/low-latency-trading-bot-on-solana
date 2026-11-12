@@ -12,9 +12,9 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 use trader_domain::{Network, SenderKind};
 use trader_execution::{BlockhashService, ProtocolAdapter, WalletLocks};
-use trader_market_data::{RpcClient, RpcConfig};
+use trader_market_data::{ws_url_from_http, AccountStream, RpcClient, RpcConfig};
 use trader_observability::Metrics;
-use trader_orders::balances::RpcBalances;
+use trader_orders::balances::{RpcBalances, StreamBalances};
 use trader_orders::{
     Engine, EngineConfig, MemStore, Observer, ObserverConfig, OrderStore, OrderUpdate,
 };
@@ -188,12 +188,29 @@ pub async fn build(cfg: Config) -> anyhow::Result<Built> {
     }
     // TPU sender is not built (see crates/sender-tpu); never registered.
 
+    // --- WebSocket account stream (real clusters only; WS_STREAMING=false disables).
+    // Coin state and wallet balances are pushed by the RPC; reads fall back to
+    // RPC whenever the stream is not live or an account is not seeded yet.
+    let stream = match (&mock, cfg.ws_streaming, &cfg.rpc_url) {
+        (None, true, Some(http)) => Some(AccountStream::spawn(
+            cfg.ws_url.clone().unwrap_or_else(|| ws_url_from_http(http)),
+        )),
+        _ => None,
+    };
     // --- adapters
     let adapters: Vec<Arc<dyn ProtocolAdapter>> = match &mock {
         Some(m) => vec![Arc::new(m.dex.clone())],
-        None => vec![Arc::new(trader_protocol_pump::PumpAdapter::new(
-            rpc.clone(),
-        ))],
+        None => {
+            let mut p = trader_protocol_pump::PumpAdapter::new(rpc.clone());
+            if let Some(s) = &stream {
+                p = p.with_stream(s.clone());
+            }
+            vec![Arc::new(p)]
+        }
+    };
+    let balances: Arc<dyn trader_orders::BalanceSource> = match &stream {
+        Some(s) => Arc::new(StreamBalances::new(rpc.clone(), s.clone())),
+        None => Arc::new(RpcBalances { rpc: rpc.clone() }),
     };
     let engine_senders = senders.clone();
     let (tx, _) = broadcast::channel(8192);
@@ -228,7 +245,7 @@ pub async fn build(cfg: Config) -> anyhow::Result<Built> {
         blockhash,
         locks,
         Arc::new(AppSigners::new(app.clone(), kek.clone(), cfg.mode)),
-        Arc::new(RpcBalances { rpc: rpc.clone() }),
+        balances,
         Arc::new(AppPolicies {
             app: app.clone(),
             defaults: default_policy(cfg.mode, &policy_senders),

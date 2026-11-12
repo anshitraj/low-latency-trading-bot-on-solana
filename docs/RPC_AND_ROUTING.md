@@ -31,6 +31,20 @@ timeouts, transport → Ambiguous.
 - Circuit breaker: 5 consecutive bad outcomes → open 10 s → single half-open trial.
 - Tips: see EXECUTION_ENGINE.md; the tip is paid once, by the transaction, whichever path lands it.
 
+## WebSocket account stream (`crates/market-data/src/ws.rs`)
+`accountSubscribe` (base64, `processed`) for each coin's Global, FeeConfig, bonding
+curve, mint and curve token accounts, plus each wallet's SOL account, token accounts
+and Pump `user_volume_accumulator`; `slotSubscribe` as heartbeat.
+- Served only while live: connected **and** a slot notification within 1.5 s.
+- An account is served only after its subscription is acknowledged on the current
+  connection **and** seeded by an RPC read issued after that ack (no gap where an
+  update could be missed); newer slots always win.
+- On disconnect every entry is dropped; reconnect (250 ms → 10 s backoff) resubscribes
+  and re-seeds. Until then reads fall back to RPC (fail closed to the slow path, never to stale data).
+- Warm-up: first quote for a coin (Mini App "Load" → `/v1/tokens/{mint}/quote`) starts
+  it in the background; `mainnet-canary` and `trader-bench live` warm explicitly.
+- Env: `WS_URL` (default: `RPC_URL` with http→ws), `WS_STREAMING=false` to disable.
+
 ## Connection handling
 `reqwest` clients per endpoint with keep-alive pools (90 s idle, TCP_NODELAY, keepalive 30 s). No per-trade connection bootstrap. Blockhash refreshed every 500 ms (`confirmed`), block height every ~2 s.
 

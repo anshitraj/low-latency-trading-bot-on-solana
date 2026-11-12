@@ -35,7 +35,7 @@ use trader_market_data::token::{
     associated_token_address, parse_mint, parse_token_account, MintInfo, SPL_TOKEN_PROGRAM,
     TOKEN_2022_PROGRAM,
 };
-use trader_market_data::{RpcClient, TokenBalanceChange};
+use trader_market_data::{AccountStream, RpcClient, TokenBalanceChange};
 
 pub const PUMP_PROGRAM_ID: Pubkey = constants::pump::PROGRAM_ID;
 pub const PUMP_FEE_PROGRAM_ID: Pubkey = constants::FEE_PROGRAM_ID;
@@ -50,6 +50,8 @@ pub const V3_USER_INDEX: usize = 8;
 pub const DEFAULT_COMPUTE_UNITS: u32 = 150_000;
 /// Data length of the pump `UserVolumeAccumulator` account (observed on localnet).
 pub const USER_VOLUME_ACCUMULATOR_LEN: u64 = 137;
+/// A stream counts as live if a slot notification arrived within this window.
+pub const STREAM_MAX_SILENCE: std::time::Duration = std::time::Duration::from_millis(1_500);
 /// Small reference trade used to estimate spot price for impact display.
 const SPOT_PROBE_LAMPORTS: u64 = 1_000_000;
 
@@ -70,6 +72,9 @@ pub struct PumpAdapter {
     sdk: PumpSdk,
     cache: Arc<RwLock<HashMap<Pubkey, CurveSnapshot>>>,
     compute_units: u32,
+    /// Optional WebSocket account stream: quotes read pushed state with no
+    /// round trip while it is live; otherwise RPC as before.
+    stream: Option<AccountStream>,
 }
 
 impl PumpAdapter {
@@ -79,6 +84,7 @@ impl PumpAdapter {
             sdk: PumpSdk::new(),
             cache: Default::default(),
             compute_units: DEFAULT_COMPUTE_UNITS,
+            stream: None,
         }
     }
 
@@ -89,7 +95,99 @@ impl PumpAdapter {
             sdk: PumpSdk::new(),
             cache: Default::default(),
             compute_units: DEFAULT_COMPUTE_UNITS,
+            stream: None,
         }
+    }
+
+    pub fn with_stream(mut self, stream: AccountStream) -> Self {
+        self.stream = Some(stream);
+        self
+    }
+
+    /// Accounts a quote needs: global, fee_config, curve, mint, curve ATA (SPL, Token-2022).
+    pub fn state_keys(mint: &Pubkey) -> [Pubkey; 6] {
+        let bc = pda::pump::bonding_curve(mint).0;
+        [
+            pda::pump::global().0,
+            pda::pump::fee_config().0,
+            bc,
+            *mint,
+            associated_token_address(&bc, mint, &SPL_TOKEN_PROGRAM),
+            associated_token_address(&bc, mint, &TOKEN_2022_PROGRAM),
+        ]
+    }
+
+    /// Subscribe and seed this mint's state on the stream (awaits the warm-up).
+    /// Returns false without a stream or if the subscription was not acknowledged.
+    pub async fn prewarm(&self, mint: &Pubkey) -> Result<bool, ProtocolError> {
+        let (Some(stream), Some(rpc)) = (&self.stream, &self.rpc) else {
+            return Ok(false);
+        };
+        trader_market_data::ws::warm(
+            stream,
+            rpc,
+            &Self::state_keys(mint),
+            std::time::Duration::from_secs(3),
+        )
+        .await
+        .map_err(|e| ProtocolError::Rpc(e.to_string()))
+    }
+
+    fn warm_in_background(&self, mint: &Pubkey) {
+        let (Some(stream), Some(rpc)) = (self.stream.clone(), self.rpc.clone()) else {
+            return;
+        };
+        let keys = Self::state_keys(mint);
+        if keys.iter().all(|k| stream.is_acked(k)) {
+            return;
+        }
+        tokio::spawn(async move {
+            let _ = trader_market_data::ws::warm(
+                &stream,
+                &rpc,
+                &keys,
+                std::time::Duration::from_secs(3),
+            )
+            .await;
+        });
+    }
+
+    /// Snapshot built from pushed stream state (no I/O), if live and fully seeded.
+    pub fn snapshot_from_stream(&self, mint: &Pubkey) -> Option<CurveSnapshot> {
+        let stream = self.stream.as_ref()?;
+        if !stream.is_live(STREAM_MAX_SILENCE) {
+            return None;
+        }
+        let keys = Self::state_keys(mint);
+        let e = stream.get_all(&keys)?;
+        let (global, fee, curve, mint_acct) = (
+            e[0].account.as_ref()?,
+            e[1].account.as_ref()?,
+            e[2].account.as_ref()?,
+            e[3].account.as_ref()?,
+        );
+        let ata = if mint_acct.owner == TOKEN_2022_PROGRAM {
+            &e[5]
+        } else {
+            &e[4]
+        };
+        let base_ata_amount = ata
+            .account
+            .as_ref()
+            .and_then(|a| parse_token_account(&a.owner, &a.data).ok())
+            .map(|t| t.amount)
+            .unwrap_or(0);
+        let slot = e.iter().map(|x| x.slot).max().unwrap_or(0);
+        Self::decode_snapshot(
+            mint,
+            (&global.owner, &global.data),
+            (&fee.owner, &fee.data),
+            (&curve.owner, &curve.data),
+            (&mint_acct.owner, &mint_acct.data),
+            base_ata_amount,
+            slot,
+        )
+        .ok()
     }
 
     pub fn with_compute_units(mut self, cu: u32) -> Self {
@@ -150,15 +248,11 @@ impl PumpAdapter {
             .rpc
             .as_ref()
             .ok_or_else(|| ProtocolError::StateUnavailable("offline adapter".into()))?;
-        let bc = pda::pump::bonding_curve(mint).0;
-        let keys = [
-            pda::pump::global().0,
-            pda::pump::fee_config().0,
-            bc,
-            *mint,
-            associated_token_address(&bc, mint, &SPL_TOKEN_PROGRAM),
-            associated_token_address(&bc, mint, &TOKEN_2022_PROGRAM),
-        ];
+        if let Some(s) = self.snapshot_from_stream(mint) {
+            return Ok(Some(s));
+        }
+        self.warm_in_background(mint);
+        let keys = Self::state_keys(mint);
         let (slot, accts) = rpc
             .get_multiple_accounts(&keys, Commitment::Processed)
             .await
@@ -200,6 +294,11 @@ impl PumpAdapter {
     }
 
     fn fresh(&self, mint: &Pubkey, req: &QuoteRequest) -> Result<CurveSnapshot, ProtocolError> {
+        // Live stream: always quote from the latest pushed state.
+        if let Some(s) = self.snapshot_from_stream(mint) {
+            self.cache.write().insert(*mint, s.clone());
+            return Ok(s);
+        }
         let s = self
             .cache
             .read()

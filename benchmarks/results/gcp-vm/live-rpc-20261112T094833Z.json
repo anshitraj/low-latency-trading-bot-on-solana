@@ -1,0 +1,56 @@
+{
+  "balances": {
+    "rpc_balances_us": {
+      "max": 46335,
+      "mean": 26507,
+      "min": 11576,
+      "n": 20,
+      "p50": 25311,
+      "p90": 37951,
+      "p95": 41919,
+      "p99": 46335,
+      "unit": "us"
+    },
+    "stream_balances_us": null
+  },
+  "env": {
+    "arch": "x86_64",
+    "cpus": 4,
+    "generated_at": "2026-11-12T09:48:33.811357629+00:00",
+    "host": "",
+    "os": "linux",
+    "profile": "release"
+  },
+  "gap_ms": 500,
+  "intent_to_signed_us": {
+    "max": 111935,
+    "mean": 28586,
+    "min": 4540,
+    "n": 100,
+    "p50": 24671,
+    "p90": 45663,
+    "p95": 60095,
+    "p99": 88383,
+    "unit": "us"
+  },
+  "iterations": 100,
+  "kind": "live_rpc",
+  "mint": "6caZsnv4PgEhKUKEV1aPQHq94PQi5HyufAt1oaU7pump",
+  "note": "LIVE cluster Pump state; real signing with a throwaway key; MOCK sender (nothing broadcast); cached balances",
+  "request_to_send_start_us": {
+    "max": 111935,
+    "mean": 28605,
+    "min": 4556,
+    "n": 100,
+    "p50": 24687,
+    "p90": 45695,
+    "p95": 60095,
+    "p99": 88383,
+    "unit": "us"
+  },
+  "rpc_host": "api.mainnet-beta.solana.com",
+  "sample_failures": [],
+  "stream_hits_before_submit": 0,
+  "stream_warmup_ms": null,
+  "ws_reconnects": null
+}

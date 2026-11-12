@@ -4,6 +4,21 @@
 creates or deletes resources require explicit owner approval and prompt for
 confirmation. Terraform was not run in this session (not installed; no project id).
 
+## What is actually deployed (2026-11-12, owner-approved)
+| item | value |
+|---|---|
+| project | `vps-sandbox` (a new dedicated project was refused: "Cloud billing quota exceeded" on the credit billing account) |
+| VM | `trader-vm`, c4-standard-4, `europe-west3-a`, Ubuntu 24.04, hyperdisk-balanced 50 GB, Shielded VM, OS Login, labels `app=trader` |
+| network | dedicated VPC `trader-net` / subnet `trader-euw3` 10.30.0.0/24; only ingress rule `trader-allow-ssh-iap` (tcp:22 from 35.235.240.0/20, Google IAP). Existing `default` network rules untouched. Ephemeral external IP for outbound only |
+| budget | "trader vps-sandbox credit burn": ₹105,000 (~US$1,200), gross usage before credits, alerts 25/50/80/100% + 80% forecast |
+| software | Rust stable, Postgres 16 (localhost only), repo at `~/trader` |
+| created with | `gcloud` (Terraform in `deploy/gcp/terraform` was not used: not installed) |
+
+Connect: `gcloud compute ssh trader-vm --project vps-sandbox --zone europe-west3-a --tunnel-through-iap`
+Stop (keeps disk, stops VM billing): `gcloud compute instances stop trader-vm --project vps-sandbox --zone europe-west3-a`
+Delete: `gcloud compute instances delete trader-vm --project vps-sandbox --zone europe-west3-a`
+(also `trader-net` network/subnet/firewall, and the budget). Running cost estimate ~US$0.23/h (credits).
+
 ## Topology
 One Compute Engine VM (`trader-vm`, default `c4-standard-4`, Debian 12,
 shielded VM, OS Login, 50 GB pd-balanced) in `europe-west3-a`:

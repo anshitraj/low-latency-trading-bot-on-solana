@@ -116,3 +116,19 @@ Mainnet dry run (same day, owner-funded canary wallet, public RPC, coin `6caZsnv
 - Then: simulation err=null, 69,726 / 69,728 CU, quote 120,000 lamports → 1,488,072,049 raw tokens (min 1,413,668,446). intent→signed 173 ms over the public RPC from this desktop (fresh state + balance reads), vs ~2 ms on localnet: remote RPC round trips dominate.
 - Verified afterwards: wallet balance unchanged (13,000,000 lamports), signature not on chain.
 - Observed: public RPC returns 429 after a burst of calls; mainnet now carries transaction version 1 (we send v0). Canary status polling default raised to 400 ms (`--poll-ms`).
+
+## 2026-11-12 — session 1, part 5 (GCP VM + WebSocket streaming)
+Owner approved a GCP VM (new project, c4-standard-4, Frankfurt). New project creation
+worked but billing link failed ("Cloud billing quota exceeded"); owner chose
+`vps-sandbox`; empty project deleted. Built `trader-vm` with its own VPC (IAP-only SSH)
+and a ₹105,000 credit-burn budget (billing account currency is INR). See GCP_DEPLOYMENT.md.
+
+Built WebSocket account streaming (market-data `ws.rs`, Pump adapter `with_stream`,
+`StreamBalances`, API `WS_URL`/`WS_STREAMING`, canary `--no-ws`, `trader-bench live`).
+Measured (BENCHMARKS.md 2d/2e): on the VM order→signed 0.204 ms p50 with the stream vs
+24.7 ms with RPC reads; mainnet dry run from the desktop 0.22–0.45 ms (was 173 ms);
+localnet streamed send loop 6/6 FINALIZED.
+
+Issues found: the live bench first failed on the engine gate "mock sender not allowed on
+mainnet" (kept; bench labels orders localnet). A leftover validator inside WSL survived
+TaskStop and was killed mid-test by the next start (environment, documented).

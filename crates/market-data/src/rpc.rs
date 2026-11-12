@@ -542,7 +542,7 @@ struct Ctx {
 }
 
 #[derive(Deserialize)]
-struct RawAccount {
+pub(crate) struct RawAccount {
     lamports: u64,
     owner: String,
     data: (String, String),
@@ -550,7 +550,7 @@ struct RawAccount {
 }
 
 impl RawAccount {
-    fn decode(self) -> Result<AccountData, RpcError> {
+    pub(crate) fn decode(self) -> Result<AccountData, RpcError> {
         if self.data.1 != "base64" {
             return Err(RpcError::Decode(format!(
                 "unexpected encoding {}",
@@ -578,7 +578,7 @@ pub fn parse_commitment(s: &str) -> Option<Commitment> {
     }
 }
 
-fn redact(s: &str) -> String {
+pub(crate) fn redact(s: &str) -> String {
     // reqwest errors include the URL; strip query strings which may carry api keys.
     let mut out = String::with_capacity(s.len());
     let mut in_query = false;
