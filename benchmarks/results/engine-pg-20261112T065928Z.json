@@ -1,0 +1,215 @@
+{
+  "env": {
+    "arch": "x86_64",
+    "cpus": 20,
+    "generated_at": "2026-11-12T06:59:28.829279144+00:00",
+    "host": "",
+    "os": "linux",
+    "profile": "release"
+  },
+  "kind": "engine_warm_path",
+  "levels": [
+    {
+      "concurrency": 1,
+      "create_order_us": {
+        "max": 2805,
+        "mean": 293,
+        "min": 203,
+        "n": 2000,
+        "p50": 277,
+        "p90": 360,
+        "p95": 403,
+        "p99": 529,
+        "unit": "us"
+      },
+      "intent_to_send_start_us": {
+        "max": 32175,
+        "mean": 1864,
+        "min": 1186,
+        "n": 2000,
+        "p50": 1762,
+        "p90": 2247,
+        "p95": 2465,
+        "p99": 3379,
+        "unit": "us"
+      },
+      "intent_to_signed_us": {
+        "max": 5147,
+        "mean": 862,
+        "min": 432,
+        "n": 2000,
+        "p50": 831,
+        "p90": 1129,
+        "p95": 1239,
+        "p99": 1771,
+        "unit": "us"
+      },
+      "orders": 2000,
+      "request_to_send_start_us": {
+        "max": 32399,
+        "mean": 2157,
+        "min": 1420,
+        "n": 2000,
+        "p50": 2043,
+        "p90": 2585,
+        "p95": 2813,
+        "p99": 3853,
+        "unit": "us"
+      },
+      "submitted": 2000,
+      "wall_ms": 7788
+    },
+    {
+      "concurrency": 10,
+      "create_order_us": {
+        "max": 9695,
+        "mean": 643,
+        "min": 299,
+        "n": 2000,
+        "p50": 599,
+        "p90": 819,
+        "p95": 879,
+        "p99": 1177,
+        "unit": "us"
+      },
+      "intent_to_send_start_us": {
+        "max": 20719,
+        "mean": 3830,
+        "min": 2386,
+        "n": 2000,
+        "p50": 3703,
+        "p90": 4379,
+        "p95": 4663,
+        "p99": 7103,
+        "unit": "us"
+      },
+      "intent_to_signed_us": {
+        "max": 11015,
+        "mean": 1594,
+        "min": 996,
+        "n": 2000,
+        "p50": 1544,
+        "p90": 1928,
+        "p95": 2087,
+        "p99": 2551,
+        "unit": "us"
+      },
+      "orders": 2000,
+      "request_to_send_start_us": {
+        "max": 24111,
+        "mean": 4473,
+        "min": 2842,
+        "n": 2000,
+        "p50": 4327,
+        "p90": 5059,
+        "p95": 5331,
+        "p99": 8027,
+        "unit": "us"
+      },
+      "submitted": 2000,
+      "wall_ms": 1665
+    },
+    {
+      "concurrency": 50,
+      "create_order_us": {
+        "max": 15343,
+        "mean": 1198,
+        "min": 380,
+        "n": 2000,
+        "p50": 902,
+        "p90": 1426,
+        "p95": 1789,
+        "p99": 10935,
+        "unit": "us"
+      },
+      "intent_to_send_start_us": {
+        "max": 36543,
+        "mean": 14685,
+        "min": 8616,
+        "n": 2000,
+        "p50": 14255,
+        "p90": 16023,
+        "p95": 16927,
+        "p99": 32543,
+        "unit": "us"
+      },
+      "intent_to_signed_us": {
+        "max": 26815,
+        "mean": 7197,
+        "min": 4344,
+        "n": 2000,
+        "p50": 6859,
+        "p90": 8163,
+        "p95": 8903,
+        "p99": 19407,
+        "unit": "us"
+      },
+      "orders": 2000,
+      "request_to_send_start_us": {
+        "max": 43743,
+        "mean": 15883,
+        "min": 9520,
+        "n": 2000,
+        "p50": 15207,
+        "p90": 17087,
+        "p95": 18239,
+        "p99": 35999,
+        "unit": "us"
+      },
+      "submitted": 2000,
+      "wall_ms": 1220
+    },
+    {
+      "concurrency": 100,
+      "create_order_us": {
+        "max": 21023,
+        "mean": 1485,
+        "min": 334,
+        "n": 2000,
+        "p50": 797,
+        "p90": 1600,
+        "p95": 3069,
+        "p99": 18511,
+        "unit": "us"
+      },
+      "intent_to_send_start_us": {
+        "max": 53919,
+        "mean": 27045,
+        "min": 21952,
+        "n": 2000,
+        "p50": 26639,
+        "p90": 29471,
+        "p95": 30767,
+        "p99": 40799,
+        "unit": "us"
+      },
+      "intent_to_signed_us": {
+        "max": 35871,
+        "mean": 13685,
+        "min": 9848,
+        "n": 2000,
+        "p50": 13279,
+        "p90": 15103,
+        "p95": 17647,
+        "p99": 24863,
+        "unit": "us"
+      },
+      "orders": 2000,
+      "request_to_send_start_us": {
+        "max": 66367,
+        "mean": 28531,
+        "min": 22368,
+        "n": 2000,
+        "p50": 27567,
+        "p90": 30655,
+        "p95": 33055,
+        "p99": 58303,
+        "unit": "us"
+      },
+      "submitted": 2000,
+      "wall_ms": 1110
+    }
+  ],
+  "note": "Real Engine, cached Pump state (fixture), cached balances, ManagedLocal signer, MOCK sender. Excludes RPC and KMS.",
+  "store": "PostgreSQL: pre-sign writes synchronous_commit=off, SIGNED and later durable (fsync); DATABASE_MAX_CONNECTIONS=default DATABASE_PRESIGN_MAX_CONNECTIONS=default"
+}

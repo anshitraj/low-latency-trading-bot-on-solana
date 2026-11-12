@@ -347,3 +347,174 @@ async fn callbacks_updates_outbox_sessions() {
         .await
         .unwrap());
 }
+
+fn mock_quote(i: &TradeIntent) -> trader_domain::Quote {
+    trader_domain::Quote {
+        id: Uuid::new_v4(),
+        network: Network::Mock,
+        market: trader_domain::MarketRef {
+            dex: trader_domain::DexKind::Mock,
+            market: i.mint,
+            base_mint: i.mint,
+            quote_mint: rand_pk(),
+        },
+        side: Side::Buy,
+        in_amount: 1_000,
+        in_decimals: 9,
+        expected_out: 10,
+        out_decimals: 6,
+        min_out: 9,
+        max_in: 1_000,
+        price_impact_bps: Some(1),
+        costs: Default::default(),
+        max_total_debit: Lamports(6_000),
+        context_slot: 1,
+        state_age_ms: 0,
+        created_at: chrono::Utc::now(),
+        expires_at: chrono::Utc::now() + chrono::Duration::seconds(30),
+        source: trader_domain::QuoteSource::Mock,
+        warnings: vec![],
+    }
+}
+
+/// Hot-path single-round-trip writes: quote + advance, batched attempts.
+#[tokio::test]
+async fn hot_path_quote_and_advance_and_batched_attempts() {
+    let Some(s) = store().await else { return };
+    let (u, w, pk) = seed(&s).await;
+
+    // CREATED -> QUOTED -> SIGNING atomically, both journaled, quote stored.
+    let i = intent(u, w, "qa-1");
+    let o = s.create_order(&i, pk).await.unwrap();
+    let local = o.order().clone();
+    let read = s.get_order(i.id).await.unwrap();
+    assert_eq!(
+        local.created_at, read.created_at,
+        "locally built order matches the row"
+    );
+    assert_eq!(local.state, read.state);
+    let q = mock_quote(&i);
+    s.quote_and_advance(i.id, &q, serde_json::json!({"k": 1}), OrderState::Signing)
+        .await
+        .unwrap();
+    let got = s.get_order(i.id).await.unwrap();
+    assert_eq!(got.state, OrderState::Signing);
+    assert_eq!(got.quote.unwrap().id, q.id);
+    let ev: Vec<OrderState> = s.events(i.id).await.unwrap().iter().map(|e| e.to).collect();
+    assert_eq!(
+        ev,
+        vec![OrderState::Created, OrderState::Quoted, OrderState::Signing]
+    );
+
+    // Second claim loses the CAS and changes nothing.
+    let again = s
+        .quote_and_advance(i.id, &q, serde_json::json!({}), OrderState::Signing)
+        .await;
+    assert!(matches!(
+        again,
+        Err(StoreError::Conflict {
+            found: OrderState::Signing,
+            ..
+        })
+    ));
+    assert_eq!(s.events(i.id).await.unwrap().len(), 3);
+
+    // Illegal target refused before touching the database.
+    let i2 = intent(u, w, "qa-2");
+    s.create_order(&i2, pk).await.unwrap();
+    assert!(s
+        .quote_and_advance(i2.id, &q, serde_json::json!({}), OrderState::Finalized)
+        .await
+        .is_err());
+    assert_eq!(s.get_order(i2.id).await.unwrap().state, OrderState::Created);
+    // Approval path target.
+    s.quote_and_advance(i2.id, &q, serde_json::json!({}), OrderState::AwaitingAuth)
+        .await
+        .unwrap();
+    assert_eq!(
+        s.get_order(i2.id).await.unwrap().state,
+        OrderState::AwaitingAuth
+    );
+    assert!(matches!(
+        s.quote_and_advance(
+            Uuid::new_v4(),
+            &q,
+            serde_json::json!({}),
+            OrderState::Signing
+        )
+        .await,
+        Err(StoreError::NotFound)
+    ));
+
+    // Concurrent claims: exactly one wins.
+    let i3 = intent(u, w, "qa-3");
+    s.create_order(&i3, pk).await.unwrap();
+    let mut hs = vec![];
+    for _ in 0..10 {
+        let (s, q, id) = (s.clone(), q.clone(), i3.id);
+        hs.push(tokio::spawn(async move {
+            s.quote_and_advance(id, &q, serde_json::json!({}), OrderState::Signing)
+                .await
+                .is_ok()
+        }));
+    }
+    let wins = futures::future::join_all(hs)
+        .await
+        .into_iter()
+        .filter(|r| *r.as_ref().unwrap())
+        .count();
+    assert_eq!(wins, 1);
+
+    // Batched sender attempts (one statement).
+    let sig = format!("sig-{}", Uuid::new_v4());
+    s.save_signed(i.id, &signed(&sig)).await.unwrap();
+    let mk =
+        |sender: SenderKind, outcome: trader_router::SendOutcome| trader_orders::AttemptRecord {
+            order_id: i.id,
+            signature: sig.clone(),
+            attempt: trader_router::SendAttempt {
+                sender,
+                endpoint: "test".into(),
+                wall_start: chrono::Utc::now(),
+                start_offset_us: 0,
+                latency_us: 123,
+                outcome,
+            },
+            rebroadcast: false,
+        };
+    s.record_attempts(&[
+        mk(
+            SenderKind::Rpc,
+            trader_router::SendOutcome::Accepted {
+                returned_signature: Some(sig.clone()),
+            },
+        ),
+        mk(SenderKind::Jito, trader_router::SendOutcome::RateLimited),
+    ])
+    .await
+    .unwrap();
+    s.record_attempts(&[]).await.unwrap();
+    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sender_attempts WHERE order_id = $1")
+        .bind(i.id)
+        .fetch_one(&s.pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 2);
+}
+
+/// The signature write must go through the durable pool; only pre-sign writes
+/// may use the async-commit pool.
+#[tokio::test]
+async fn durable_and_presign_pools_have_expected_commit_modes() {
+    let Some(s) = store().await else { return };
+    let durable: String = sqlx::query_scalar("SHOW synchronous_commit")
+        .fetch_one(&s.pool)
+        .await
+        .unwrap();
+    let presign: String = sqlx::query_scalar("SHOW synchronous_commit")
+        .fetch_one(&s.presign)
+        .await
+        .unwrap();
+    assert_ne!(durable, "off", "SIGNED/post-send writes must be durable");
+    assert_eq!(presign, "off");
+}

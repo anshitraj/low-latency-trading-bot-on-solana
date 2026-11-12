@@ -54,31 +54,117 @@ Postgres and KMS.** File: `benchmarks/results/engine-20261111T165614Z.json`.
 | 50 | 4000 | 707 µs | 1.24 ms | 1.41 ms | 2.16 ms | 6.4 ms |
 | 100 | 4000 | 698 µs | 1.20 ms | 1.41 ms | 2.08 ms | 6.5 ms |
 
-Target "p50 < 5 ms, p99 < 15 ms warm-cache intent→signed": **met with the
-in-memory store only** (see 2b for Postgres).
+Target "p50 < 5 ms, p99 < 15 ms warm-cache intent→signed": met with the
+in-memory store at every concurrency; with PostgreSQL see 2b. A re-run on
+2026-11-12 (`engine-20261112T065040Z.json`) agrees: 0.20 / 0.51 ms p50 at 1 / 100 wallets.
 
 ### 2b. Engine warm path on PostgreSQL — `trader-bench engine --database-url …`
-Same as above, but every order write is a real PostgreSQL 18.6 write (WSL2 on
-the same host, reached through WSL's localhost relay; fresh database; pool 16
-with 4 warm connections). File: `benchmarks/results/engine-pg-20261111T181806Z.json`.
-8000/8000 orders SUBMITTED.
+Same engine, but every order write is a real PostgreSQL 18.6 write. Postgres runs
+in WSL2 on the same host and is reached through WSL's localhost relay (so every
+round trip crosses a VM boundary); fresh database per run; local validator
+**stopped** during the run (it shares the virtual disk and skews fsync timing).
 
-| concurrency (wallets) | orders | intent→signed p50 | p90 | p95 | p99 | max | throughput |
-|---:|---:|---:|---:|---:|---:|---:|---:|
-| 1 | 2000 | 5.28 ms | 7.32 ms | 8.37 ms | 11.6 ms | 69 ms | 83/s |
-| 10 | 2000 | 11.7 ms | 13.2 ms | 14.2 ms | 17.4 ms | 126 ms | 384/s |
-| 50 | 2000 | 60.8 ms | 66.3 ms | 68.3 ms | 78.3 ms | 97 ms | 460/s |
-| 100 | 2000 | 109 ms | 137 ms | 145 ms | 155 ms | 161 ms | 452/s |
+What each column measures (all from one monotonic clock inside `submit()`):
+- **accepted→signed**: idempotent order row exists → transaction signed. Covers
+  policy + daily-usage read, quote, `CREATED→QUOTED→SIGNING` (one plpgsql call), build, guard, sign.
+- **request→send**: `submit()` entry → bytes handed to the sender. Adds the
+  idempotent create and the **durable** `SIGNED` write (fsync) that must precede any send.
 
-**Target missed with a real database.** p50 is borderline with one wallet and
-grows with concurrency: ~5 sequential DB round trips happen before signing
-(daily usage, CREATED→QUOTED, save quote, QUOTED→SIGNING, durable SIGNED insert)
-and the 16-connection pool saturates. Not yet implemented: merge pre-sign writes
-into one transaction, keep daily usage in memory, size the pool to concurrency,
-run Postgres on the same Linux host as the engine (no WSL relay, no network hop).
-An earlier run (`engine-pg-20261111T181602Z.json`) is superseded: the benchmark's
-blockhash was never refreshed, so a slow run tripped the 30 s freshness gate
-(the engine correctly rejected those orders) and it shared a database with test rows.
+#### Before → after the round-trip work (1 wallet, same host)
+| | before (`engine-pg-20261111T181806Z`) | after (4 runs, `engine-pg-20261112T064753Z`…`065005Z`) |
+|---|---:|---:|
+| DB round trips before signing | ~5 sequential | 2 (usage read, quote+advance) |
+| accepted→signed p50 / p99 | 5.28 / 11.6 ms | **1.48–1.59 / 2.28–2.77 ms** |
+| request→send p50 / p99 | not recorded | **3.30–4.03 / 4.99–20.3 ms** |
+
+#### After, by concurrency (default pools 16 durable + 8 pre-sign; range over 4 runs)
+| wallets | submitted | accepted→signed p50 | p99 | request→send p50 | p99 | throughput |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 8000/8000 | 1.48–1.59 ms | 2.3–2.8 ms | 3.3–4.0 ms | 5.0–20.3 ms | 72–178/s |
+| 10 | 8000/8000 | 1.68–1.96 ms | 3.0–3.5 ms | 10.4–15.8 ms | 17–132 ms | 247–445/s |
+| 50 | 8000/8000 | 14–21 ms | 37–70 ms | 38–62 ms | 93–505 ms | 361–557/s |
+| 100 | 8000/8000 | 21–49 ms | 51–127 ms | 43–109 ms | 89–606 ms | 411–1138/s |
+
+#### Pool sized to concurrency (`DATABASE_MAX_CONNECTIONS=48`, `DATABASE_PRESIGN_MAX_CONNECTIONS=32`; 2 runs, `engine-pg-20261112T065032Z`, `…065039Z`)
+| wallets | accepted→signed p50 / p99 | request→send p50 / p99 | throughput |
+|---:|---:|---:|---:|
+| 10 | 2.27–2.33 / 4.1–5.2 ms | 5.8–6.1 / 10.2–11.8 ms | 865–907/s |
+| 50 | 6.2–6.5 / 23–75 ms | 18.2–19.0 / 110–128 ms | 1270–1309/s |
+| 100 | 15.5–15.7 / 96–105 ms | 37.1–39.1 / 207–209 ms | 1282–1305/s |
+
+Controlled check at 10 wallets as the *first* level of a fresh process, 2 runs per
+pool size (`engine-pg-20261112T065058Z`…`065107Z`): request→send p50 6.3–6.5 ms
+(16+8) vs 6.1–6.5 ms (48+32) — pool size does not matter at 10 wallets. The
+10–16 ms seen at 10 wallets in the 4-level runs comes from running right after
+the 1-wallet level (a checkpoint was writing in the background); that is also
+what a real host does, so both are reported.
+
+**Verdict (through the relay).** Single-wallet intent→signed now meets the target on Postgres
+(p50 1.5 ms, p99 < 3 ms). The full request including the durable write meets
+p50 < 5 ms; its p99 meets 15 ms in 1 of 4 runs — the tail is fsync on this
+desktop's virtual disk. Beyond ~10 concurrent wallets latency is bounded by
+connection queueing and serialized fsyncs: sizing the pool to concurrency cuts
+it 2–3×, but 50–100 simultaneous orders still exceed 15 ms.
+
+What changed:
+1. Pre-sign writes collapsed: one CTE for create (intent + order + event), one
+   plpgsql call `order_quote_and_advance` for `CREATED→QUOTED→SIGNING|AWAITING_AUTH`
+   (two CAS transitions + quote + two journal rows), CTE transitions, one
+   `INSERT … jsonb_array_elements` for send attempts, one daily-usage query.
+2. Pre-sign writes use a second pool with `synchronous_commit=off`; `SIGNED` and
+   every later write stays durable. Safe because nothing has been signed or
+   sent before `SIGNED`, and PostgreSQL flushes WAL in order: the durable
+   `SIGNED` commit cannot become durable unless every earlier async commit
+   already is. A crash can lose only orders that never reached `SIGNED`, which
+   is the same as the request never arriving (the client retries with the same
+   idempotency key). Off switch: `DATABASE_ASYNC_PRESIGN_COMMITS=false`.
+3. Both pools are clamped to the server's `max_connections` minus 10. Found by
+   this benchmark: 2 × 64 connections > 100 made opens fail under load, 16 orders
+   were rejected with "pool timed out", and 10 sent orders stayed `SIGNED`
+   because the `SUBMITTED` write failed (`engine-pg-20261112T063003Z.json`:
+   1990/2000 and 1973/2000 submitted). The engine now always hands a sent
+   transaction to the observer (from `SIGNED` if `SUBMITTED` cannot be written)
+   and releases the wallet reservation when nothing was forwarded. Since the
+   fix: 52,000/52,000 orders submitted in the runs tabled above. **One other
+   run** (with the local validator still running) aborted at 10 wallets: a
+   connection acquire waited the full 10 s (`pool timed out while waiting for an
+   open connection`) and `submit()` returned that error. Root cause not
+   identified (no Postgres error logged, no checkpoint in progress); suspected
+   WSL relay or virtual-disk stall. Watch `pool timed out` in production logs.
+4. SSL off vs on (`sslmode=disable` / `prefer`) on localhost: no measurable difference.
+
+Not done (would cut further): run Postgres on the same Linux host/VPC without the
+WSL relay; a disk with fast fsync (GCP pd-ssd/hyperdisk, or Cloud SQL where HA
+replication adds latency instead); keep daily usage in memory; group commit
+tuning (`commit_delay`) for 50+ concurrent wallets. None measured.
+
+### 2c. Same benchmark, engine and Postgres colocated on Linux (no relay)
+Linux build of `trader-bench` run inside the same WSL2 VM as Postgres, TCP to
+127.0.0.1 (no Windows→WSL relay). Closest available stand-in for app + DB on one
+Linux VM; the disk is still this desktop's virtual disk. Probe of the raw database
+(`pgbench`, 1 client): SELECT round trip 0.07 ms in-VM vs 0.23 ms through the
+relay; TPC-B-like write transaction with fsync 1.31 ms avg (stddev 1.7) in-VM vs
+3.05 ms (stddev 6.5) through the relay.
+
+Default pools (16+8), 3 runs (`engine-pg-20261112T065928Z`, `…065941Z`, `…070019Z`):
+
+| wallets | accepted→signed p50 / p99 | request→send p50 / p99 | throughput |
+|---:|---:|---:|---:|
+| 1 | 0.83–0.86 / 1.4–1.8 ms | **2.04–2.12 / 3.3–3.9 ms**; slow run 2.53 / 18.9 ms | 256/s (92/s) |
+| 10 | 1.0–1.5 / 2.0–2.6 ms | **3.9–4.3 / 6.6–8.0 ms**; slow run 10.6 / 18.9 ms | 1201–1253/s (439/s) |
+| 50 | 6.0–6.9 / 17–19 ms | 13.5–15.2 / 30–36 ms; slow run 42 / 75 ms | 1639–1857/s |
+| 100 | 12.5–13.3 / 25 ms | 26.4–27.6 / 52–58 ms; slow run 106 / 206 ms | 1801–1834/s |
+
+Pools 48+32, 2 runs (`…070032Z` slow, `…070038Z`): 50 wallets request p50 10.1 ms
+(slow run 28.2), 100 wallets 21.2 ms (57.8), ~2,400 orders/s.
+
+The "slow" runs are the same binary minutes apart; only the disk's fsync time
+changed (Windows host I/O underneath the VM). Both are reported because a
+production disk can do the same.
+
+**Verdict (colocated).** With 1–10 concurrent orders the full request — idempotent
+create, quote, sign, and the durable SIGNED write — meets p50 < 5 ms and p99 < 15 ms
+in 2 of 3 runs. 50–100 simultaneous orders do not meet p99 < 15 ms on this disk.
 
 ### 3. Real Pump program on a local validator — `trader-cli smoke-pump --iterations 10`
 Official `pump.so` (pump-rust-client 0.5.0 artifacts) + admin PDAs cloned from
@@ -103,6 +189,12 @@ has no competition, no leader rotation across machines and 400 ms slots; the
 signed→observed figure is quantized by the 100 ms poll and slot boundaries.
 **This is not mainnet landing performance.** CU limit is 150,000 (2× the max
 observed).
+
+Re-run after the 2026-11-12 engine/store changes (`localnet-pump-smoke-v2.json`):
+20/20 FINALIZED, 20/20 balances verified, buys ≤1 slot 10/10, sells 7/10 (≤2 slots 10/10);
+intent→signed p50 / p95 2.00 / 4.46 ms (buy), 2.08 / 4.15 ms (sell); signed→first
+observed p50 107 ms (buy) / 417 ms (sell), p95 442 ms. Bimodal: ~100 ms when the tx
+lands in the current slot, ~430 ms when it lands in the next one.
 
 The first buy debited 53,923,630 lamports for a 0.05 SOL buy: 50,000,000 swap +
 2,074,080 Token-2022 ATA rent + 1,844,400 pump `user_volume_accumulator` rent +
@@ -137,6 +229,7 @@ landed once.
 
 | item | reason |
 |---|---|
+| Postgres on a GCP VM / Cloud SQL / Supabase | Only measured on WSL2 on the dev desktop; no cloud database authorized |
 | Mainnet landing, sender A/B (RPC vs Jito vs Helius vs TPU) | Mainnet trading not authorized; TPU sender not implemented |
 | GCP region RTT (Frankfurt vs Singapore) | No GCP deployment authorized; script ready: `deploy/gcp/scripts/region-ab.sh` |
 | Telegram ingress→confirmation | Requires a real bot token + public HTTPS endpoint |

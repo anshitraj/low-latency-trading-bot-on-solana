@@ -51,6 +51,23 @@ pub trait OrderStore: Send + Sync {
         detail: serde_json::Value,
     ) -> Result<(), StoreError>;
     async fn save_quote(&self, id: Uuid, quote: &Quote) -> Result<(), StoreError>;
+    /// CREATED -> QUOTED (storing `quote`) -> `then` (AWAITING_AUTH or SIGNING),
+    /// both journaled. PgStore does it in one atomic round trip; this default
+    /// is CAS-safe (it can only lose, never double-apply).
+    /// `Conflict` if the order is no longer CREATED.
+    async fn quote_and_advance(
+        &self,
+        id: Uuid,
+        quote: &Quote,
+        detail: serde_json::Value,
+        then: OrderState,
+    ) -> Result<(), StoreError> {
+        self.transition(id, OrderState::Created, OrderState::Quoted, detail)
+            .await?;
+        self.save_quote(id, quote).await?;
+        self.transition(id, OrderState::Quoted, then, serde_json::json!({}))
+            .await
+    }
     /// Must be durable before any send. Transitions SIGNING -> SIGNED atomically.
     async fn save_signed(&self, id: Uuid, signed: &SignedRecord) -> Result<(), StoreError>;
     async fn reject(&self, id: Uuid, from: OrderState, reason: &str) -> Result<(), StoreError>;

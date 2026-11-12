@@ -10,6 +10,8 @@ Status labels: **implemented/tested**, **implemented/untested**, **gated**, **no
 | Order state machine + journal | implemented/tested | 13 states; DB trigger mirrors the table (verified on Postgres) |
 | Idempotent order creation | implemented/tested | MemStore and Postgres (20 concurrent creates -> 1 row) |
 | Sign-once, same-bytes fan-out, rebroadcast, block-height expiry | implemented/tested | mock chain + localnet |
+| Sent tx observed even if the SUBMITTED write fails; reservation released when nothing was forwarded | implemented, **not test-covered** | reviewed; no failing-store harness yet. Found by the Postgres pool-overcommit benchmark |
+| Async pre-sign commits (`synchronous_commit=off` before SIGNED) | implemented/tested | commit modes asserted on Postgres; crash-loss window argued in DATABASE.md, crash itself not simulated |
 | Restart reconciliation | implemented/tested (mock) | recovered orders are observed, never rebroadcast |
 | Pump bonding-curve buy/sell (v3) | implemented/tested on localnet | real `pump.so`; **no devnet/mainnet fill yet** |
 | PumpSwap (post-migration AMM) | not implemented | migrated coins are refused (`Unsupported`) |
@@ -54,7 +56,7 @@ Status labels: **implemented/tested**, **implemented/untested**, **gated**, **no
 - `bincode 1.x` unmaintained (Solana wire format dependency).
 
 ## Measurement gaps
-See `docs/BENCHMARKS.md` "NOT MEASURED": no mainnet landing data, no sender comparison, no GCP region data, no Postgres latency, no Telegram end-to-end latency.
+See `docs/BENCHMARKS.md` "NOT MEASURED": no mainnet landing data, no sender comparison, no GCP region data, no Telegram end-to-end latency. Postgres latency is measured only on WSL2 on the dev desktop (BENCHMARKS.md 2b); above ~10 concurrent orders it exceeds the 15 ms p99 target.
 
 ## Environment notes
 - Agave 4.2 `solana-test-validator` cannot create a ledger on native Windows ("Access is denied" unpacking genesis); use WSL2/Linux (`scripts/localnet-wsl.sh`).

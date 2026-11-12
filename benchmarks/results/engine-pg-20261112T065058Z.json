@@ -1,0 +1,65 @@
+{
+  "env": {
+    "arch": "x86_64",
+    "cpus": 20,
+    "generated_at": "2026-11-12T06:50:58.965017700+00:00",
+    "host": "ANSHITRAJ-PC",
+    "os": "windows",
+    "profile": "release"
+  },
+  "kind": "engine_warm_path",
+  "levels": [
+    {
+      "concurrency": 10,
+      "create_order_us": {
+        "max": 21743,
+        "mean": 1184,
+        "min": 682,
+        "n": 2000,
+        "p50": 1110,
+        "p90": 1401,
+        "p95": 1535,
+        "p99": 2073,
+        "unit": "us"
+      },
+      "intent_to_send_start_us": {
+        "max": 39487,
+        "mean": 5299,
+        "min": 3538,
+        "n": 2000,
+        "p50": 5151,
+        "p90": 5991,
+        "p95": 6363,
+        "p99": 7883,
+        "unit": "us"
+      },
+      "intent_to_signed_us": {
+        "max": 26047,
+        "mean": 2544,
+        "min": 1654,
+        "n": 2000,
+        "p50": 2453,
+        "p90": 2979,
+        "p95": 3179,
+        "p99": 4099,
+        "unit": "us"
+      },
+      "orders": 2000,
+      "request_to_send_start_us": {
+        "max": 45727,
+        "mean": 6483,
+        "min": 4296,
+        "n": 2000,
+        "p50": 6271,
+        "p90": 7171,
+        "p95": 7651,
+        "p99": 9551,
+        "unit": "us"
+      },
+      "submitted": 2000,
+      "wall_ms": 2333
+    }
+  ],
+  "note": "Real Engine, cached Pump state (fixture), cached balances, ManagedLocal signer, MOCK sender. Excludes RPC and KMS.",
+  "store": "PostgreSQL: pre-sign writes synchronous_commit=off, SIGNED and later durable (fsync); DATABASE_MAX_CONNECTIONS=16 DATABASE_PRESIGN_MAX_CONNECTIONS=8"
+}

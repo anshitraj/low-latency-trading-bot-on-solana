@@ -19,7 +19,8 @@ durable idempotent state machine), Pump bonding-curve trading via the official
 ## Measured (this host, see [docs/BENCHMARKS.md](docs/BENCHMARKS.md))
 - Offline quote→build→guard→sign→serialize: **p50 139 µs, p99 316 µs**.
 - Engine intent→signed (in-memory store, cached state): **p50 203 µs / p99 459 µs** (1 wallet), p99 2.1 ms at 100 concurrent wallets.
-- Localnet real `pump.so`: 20/20 FINALIZED, 85% landed within 1 slot, 100% within 2 (local validator — not mainnet).
+- Engine on PostgreSQL, full request incl. durable SIGNED write (app + DB colocated on Linux, desktop disk): **p50 2.0 ms / p99 3.3–3.9 ms** (1 wallet), p50 3.9–4.3 ms / p99 6.6–8.0 ms (10 wallets); 50–100 concurrent orders miss the 15 ms p99 target.
+- Localnet real `pump.so`: 20/20 FINALIZED, 85% landed within 1 slot, 100% within 2 (local validator — not mainnet). Re-run 2026-11-12: 20/20, 85%/100%.
 - Mainnet / sender comparison / GCP region: **NOT MEASURED**.
 
 ## Quick start (mock mode, no network, no funds)

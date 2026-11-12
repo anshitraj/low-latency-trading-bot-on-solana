@@ -60,3 +60,37 @@ TEST_DATABASE_URL=postgres://trader:trader@127.0.0.1:5433/trader cargo test -p t
 scripts/postgres-wsl.sh reset-e2e && E2E_DATABASE_URL=postgres://trader:trader@127.0.0.1:5433/trader_e2e pnpm exec playwright test   # 16 passed (x2)
 trader-bench engine --iterations 2000 --concurrency 1,10,50,100 --database-url postgres://trader:trader@127.0.0.1:5433/trader_bench    # BENCHMARKS.md 2b
 ```
+
+## 2026-11-12 — session 1, part 3 (Postgres hot-path latency)
+Owner asked to cut DB round trips, then to check speed properly.
+
+Done:
+- Pre-sign DB round trips 5 → 2: single-CTE create, plpgsql `order_quote_and_advance` (migration 0002), CTE transitions / SIGNED / reject, one-statement batched send attempts, one-query daily usage.
+- Second pool with `synchronous_commit=off` for pre-sign writes; SIGNED and later stay durable (safety argument in DATABASE.md). `DATABASE_ASYNC_PRESIGN_COMMITS=false` disables it.
+- Pools clamped to server `max_connections` − 10; new `DATABASE_PRESIGN_MAX_CONNECTIONS`.
+- Engine: a sent transaction is always handed to the observer (from SIGNED if the SUBMITTED write fails); reservation released when no sender forwarded.
+
+Bugs found by the benchmark (and fixed):
+- 2 × 64 pool connections > Postgres `max_connections=100` → connection opens failed under load; 16 orders rejected "pool timed out"; 10 sent orders left in SIGNED because the SUBMITTED write failed and the engine then skipped the observer. Fixed by the clamp + always-observe change. Not covered by an automated test yet (no failing-store harness).
+
+Measured (BENCHMARKS.md 2b, validator stopped, 4 repeat runs):
+- 1 wallet: accepted→signed p50 1.5 ms (was 5.3), p99 2.3–2.8 ms; full request incl. durable SIGNED p50 3.3–4.0 ms, p99 5–20 ms.
+- 10 / 50 / 100 wallets with pools sized to load (48+32): request p50 6 / 19 / 38 ms.
+- Colocated on Linux (bench + Postgres in one VM, BENCHMARKS.md 2c): 1 wallet request p50 2.0–2.1 ms, p99 3.3–3.9 ms; 10 wallets p50 3.9–4.3 ms, p99 6.6–8.0 ms (2 of 3 runs; the third was 2–4× slower from disk fsync swings).
+- In-memory store: 0.20–0.51 ms p50 (engine CPU floor).
+- Real Pump bytecode on localnet: 20/20 FINALIZED and verified; intent→signed p50 2.0 ms.
+- Environment: WSL localhost relay adds ~0.16 ms per round trip and occasional multi-second stalls (pgbench through the relay: 5 s window with 6.4 ms avg, 20 ms stddev; one engine run aborted on a 10 s pool-acquire timeout; one Playwright-on-Postgres test failed once, passed on rerun).
+
+Commands run:
+```
+cargo fmt --all --check; cargo clippy --workspace --all-targets -- -D warnings   # pass
+cargo test --workspace                                                            # 113 passed, 0 failed
+TEST_DATABASE_URL=postgres://trader:trader@127.0.0.1:5433/trader cargo test -p trader-api --test pg   # 5 passed
+trader-bench engine --iterations 2000 --concurrency 1,10,50,100 --database-url ...trader_bench?sslmode=disable   # 4 runs
+DATABASE_MAX_CONNECTIONS=48 DATABASE_PRESIGN_MAX_CONNECTIONS=32 trader-bench engine ... --concurrency 10,50,100   # 2 runs
+trader-cli smoke-pump --mint <MINT> --iterations 10 --report benchmarks/results/localnet-pump-smoke-v2.json        # 20/20
+pnpm exec playwright test                                    # 16 passed (memory store)
+E2E_DATABASE_URL=...trader_e2e pnpm exec playwright test     # 15 passed, 1 failed once; isolated rerun 2/2; next full run 16/16
+```
+
+Not claimed: anything about GMGN/BullX or other bots (no comparable data); mainnet landing; cloud Postgres latency.

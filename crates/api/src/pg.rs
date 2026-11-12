@@ -23,7 +23,18 @@ use trader_wallets::{SealedKey, SignerKind};
 use uuid::Uuid;
 
 pub struct PgStore {
+    /// Fully durable pool (`synchronous_commit` server default, normally on).
+    /// Used for every write that can matter after a crash: SIGNED (must be
+    /// durable before any send), all post-send transitions, fills, positions,
+    /// rejections, app data.
     pub pool: PgPool,
+    /// Pre-sign pool with `synchronous_commit = off`: only CREATED and
+    /// QUOTED/claim writes. They are visible immediately but their WAL flush is
+    /// deferred. Safe because WAL is flushed in order: the durable SIGNED commit
+    /// (which happens after them) flushes them too, so a crash can only lose
+    /// pre-sign rows of orders that were never signed — nothing could have been
+    /// sent. Disable with `DATABASE_ASYNC_PRESIGN_COMMITS=false`.
+    pub presign: PgPool,
     network: Network,
 }
 
@@ -77,19 +88,81 @@ impl PgStore {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(d)
         };
-        let pool = PgPoolOptions::new()
-            .max_connections(num("DATABASE_MAX_CONNECTIONS", 16) as u32)
-            .min_connections(num("DATABASE_MIN_CONNECTIONS", 4) as u32)
-            .acquire_timeout(std::time::Duration::from_secs(num(
-                "DATABASE_ACQUIRE_TIMEOUT_SECS",
-                10,
-            )))
-            .idle_timeout(None)
-            .test_before_acquire(false)
-            .connect(url)
-            .await?;
+        let async_presign =
+            std::env::var("DATABASE_ASYNC_PRESIGN_COMMITS").as_deref() != Ok("false");
+        // Size both pools to fit the server's max_connections (minus headroom
+        // for migrations/admin/other clients). Exceeding it makes connection
+        // opens fail under load (observed: pool timeouts at 2 x 64 > 100).
+        let probe = PgPoolOptions::new().max_connections(1).connect(url).await?;
+        let server_max: u32 = sqlx::query_scalar::<_, String>("SHOW max_connections")
+            .fetch_one(&probe)
+            .await?
+            .parse()
+            .unwrap_or(100);
+        probe.close().await;
+        let budget = server_max.saturating_sub(10).max(4);
+        let want_main = num("DATABASE_MAX_CONNECTIONS", 16).max(1) as u32;
+        let want_pre = if async_presign {
+            num(
+                "DATABASE_PRESIGN_MAX_CONNECTIONS",
+                (want_main / 2).max(2) as u64,
+            )
+            .max(1) as u32
+        } else {
+            0
+        };
+        let (main_max, pre_max) = if want_main + want_pre > budget {
+            let main = (budget * want_main / (want_main + want_pre)).max(2);
+            let pre = if async_presign {
+                budget.saturating_sub(main).max(1)
+            } else {
+                0
+            };
+            tracing::warn!(
+                server_max,
+                want_main,
+                want_pre,
+                main,
+                pre,
+                "database pools clamped to fit max_connections"
+            );
+            (main, pre)
+        } else {
+            (want_main, want_pre)
+        };
+        let min_conn = num("DATABASE_MIN_CONNECTIONS", 4) as u32;
+        let opts = |max: u32| {
+            PgPoolOptions::new()
+                .max_connections(max)
+                .min_connections(min_conn.min(max))
+                .acquire_timeout(std::time::Duration::from_secs(num(
+                    "DATABASE_ACQUIRE_TIMEOUT_SECS",
+                    10,
+                )))
+                .idle_timeout(None)
+                .test_before_acquire(false)
+        };
+        let pool = opts(main_max).connect(url).await?;
         sqlx::migrate!("../../migrations").run(&pool).await?;
-        Ok(Self { pool, network })
+        let presign = if async_presign {
+            opts(pre_max)
+                .after_connect(|conn, _meta| {
+                    Box::pin(async move {
+                        use sqlx::Executor;
+                        conn.execute("SET synchronous_commit = off").await?;
+                        Ok(())
+                    })
+                })
+                .connect(url)
+                .await?
+        } else {
+            pool.clone()
+        };
+        Ok(Self {
+            pool,
+            presign,
+            network,
+        })
     }
 
     fn row_to_order(r: &PgRow) -> Result<Order, StoreError> {
@@ -115,24 +188,6 @@ impl PgStore {
         })
     }
 
-    async fn insert_event(
-        tx: &mut sqlx::PgConnection,
-        id: Uuid,
-        from: Option<OrderState>,
-        to: OrderState,
-        detail: serde_json::Value,
-    ) -> Result<(), StoreError> {
-        sqlx::query("INSERT INTO order_events (order_id, from_state, to_state, detail) VALUES ($1, $2, $3, $4)")
-            .bind(id)
-            .bind(from.map(|s| s.as_str()))
-            .bind(to.as_str())
-            .bind(Json(detail))
-            .execute(tx)
-            .await
-            .map_err(be)?;
-        Ok(())
-    }
-
     async fn current_state(&self, id: Uuid) -> Result<OrderState, StoreError> {
         let s: Option<String> = sqlx::query_scalar("SELECT state FROM orders WHERE id = $1")
             .bind(id)
@@ -155,19 +210,46 @@ impl OrderStore for PgStore {
                 "intent network does not match store network".into(),
             ));
         }
-        let mut tx = self.pool.begin().await.map_err(be)?;
-        let ins = sqlx::query("INSERT INTO trade_intents (id, user_id, wallet_id, network, idempotency_key, intent) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (user_id, idempotency_key) DO NOTHING")
-            .bind(intent.id)
-            .bind(intent.user_id)
-            .bind(intent.wallet_id)
-            .bind(intent.network.as_str())
-            .bind(&intent.idempotency_key)
-            .bind(Json(intent))
-            .execute(&mut *tx)
-            .await
-            .map_err(be)?;
-        if ins.rows_affected() == 0 {
-            tx.rollback().await.ok();
+        let buy = match intent.amount {
+            AmountSpec::ExactSolIn { lamports } => lamports.0 as i64,
+            _ => 0,
+        };
+        // Postgres stores microseconds; truncate so the locally built Order
+        // equals what a later read returns.
+        let now = chrono::SubsecRound::trunc_subsecs(chrono::Utc::now(), 6);
+        // One round trip: the three inserts run in a single atomic statement.
+        // ON CONFLICT DO NOTHING makes duplicates insert nothing (count = 0).
+        let created: i64 = sqlx::query_scalar(
+            "WITH i AS (
+                INSERT INTO trade_intents (id, user_id, wallet_id, network, idempotency_key, intent, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                ON CONFLICT (user_id, idempotency_key) DO NOTHING
+                RETURNING id),
+             o AS (
+                INSERT INTO orders (id, user_id, wallet_id, wallet_pubkey, network, side, mint, buy_lamports, state, created_at, updated_at)
+                SELECT id, $2, $3, $8, $4, $9, $10, $11, 'CREATED', $7, $7 FROM i
+                RETURNING id),
+             e AS (
+                INSERT INTO order_events (order_id, from_state, to_state, detail, at)
+                SELECT id, NULL, 'CREATED', '{}'::jsonb, $7 FROM o
+                RETURNING order_id)
+             SELECT COUNT(*) FROM e",
+        )
+        .bind(intent.id)
+        .bind(intent.user_id)
+        .bind(intent.wallet_id)
+        .bind(intent.network.as_str())
+        .bind(&intent.idempotency_key)
+        .bind(Json(intent))
+        .bind(now)
+        .bind(wallet.to_string())
+        .bind(intent.side.as_str())
+        .bind(intent.mint.to_string())
+        .bind(buy)
+        .fetch_one(&self.presign)
+        .await
+        .map_err(be)?;
+        if created == 0 {
             let id: Uuid = sqlx::query_scalar(
                 "SELECT id FROM trade_intents WHERE user_id = $1 AND idempotency_key = $2",
             )
@@ -178,32 +260,21 @@ impl OrderStore for PgStore {
             .map_err(be)?;
             return Ok(CreateOutcome::Existing(self.get_order(id).await?));
         }
-        let buy = match intent.amount {
-            AmountSpec::ExactSolIn { lamports } => lamports.0 as i64,
-            _ => 0,
-        };
-        sqlx::query("INSERT INTO orders (id, user_id, wallet_id, wallet_pubkey, network, side, mint, buy_lamports, state) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'CREATED')")
-            .bind(intent.id)
-            .bind(intent.user_id)
-            .bind(intent.wallet_id)
-            .bind(wallet.to_string())
-            .bind(intent.network.as_str())
-            .bind(intent.side.as_str())
-            .bind(intent.mint.to_string())
-            .bind(buy)
-            .execute(&mut *tx)
-            .await
-            .map_err(be)?;
-        Self::insert_event(
-            &mut tx,
-            intent.id,
-            None,
-            OrderState::Created,
-            serde_json::json!({}),
-        )
-        .await?;
-        tx.commit().await.map_err(be)?;
-        Ok(CreateOutcome::Created(self.get_order(intent.id).await?))
+        // Built locally: no read-back round trip.
+        Ok(CreateOutcome::Created(Order {
+            id: intent.id,
+            user_id: intent.user_id,
+            wallet_id: intent.wallet_id,
+            wallet,
+            intent: intent.clone(),
+            state: OrderState::Created,
+            quote: None,
+            signed: None,
+            fill: None,
+            reject_reason: None,
+            created_at: now,
+            updated_at: now,
+        }))
     }
 
     async fn get_order(&self, id: Uuid) -> Result<Order, StoreError> {
@@ -245,25 +316,54 @@ impl OrderStore for PgStore {
         detail: serde_json::Value,
     ) -> Result<(), StoreError> {
         from.transition(to)?;
-        let mut tx = self.pool.begin().await.map_err(be)?;
+        // CAS update + journal row in one atomic statement (one round trip).
         let r = sqlx::query(
-            "UPDATE orders SET state = $3, updated_at = now() WHERE id = $1 AND state = $2",
+            "WITH u AS (
+                UPDATE orders SET state = $3, updated_at = now()
+                WHERE id = $1 AND state = $2 RETURNING id)
+             INSERT INTO order_events (order_id, from_state, to_state, detail)
+             SELECT id, $2, $3, $4 FROM u",
         )
         .bind(id)
         .bind(from.as_str())
         .bind(to.as_str())
-        .execute(&mut *tx)
+        .bind(Json(detail))
+        .execute(&self.pool)
         .await
         .map_err(be)?;
         if r.rows_affected() == 0 {
-            tx.rollback().await.ok();
             return Err(StoreError::Conflict {
                 expected: from,
                 found: self.current_state(id).await?,
             });
         }
-        Self::insert_event(&mut tx, id, Some(from), to, detail).await?;
-        tx.commit().await.map_err(be)
+        Ok(())
+    }
+
+    async fn quote_and_advance(
+        &self,
+        id: Uuid,
+        quote: &Quote,
+        detail: serde_json::Value,
+        then: OrderState,
+    ) -> Result<(), StoreError> {
+        OrderState::Quoted.transition(then)?;
+        let res: String = sqlx::query_scalar("SELECT order_quote_and_advance($1, $2, $3, $4)")
+            .bind(id)
+            .bind(Json(quote))
+            .bind(Json(detail))
+            .bind(then.as_str())
+            .fetch_one(&self.presign)
+            .await
+            .map_err(be)?;
+        match res.as_str() {
+            "OK" => Ok(()),
+            "NOT_FOUND" => Err(StoreError::NotFound),
+            other => Err(StoreError::Conflict {
+                expected: OrderState::Created,
+                found: OrderState::from_str(other).map_err(be)?,
+            }),
+        }
     }
 
     async fn save_quote(&self, id: Uuid, quote: &Quote) -> Result<(), StoreError> {
@@ -277,74 +377,95 @@ impl OrderStore for PgStore {
     }
 
     async fn save_signed(&self, id: Uuid, s: &SignedRecord) -> Result<(), StoreError> {
-        let mut tx = self.pool.begin().await.map_err(be)?;
-        let r = sqlx::query("UPDATE orders SET state = 'SIGNED', updated_at = now() WHERE id = $1 AND state = 'SIGNING'").bind(id).execute(&mut *tx).await.map_err(be)?;
-        if r.rows_affected() == 0 {
-            tx.rollback().await.ok();
-            return Err(StoreError::Conflict {
+        // SIGNING -> SIGNED, the transactions row (unique signature) and the
+        // journal row in ONE atomic statement: either all persist or none.
+        let res = sqlx::query_scalar::<_, i64>(
+            "WITH u AS (
+                UPDATE orders SET state = 'SIGNED', updated_at = now()
+                WHERE id = $1 AND state = 'SIGNING' RETURNING id),
+             t AS (
+                INSERT INTO transactions (signature, order_id, network, signed, last_valid_block_height, tip_lamports)
+                SELECT $2, id, $3, $4, $5, $6 FROM u RETURNING order_id),
+             e AS (
+                INSERT INTO order_events (order_id, from_state, to_state, detail)
+                SELECT order_id, 'SIGNING', 'SIGNED', $7 FROM t RETURNING order_id)
+             SELECT COUNT(*) FROM e",
+        )
+        .bind(id)
+        .bind(&s.signature)
+        .bind(self.network.as_str())
+        .bind(Json(s))
+        .bind(s.last_valid_block_height as i64)
+        .bind(s.tip_lamports as i64)
+        .bind(Json(serde_json::json!({"signature": s.signature, "last_valid_block_height": s.last_valid_block_height})))
+        .fetch_one(&self.pool)
+        .await;
+        match res {
+            Ok(1) => Ok(()),
+            Ok(_) => Err(StoreError::Conflict {
                 expected: OrderState::Signing,
                 found: self.current_state(id).await?,
-            });
+            }),
+            Err(e) if is_unique_violation(&e) => Err(StoreError::DuplicateSignature),
+            Err(e) => Err(be(e)),
         }
-        let ins = sqlx::query("INSERT INTO transactions (signature, order_id, network, signed, last_valid_block_height, tip_lamports) VALUES ($1,$2,$3,$4,$5,$6)")
-            .bind(&s.signature)
-            .bind(id)
-            .bind(self.network.as_str())
-            .bind(Json(s))
-            .bind(s.last_valid_block_height as i64)
-            .bind(s.tip_lamports as i64)
-            .execute(&mut *tx)
-            .await;
-        if let Err(e) = ins {
-            tx.rollback().await.ok();
-            return Err(if is_unique_violation(&e) {
-                StoreError::DuplicateSignature
-            } else {
-                be(e)
-            });
-        }
-        Self::insert_event(&mut tx, id, Some(OrderState::Signing), OrderState::Signed, serde_json::json!({"signature": s.signature, "last_valid_block_height": s.last_valid_block_height})).await?;
-        tx.commit().await.map_err(be)
     }
 
     async fn reject(&self, id: Uuid, from: OrderState, reason: &str) -> Result<(), StoreError> {
         from.transition(OrderState::Rejected)?;
-        let mut tx = self.pool.begin().await.map_err(be)?;
-        let r = sqlx::query("UPDATE orders SET state = 'REJECTED', reject_reason = $3, updated_at = now() WHERE id = $1 AND state = $2").bind(id).bind(from.as_str()).bind(reason).execute(&mut *tx).await.map_err(be)?;
+        let r = sqlx::query(
+            "WITH u AS (
+                UPDATE orders SET state = 'REJECTED', reject_reason = $3, updated_at = now()
+                WHERE id = $1 AND state = $2 RETURNING id)
+             INSERT INTO order_events (order_id, from_state, to_state, detail)
+             SELECT id, $2, 'REJECTED', $4 FROM u",
+        )
+        .bind(id)
+        .bind(from.as_str())
+        .bind(reason)
+        .bind(Json(serde_json::json!({"reason": reason})))
+        .execute(&self.pool)
+        .await
+        .map_err(be)?;
         if r.rows_affected() == 0 {
-            tx.rollback().await.ok();
             return Err(StoreError::Conflict {
                 expected: from,
                 found: self.current_state(id).await?,
             });
         }
-        Self::insert_event(
-            &mut tx,
-            id,
-            Some(from),
-            OrderState::Rejected,
-            serde_json::json!({"reason": reason}),
-        )
-        .await?;
-        tx.commit().await.map_err(be)
+        Ok(())
     }
 
     async fn record_attempts(&self, recs: &[AttemptRecord]) -> Result<(), StoreError> {
-        for a in recs {
-            sqlx::query("INSERT INTO sender_attempts (order_id, signature, sender, endpoint, outcome, detail, latency_us, rebroadcast, wall_start) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)")
-                .bind(a.order_id)
-                .bind(&a.signature)
-                .bind(a.attempt.sender.as_str())
-                .bind(&a.attempt.endpoint)
-                .bind(a.attempt.outcome.code())
-                .bind(Json(&a.attempt.outcome))
-                .bind(a.attempt.latency_us as i64)
-                .bind(a.rebroadcast)
-                .bind(a.attempt.wall_start)
-                .execute(&self.pool)
-                .await
-                .map_err(be)?;
+        if recs.is_empty() {
+            return Ok(());
         }
+        let rows: Vec<serde_json::Value> = recs
+            .iter()
+            .map(|a| {
+                serde_json::json!({
+                    "order_id": a.order_id,
+                    "signature": a.signature,
+                    "sender": a.attempt.sender.as_str(),
+                    "endpoint": a.attempt.endpoint,
+                    "outcome": a.attempt.outcome.code(),
+                    "detail": a.attempt.outcome,
+                    "latency_us": a.attempt.latency_us,
+                    "rebroadcast": a.rebroadcast,
+                    "wall_start": a.attempt.wall_start,
+                })
+            })
+            .collect();
+        sqlx::query(
+            "INSERT INTO sender_attempts (order_id, signature, sender, endpoint, outcome, detail, latency_us, rebroadcast, wall_start)
+             SELECT (a->>'order_id')::uuid, a->>'signature', a->>'sender', a->>'endpoint', a->>'outcome',
+                    a->'detail', (a->>'latency_us')::bigint, (a->>'rebroadcast')::boolean, (a->>'wall_start')::timestamptz
+             FROM jsonb_array_elements($1) AS a",
+        )
+        .bind(Json(serde_json::Value::Array(rows)))
+        .execute(&self.pool)
+        .await
+        .map_err(be)?;
         Ok(())
     }
 
@@ -372,17 +493,27 @@ impl OrderStore for PgStore {
     }
 
     async fn usage_today(&self, wallet_id: Uuid) -> Result<UsageSnapshot, StoreError> {
-        let r = sqlx::query("SELECT COUNT(*)::bigint AS n, COALESCE(SUM(buy_lamports), 0)::bigint AS t FROM orders WHERE wallet_id = $1 AND state <> 'REJECTED' AND created_at >= date_trunc('day', now() AT TIME ZONE 'utc') AT TIME ZONE 'utc'")
-            .bind(wallet_id)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(be)?;
-        // Approximation (documented): realized losses on positions touched today.
-        let loss: String = sqlx::query_scalar("SELECT COALESCE(-SUM(LEAST(realized_pnl, 0)), 0)::text FROM positions WHERE wallet_id = $1 AND updated_at >= date_trunc('day', now() AT TIME ZONE 'utc') AT TIME ZONE 'utc'")
-            .bind(wallet_id)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(be)?;
+        let day_start = chrono::Utc::now()
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .expect("midnight")
+            .and_utc();
+        // One round trip. Loss is an approximation (documented): realized
+        // losses on positions touched today.
+        let r = sqlx::query(
+            "SELECT COUNT(*)::bigint AS n,
+                    COALESCE(SUM(buy_lamports), 0)::bigint AS t,
+                    (SELECT COALESCE(-SUM(LEAST(realized_pnl, 0)), 0)::text
+                       FROM positions WHERE wallet_id = $1 AND updated_at >= $2) AS loss
+             FROM orders
+             WHERE wallet_id = $1 AND state <> 'REJECTED' AND created_at >= $2",
+        )
+        .bind(wallet_id)
+        .bind(day_start)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(be)?;
+        let loss: String = r.try_get("loss").map_err(be)?;
         Ok(UsageSnapshot {
             trades_today: r.try_get::<i64, _>("n").map_err(be)? as u32,
             turnover_today: trader_domain::Lamports(r.try_get::<i64, _>("t").map_err(be)? as u64),

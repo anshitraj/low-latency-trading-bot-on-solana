@@ -21,13 +21,13 @@
 |---|---|
 | `cargo fmt --check` | pass |
 | `cargo clippy -D warnings` (all targets) | pass |
-| `cargo test --workspace` | **108 passed, 0 failed** (the 3 PgStore tests skip without `TEST_DATABASE_URL`; run separately, below) |
-| PgStore tests on PostgreSQL 18.6 (WSL2) | **3/3 passed**; then **89/89 consecutive suite runs** over 100 s, 0 failures |
+| `cargo test --workspace` | **113 passed, 0 failed** (the 5 PgStore tests skip without `TEST_DATABASE_URL`; run separately, below) |
+| PgStore tests on PostgreSQL 18.6 (WSL2) | **5/5 passed** (2026-11-12, incl. hot-path CAS race: 10 concurrent claims → 1 winner, and pool commit modes); earlier 3-test suite: 89/89 consecutive runs over 100 s |
 | Playwright (desktop Chrome + Pixel 7) | **16 passed, 0 failed** |
 | `cargo audit` | pass with 4 documented ignores (see KNOWN_LIMITATIONS) |
 | secret scan | clean |
 | localnet Pump smoke (real `pump.so`) | 20/20 trades FINALIZED and independently verified |
-| Playwright with Postgres as the store | **16/16 passed** in 2 consecutive runs after the WSL keepalive fix (before it, runs longer than ~60 s failed when WSL stopped the distro) |
+| Playwright with Postgres as the store | **16/16 passed** in 2 consecutive runs after the WSL keepalive fix (before it, runs longer than ~60 s failed when WSL stopped the distro). 2026-11-12 after the hot-path changes: 15 passed, 1 failed (`cancel in confirmation sheet never signs`, desktop); passed on isolated rerun, whose server log showed a 2.7 s INSERT and a 4.5 s connection acquire (WSL stall, see BENCHMARKS.md 2b). A following full run: 16/16. Treat as flaky in this environment |
 | `terraform validate/plan` | **NOT RUN** (terraform not installed; no GCP project provided) |
 | devnet / mainnet trades | **NOT RUN** (devnet: faucet limits; mainnet: not authorized) |
 

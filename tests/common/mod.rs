@@ -227,7 +227,9 @@ impl Harness {
         let start = std::time::Instant::now();
         loop {
             let o = self.store.get_order(id).await.unwrap();
-            if o.state.is_terminal() && (o.state != OrderState::Finalized || o.fill.is_some()) {
+            // Landed terminal states (FINALIZED / FAILED_ONCHAIN) are journaled
+            // before getTransaction is decoded; wait for the fill too.
+            if o.state.is_terminal() && (!o.state.has_landed() || o.fill.is_some()) {
                 return o;
             }
             if start.elapsed() > timeout {

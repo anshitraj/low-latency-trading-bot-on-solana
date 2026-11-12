@@ -130,7 +130,7 @@ pub struct Engine {
     pub updates: broadcast::Sender<OrderUpdate>,
     prepared: Mutex<HashMap<Uuid, Prepared>>,
     traces: Mutex<HashMap<Uuid, LatencyTrace>>,
-    queue: Mutex<Option<mpsc::Sender<Uuid>>>,
+    queue: Mutex<Option<mpsc::Sender<Order>>>,
     /// (wallet, blockhash) -> (next CU offset, first use).
     recent_msgs: Mutex<HashMap<(Pubkey, solana_hash_compat::Hash), (u32, Instant)>>,
 }
@@ -186,7 +186,7 @@ impl Engine {
 
     /// Start N workers consuming the bounded order queue.
     pub fn spawn_workers(self: &Arc<Self>) {
-        let (tx, rx) = mpsc::channel::<Uuid>(self.cfg.queue_capacity);
+        let (tx, rx) = mpsc::channel::<Order>(self.cfg.queue_capacity);
         *self.queue.lock() = Some(tx);
         let rx = Arc::new(tokio::sync::Mutex::new(rx));
         for _ in 0..self.cfg.workers.max(1) {
@@ -195,8 +195,9 @@ impl Engine {
                 loop {
                     let next = { rx.lock().await.recv().await };
                     match next {
-                        Some(id) => {
-                            if let Err(e) = me.process(id).await {
+                        Some(o) => {
+                            let id = o.id;
+                            if let Err(e) = me.process_order(o).await {
                                 tracing::warn!(order_id = %id, error = %e, "order processing error");
                             }
                         }
@@ -533,11 +534,11 @@ impl Engine {
                 self.traces.lock().insert(o.id, t);
                 match permit {
                     Some(p) => {
-                        p.send(o.id);
+                        p.send(o.clone());
                     }
                     None => {
                         // No worker pool (tests): process inline.
-                        let _ = self.process(o.id).await;
+                        let _ = self.process_order(o.clone()).await;
                     }
                 }
                 Ok(o)
@@ -545,12 +546,20 @@ impl Engine {
         }
     }
 
-    /// Advance a CREATED order to QUOTED and then either AWAITING_AUTH or execution.
+    /// Advance a CREATED order (re-read from the store).
     pub async fn process(&self, id: Uuid) -> Result<(), EngineError> {
         let o = self.store.get_order(id).await?;
+        self.process_order(o).await
+    }
+
+    /// Advance a CREATED order to QUOTED and then either AWAITING_AUTH or
+    /// execution. Hot path DB round trips (Postgres): daily usage (1),
+    /// quote + claim SIGNING (1), durable SIGNED (1).
+    pub async fn process_order(&self, mut o: Order) -> Result<(), EngineError> {
         if o.state != OrderState::Created {
             return Ok(()); // another worker / duplicate delivery
         }
+        let id = o.id;
         let policy = match self.policy_and_usage(&o.intent).await {
             Ok(p) => p,
             Err(e) => return self.reject(&o, OrderState::Created, &e.to_string()).await,
@@ -560,20 +569,24 @@ impl Engine {
             Err(e) => return self.reject(&o, OrderState::Created, &e.to_string()).await,
         };
         self.mark(id, Stage::QuoteReady);
-        self.store.save_quote(id, &quote).await?;
-        self.store
-            .transition(id, OrderState::Created, OrderState::Quoted, serde_json::json!({"quote_id": quote.id, "expected_out": quote.expected_out.to_string(), "min_out": quote.min_out.to_string()}))
-            .await?;
-        self.prepared.lock().insert(id, prep);
-        if o.intent.requires_approval {
-            self.store
-                .transition(
-                    id,
-                    OrderState::Quoted,
-                    OrderState::AwaitingAuth,
-                    serde_json::json!({}),
-                )
-                .await?;
+        let approval = o.intent.requires_approval;
+        let then = if approval {
+            OrderState::AwaitingAuth
+        } else {
+            // Claim the order for signing in the same atomic write as the
+            // quote: only one worker can ever hold SIGNING for an order.
+            OrderState::Signing
+        };
+        let detail = serde_json::json!({"quote_id": quote.id, "expected_out": quote.expected_out.to_string(), "min_out": quote.min_out.to_string()});
+        match self.store.quote_and_advance(id, &quote, detail, then).await {
+            Ok(()) => {}
+            Err(StoreError::Conflict { .. }) => return Ok(()), // someone else advanced it
+            Err(e) => return Err(e.into()),
+        }
+        o.quote = Some(quote);
+        o.state = then;
+        if approval {
+            self.prepared.lock().insert(id, prep);
             self.emit(
                 &o,
                 OrderState::AwaitingAuth,
@@ -581,18 +594,44 @@ impl Engine {
             );
             return Ok(());
         }
-        self.execute(id, OrderState::Quoted).await
+        self.execute_claimed(o, policy, Some(prep)).await
     }
 
     pub async fn approve(&self, id: Uuid, user_id: Uuid) -> Result<Order, EngineError> {
-        let o = self.store.get_order(id).await?;
+        let mut o = self.store.get_order(id).await?;
         if o.user_id != user_id {
             return Err(EngineError::Forbidden);
         }
         if o.state != OrderState::AwaitingAuth {
             return Ok(o); // idempotent: already approved/cancelled/expired
         }
-        self.execute(id, OrderState::AwaitingAuth).await?;
+        // Claim before signing: of N concurrent approvals exactly one wins.
+        match self
+            .store
+            .transition(
+                id,
+                OrderState::AwaitingAuth,
+                OrderState::Signing,
+                serde_json::json!({}),
+            )
+            .await
+        {
+            Ok(()) => {}
+            Err(StoreError::Conflict { .. }) => return Ok(self.store.get_order(id).await?),
+            Err(e) => return Err(e.into()),
+        }
+        o.state = OrderState::Signing;
+        // Time has passed since quoting: re-read the policy (kill switch).
+        let policy = match self.policies.policy(o.wallet_id).await {
+            Ok(p) => p,
+            Err(e) => {
+                self.reject(&o, OrderState::Signing, &format!("policy unavailable: {e}"))
+                    .await?;
+                return Ok(self.store.get_order(id).await?);
+            }
+        };
+        let prep = self.prepared.lock().remove(&id);
+        self.execute_claimed(o, policy, prep).await?;
         Ok(self.store.get_order(id).await?)
     }
 
@@ -621,34 +660,27 @@ impl Engine {
         Ok(())
     }
 
-    /// Sign once and submit. `from` is QUOTED or AWAITING_AUTH.
-    async fn execute(&self, id: Uuid, from: OrderState) -> Result<(), EngineError> {
-        let o = self.store.get_order(id).await?;
-        if o.state != from {
-            return Ok(());
-        }
+    /// Sign once and submit an order this worker has claimed (state SIGNING).
+    /// No store reads here; any refusal moves SIGNING -> REJECTED (nothing was
+    /// persisted as signed, so nothing could have been sent).
+    async fn execute_claimed(
+        &self,
+        o: Order,
+        policy: WalletPolicy,
+        prep: Option<Prepared>,
+    ) -> Result<(), EngineError> {
+        let id = o.id;
+        let from = OrderState::Signing;
+        debug_assert_eq!(o.state, from);
         let guard_lock = self.locks.lock(&o.wallet).await;
-        // Re-read under lock: a concurrent approve may have won.
-        let o = self.store.get_order(id).await?;
-        if o.state != from {
-            return Ok(());
-        }
-        let policy = match self.policies.policy(o.wallet_id).await {
-            Ok(p) => p,
-            Err(e) => {
-                return self
-                    .reject(&o, from, &format!("policy unavailable: {e}"))
-                    .await
-            }
-        };
-        // Re-check kill switch / lock at signing time (user may have paused since quoting).
+        // Kill switch / operator lock.
         if policy.paused || policy.locked {
             return self
                 .reject(&o, from, &PolicyViolation::Paused.to_string())
                 .await;
         }
         let approved = o.quote.clone();
-        let mut prep = self.prepared.lock().get(&id).cloned();
+        let mut prep = prep;
         let stale_prep = prep
             .as_ref()
             .map(|p| p.at.elapsed() > Duration::from_secs(1))
@@ -722,9 +754,6 @@ impl Engine {
             Ok(s) => s,
             Err(e) => return self.reject(&o, from, &e.to_string()).await,
         };
-        self.store
-            .transition(id, from, OrderState::Signing, serde_json::json!({}))
-            .await?;
         let params = BuildParams {
             network: o.intent.network,
             payer: o.wallet,
@@ -817,14 +846,21 @@ impl Engine {
                     .iter()
                     .map(|a| format!("{}: {:?}", a.sender.as_str(), a.outcome))
                     .collect();
-                self.store
+                // Nothing was forwarded, so funds are free either way: release
+                // the reservation even if recording REJECTED fails (restart
+                // reconciliation then expires the SIGNED row by block height).
+                self.locks.release(&o.wallet, id);
+                if let Err(e) = self
+                    .store
                     .reject(
                         id,
                         OrderState::Signed,
                         &format!("all senders refused: {}", reasons.join("; ")),
                     )
-                    .await?;
-                self.locks.release(&o.wallet, id);
+                    .await
+                {
+                    tracing::error!(order_id = %id, error = %e, "failed to record REJECTED after refused sends");
+                }
                 self.emit(
                     &o2,
                     OrderState::Rejected,
@@ -832,19 +868,33 @@ impl Engine {
                 );
             }
             FanOutVerdict::PossiblyInFlight => {
-                self.store
+                // The transaction may land whatever happens next, so it is ALWAYS
+                // handed to the observer. If recording SUBMITTED fails (DB
+                // overload/outage), the observer starts from SIGNED — SIGNED ->
+                // OBSERVED/CONFIRMED/EXPIRED are legal — and the journal converges.
+                let tracked_state = match self
+                    .store
                     .transition(
                         id,
                         OrderState::Signed,
                         OrderState::Submitted,
                         serde_json::json!({"senders": rec.senders, "attempts": attempts.len()}),
                     )
-                    .await?;
-                self.emit(
-                    &o2,
-                    OrderState::Submitted,
-                    format!("submitted; signature {}", rec.signature),
-                );
+                    .await
+                {
+                    Ok(()) => {
+                        self.emit(
+                            &o2,
+                            OrderState::Submitted,
+                            format!("submitted; signature {}", rec.signature),
+                        );
+                        OrderState::Submitted
+                    }
+                    Err(e) => {
+                        tracing::error!(order_id = %id, error = %e, "sent but SUBMITTED not recorded; observing from SIGNED");
+                        OrderState::Signed
+                    }
+                };
                 let trace = self.traces.lock().get(&id).cloned();
                 self.observer.track(Track {
                     order_id: id,
@@ -857,7 +907,7 @@ impl Engine {
                     wire: Arc::new(signed.wire.clone()),
                     last_valid_block_height: rec.last_valid_block_height,
                     plan: Some(plan),
-                    state: OrderState::Submitted,
+                    state: tracked_state,
                     recovered: false,
                     tip_lamports: rec.tip_lamports,
                     trace,

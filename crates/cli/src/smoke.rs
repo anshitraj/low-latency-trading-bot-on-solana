@@ -66,7 +66,7 @@ async fn wait_terminal(store: &MemStore, id: Uuid, timeout: Duration) -> anyhow:
     let start = std::time::Instant::now();
     loop {
         let o = store.get_order(id).await?;
-        if o.state.is_terminal() && (o.state != OrderState::Finalized || o.fill.is_some()) {
+        if o.state.is_terminal() && (!o.state.has_landed() || o.fill.is_some()) {
             return Ok(o);
         }
         if start.elapsed() > timeout {

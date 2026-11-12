@@ -417,12 +417,18 @@ async fn engine(a: &HashMap<String, String>) {
             requires_approval: false,
             created_at: chrono::Utc::now(),
         };
+        // h: accepted->signed; hs: accepted->send start (includes the durable
+        // SIGNED write); hc: create (idempotent insert) ; ht: whole request
+        // (submit() start -> send start).
         let h = Arc::new(Mutex::new(hist()));
+        let hs = Arc::new(Mutex::new(hist()));
+        let hc = Arc::new(Mutex::new(hist()));
+        let ht = Arc::new(Mutex::new(hist()));
         let start = Instant::now();
         let per = n / c.max(1);
         let mut tasks = vec![];
         for (w, wallet) in wallets.iter().copied().enumerate() {
-            let (e, h) = (e.clone(), h.clone());
+            let (e, h, hs, hc, ht) = (e.clone(), h.clone(), hs.clone(), hc.clone(), ht.clone());
             let intents: Vec<TradeIntent> = (0..per).map(|i| mk(w * per + i, w)).collect();
             tasks.push(tokio::spawn(async move {
                 for it in intents {
@@ -433,6 +439,15 @@ async fn engine(a: &HashMap<String, String>) {
                     if let Some(t) = e.take_trace(o.id) {
                         if let Some(us) = t.between_us(Stage::IntentAccepted, Stage::Signed) {
                             h.lock().record(us.max(1)).unwrap();
+                        }
+                        if let Some(us) = t.between_us(Stage::IntentAccepted, Stage::SendStart) {
+                            hs.lock().record(us.max(1)).unwrap();
+                        }
+                        if let Some(us) = t.us(Stage::IntentAccepted) {
+                            hc.lock().record(us.max(1)).unwrap();
+                        }
+                        if let Some(us) = t.us(Stage::SendStart) {
+                            ht.lock().record(us.max(1)).unwrap();
                         }
                     }
                 }
@@ -456,14 +471,23 @@ async fn engine(a: &HashMap<String, String>) {
                 any.first().and_then(|o| o.reject_reason.clone())
             );
         }
-        let r = json!({"concurrency": c, "orders": per * c.max(1), "submitted": submitted, "wall_ms": wall.as_millis(), "intent_to_signed_us": summary(&h.lock(), "us")});
+        let r = json!({"concurrency": c, "orders": per * c.max(1), "submitted": submitted, "wall_ms": wall.as_millis(),
+            "intent_to_signed_us": summary(&h.lock(), "us"),
+            "intent_to_send_start_us": summary(&hs.lock(), "us"),
+            "create_order_us": summary(&hc.lock(), "us"),
+            "request_to_send_start_us": summary(&ht.lock(), "us")});
         println!("{r}");
         results.push(r);
     }
-    let store_kind = if a.contains_key("database-url") {
-        "PostgreSQL (all order writes incl. durable SIGNED are synchronous)"
-    } else {
-        "MemStore (in-memory)"
+    let async_presign = std::env::var("DATABASE_ASYNC_PRESIGN_COMMITS").as_deref() != Ok("false");
+    let store_kind = match (a.contains_key("database-url"), async_presign) {
+        (false, _) => "MemStore (in-memory)".to_string(),
+        (true, true) => format!(
+            "PostgreSQL: pre-sign writes synchronous_commit=off, SIGNED and later durable (fsync); DATABASE_MAX_CONNECTIONS={} DATABASE_PRESIGN_MAX_CONNECTIONS={}",
+            std::env::var("DATABASE_MAX_CONNECTIONS").unwrap_or_else(|_| "default".into()),
+            std::env::var("DATABASE_PRESIGN_MAX_CONNECTIONS").unwrap_or_else(|_| "default".into())
+        ),
+        (true, false) => "PostgreSQL: every order write durable (synchronous_commit=on)".to_string(),
     };
     let v = json!({"kind": "engine_warm_path", "store": store_kind, "env": env_info(), "note": "Real Engine, cached Pump state (fixture), cached balances, ManagedLocal signer, MOCK sender. Excludes RPC and KMS.", "levels": results});
     save(

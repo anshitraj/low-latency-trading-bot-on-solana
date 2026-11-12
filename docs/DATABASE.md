@@ -14,8 +14,30 @@ as the backing store). Without `DATABASE_URL` the service uses in-memory stores
 | Postgres on the GCP VM | private beta (fastest) | `deploy/gcp/vm/docker-compose.prod.yml`, or `apt install postgresql` on the VM | same host as the engine: no network hop on the synchronous SIGNED write |
 | Supabase | managed alternative / staging | `DATABASE_URL` = **shared pooler, session mode** string (port 5432, IPv4) + `?sslmode=require` | direct connections are IPv6-only (IPv4 is a paid add-on) and GCP's default VPC is IPv4-only; for the **transaction** pooler (6543) append `&statement-cache-capacity=0`; run migrations through session mode; every pre-sign write pays the network round trip; verify current free-plan limits (storage, pausing of inactive projects). Not tried with a real Supabase project. |
 
-Pool settings (env): `DATABASE_MAX_CONNECTIONS` (16), `DATABASE_MIN_CONNECTIONS` (4, kept warm),
-`DATABASE_ACQUIRE_TIMEOUT_SECS` (10); per-acquire liveness ping disabled to save a round trip.
+Pool settings (env): `DATABASE_MAX_CONNECTIONS` (16, durable pool), `DATABASE_PRESIGN_MAX_CONNECTIONS`
+(half of the durable pool, min 2), `DATABASE_MIN_CONNECTIONS` (4 per pool, kept warm),
+`DATABASE_ACQUIRE_TIMEOUT_SECS` (10), `DATABASE_ASYNC_PRESIGN_COMMITS` (true). Both pools are
+clamped at startup to the server's `max_connections` − 10 (a warning is logged). The per-acquire
+liveness ping is disabled to save a round trip. Size the pools to the number of orders you expect
+in flight at once (BENCHMARKS.md 2b: 16+8 queues beyond ~10 concurrent wallets).
+
+### Two pools: async pre-sign commits, durable from SIGNED on
+Writes before signing (intent + order creation, `CREATED→QUOTED→SIGNING`, rejections before
+signing) go through a pool whose sessions run `SET synchronous_commit = off`: they return before
+the WAL fsync. `SIGNED` and everything after it (transactions, send attempts, landing states,
+fills, positions) go through the durable pool. This is safe because nothing has been signed or
+sent before `SIGNED`, and PostgreSQL flushes WAL strictly in order, so a durable `SIGNED` commit
+implies every earlier async commit is on disk. A crash can only lose orders that never reached
+`SIGNED`; the client retry (same idempotency key) recreates them. Set
+`DATABASE_ASYNC_PRESIGN_COMMITS=false` to make every write durable (one pool).
+
+### Hot-path statements (one round trip each)
+- create: one CTE inserts the intent (`ON CONFLICT DO NOTHING`), order and first event.
+- `order_quote_and_advance(id, quote, detail, then)` (migration 0002): CAS `CREATED→QUOTED`, store
+  quote, CAS to `SIGNING`/`AWAITING_AUTH`, two journal rows; returns `OK`, `NOT_FOUND` or the current state.
+- transitions: `WITH u AS (UPDATE … WHERE state = $from RETURNING id) INSERT INTO order_events …`.
+- `SIGNED`: one CTE (order CAS + `transactions` insert + event); unique violation → duplicate signature.
+- send attempts: one `INSERT … SELECT FROM jsonb_array_elements($1)`.
 
 ## Entities
 ```
