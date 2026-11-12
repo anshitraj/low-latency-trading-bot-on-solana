@@ -33,10 +33,6 @@ pub async fn run_notifier(st: AppState) {
         };
         st.metrics
             .inc("order_updates_total", &[("state", u.state.as_str())]);
-        // Observed is transient; skip to reduce noise (confirmed follows quickly).
-        if u.state == OrderState::Observed {
-            continue;
-        }
         let Ok(user) = st.app.get_user(u.user_id).await else {
             continue;
         };
@@ -75,7 +71,13 @@ pub async fn run_notifier(st: AppState) {
             chat_id,
             text,
             buttons,
-            dedupe_key: format!("order:{}:{}", o.id, u.state.as_str()),
+            // Keyed by the user-facing stage, so Observed and Confirmed (both
+            // "executed — awaiting finality") post once: the earliest wins.
+            dedupe_key: format!(
+                "order:{}:{}",
+                o.id,
+                trader_domain::user_status_with_fill(u.state, o.fill.is_some())
+            ),
             attempts: 0,
             next_attempt_at: Utc::now(),
             edit_message_id: if u.state == OrderState::AwaitingAuth {

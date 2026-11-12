@@ -288,7 +288,7 @@ async fn telegram_full_flow_buy_confirm_filled_with_replays_and_spoofing() {
     t.press(attacker, attacker, &confirm).await;
     t.press(user, user, &confirm).await;
     t.press(user, user, &confirm).await;
-    let filled = t.wait_msg(user, "filled (finalized)").await;
+    let filled = t.wait_msg(user, "complete").await;
     assert!(filled["text"].as_str().unwrap().contains("Received"));
     let uid = t.st.app.user_by_telegram(user).await.unwrap().unwrap().id;
     let orders = t.st.orders.list_orders(uid, 10).await.unwrap();

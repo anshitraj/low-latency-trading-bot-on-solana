@@ -21,5 +21,5 @@ pub use money::{Bps, Lamports, MoneyError, TokenAmount, LAMPORTS_PER_SOL};
 pub use network::Network;
 pub use policy::{PolicyViolation, UsageSnapshot, WalletPolicy};
 pub use quote::{DexKind, MarketRef, Quote, QuoteSource};
-pub use state::{user_status, Commitment, OrderState, TransitionError};
+pub use state::{user_status, user_status_with_fill, Commitment, OrderState, TransitionError};
 pub use trace::{LatencyTrace, Stage};

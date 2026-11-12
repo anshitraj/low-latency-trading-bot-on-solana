@@ -16,6 +16,6 @@ test("capture trade flow", async ({ page, userId, mockMint }, info) => {
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.screenshot({ path: "../../docs/screenshots/confirm.png" });
   await page.getByRole("dialog").getByRole("button", { name: "Confirm trade" }).click();
-  await expect(page.getByTestId("order-status")).toContainText("filled (finalized)", { timeout: 30_000 });
+  await expect(page.getByTestId("order-status")).toContainText("complete", { timeout: 30_000 });
   await page.screenshot({ path: "../../docs/screenshots/filled.png", fullPage: true });
 });

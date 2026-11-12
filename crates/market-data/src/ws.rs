@@ -46,6 +46,7 @@ struct State {
 enum Cmd {
     Accounts(Vec<Pubkey>),
     Signature(String),
+    SlotUpdates,
 }
 
 struct Inner {
@@ -62,6 +63,44 @@ struct Inner {
     last_slot: AtomicU64,
     last_slot_at: Mutex<Option<Instant>>,
     reconnects: AtomicU64,
+    /// Block timeline: when this provider first told us about each slot, and
+    /// (if `slotsUpdatesSubscribe` is supported) each lifecycle event.
+    timeline: Mutex<Timeline>,
+    want_slot_updates: AtomicBool,
+    slot_updates_supported: Mutex<Option<bool>>,
+}
+
+/// Bounded per-slot record (last `TIMELINE_SLOTS` slots).
+#[derive(Default)]
+struct Timeline {
+    first_seen: HashMap<u64, Instant>,
+    /// slot -> [(event type, arrival, provider timestamp ms)]
+    events: HashMap<u64, Vec<(String, Instant, Option<u64>)>>,
+    order: std::collections::VecDeque<u64>,
+}
+
+const TIMELINE_SLOTS: usize = 4_096;
+
+impl Timeline {
+    fn touch(&mut self, slot: u64) {
+        if !self.first_seen.contains_key(&slot) && !self.events.contains_key(&slot) {
+            self.order.push_back(slot);
+            while self.order.len() > TIMELINE_SLOTS {
+                if let Some(old) = self.order.pop_front() {
+                    self.first_seen.remove(&old);
+                    self.events.remove(&old);
+                }
+            }
+        }
+    }
+}
+
+/// One slot lifecycle event as seen from this provider.
+#[derive(Clone, Debug)]
+pub struct SlotEvent {
+    pub kind: String,
+    pub arrived: Instant,
+    pub provider_ts_ms: Option<u64>,
 }
 
 /// Cheap to clone; one background task per stream.
@@ -87,6 +126,9 @@ impl AccountStream {
             last_slot: AtomicU64::new(0),
             last_slot_at: Mutex::new(None),
             reconnects: AtomicU64::new(0),
+            timeline: Default::default(),
+            want_slot_updates: AtomicBool::new(false),
+            slot_updates_supported: Mutex::new(None),
         });
         tokio::spawn(run(inner.clone(), rx));
         Self { inner }
@@ -206,6 +248,52 @@ impl AccountStream {
         self.inner.last_slot.load(Ordering::Acquire)
     }
 
+    /// When this provider first reported `slot` (slotNotification / slotsUpdates).
+    pub fn slot_first_seen(&self, slot: u64) -> Option<Instant> {
+        let t = self.inner.timeline.lock();
+        let a = t.first_seen.get(&slot).copied();
+        let b = t
+            .events
+            .get(&slot)
+            .and_then(|v| v.iter().map(|e| e.1).min());
+        match (a, b) {
+            (Some(x), Some(y)) => Some(x.min(y)),
+            (x, y) => x.or(y),
+        }
+    }
+
+    /// Lifecycle events for `slot` (empty unless slot updates are supported and on).
+    pub fn slot_events(&self, slot: u64) -> Vec<SlotEvent> {
+        self.inner
+            .timeline
+            .lock()
+            .events
+            .get(&slot)
+            .map(|v| {
+                v.iter()
+                    .map(|(k, a, ts)| SlotEvent {
+                        kind: k.clone(),
+                        arrived: *a,
+                        provider_ts_ms: *ts,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Ask for `slotsUpdatesSubscribe` (unstable RPC method; some providers do
+    /// not offer it). Applied on the next (re)connect and immediately if connected.
+    pub fn enable_slot_updates(&self) {
+        if !self.inner.want_slot_updates.swap(true, Ordering::AcqRel) {
+            let _ = self.inner.cmd.send(Cmd::SlotUpdates);
+        }
+    }
+
+    /// `Some(false)` if the provider refused slotsUpdatesSubscribe.
+    pub fn slot_updates_supported(&self) -> Option<bool> {
+        *self.inner.slot_updates_supported.lock()
+    }
+
     pub fn reconnects(&self) -> u64 {
         self.inner.reconnects.load(Ordering::Relaxed)
     }
@@ -247,6 +335,15 @@ pub(crate) enum WsEvent {
         sub_id: u64,
         slot: u64,
     },
+    SlotUpdate {
+        slot: u64,
+        kind: String,
+        ts_ms: Option<u64>,
+    },
+    /// JSON-RPC error reply to one of our requests.
+    ReqError {
+        req_id: u64,
+    },
     Other,
 }
 
@@ -258,7 +355,21 @@ pub(crate) fn parse_message(text: &str) -> WsEvent {
     if let (Some(req_id), Some(sub_id)) = (v["id"].as_u64(), v["result"].as_u64()) {
         return WsEvent::Ack { req_id, sub_id };
     }
+    if let (Some(req_id), true) = (v["id"].as_u64(), v["error"].is_object()) {
+        return WsEvent::ReqError { req_id };
+    }
     match v["method"].as_str() {
+        Some("slotsUpdatesNotification") => {
+            let r = &v["params"]["result"];
+            match (r["slot"].as_u64(), r["type"].as_str()) {
+                (Some(slot), Some(kind)) => WsEvent::SlotUpdate {
+                    slot,
+                    kind: kind.to_string(),
+                    ts_ms: r["timestamp"].as_u64(),
+                },
+                _ => WsEvent::Other,
+            }
+        }
         Some("slotNotification") => match v["params"]["result"]["slot"].as_u64() {
             Some(slot) => WsEvent::Slot { slot },
             None => WsEvent::Other,
@@ -305,6 +416,7 @@ pub(crate) fn parse_message(text: &str) -> WsEvent {
 }
 
 const SLOT_REQ_ID: u64 = 1;
+const SLOT_UPDATES_REQ_ID: u64 = 2;
 
 async fn run(inner: Arc<Inner>, mut rx: mpsc::UnboundedReceiver<Cmd>) {
     let mut backoff = Duration::from_millis(250);
@@ -340,7 +452,10 @@ async fn session(
     rx: &mut mpsc::UnboundedReceiver<Cmd>,
 ) {
     let (mut sink, mut stream) = ws.split();
-    let mut next_id: u64 = SLOT_REQ_ID + 1;
+    let mut next_id: u64 = SLOT_UPDATES_REQ_ID + 1;
+    let slot_updates_msg =
+        json!({"jsonrpc":"2.0","id":SLOT_UPDATES_REQ_ID,"method":"slotsUpdatesSubscribe"})
+            .to_string();
     let mut pending: HashMap<u64, Pubkey> = HashMap::new();
     let mut pending_sigs: HashMap<u64, String> = HashMap::new();
     let mut sig_subs: HashMap<u64, String> = HashMap::new();
@@ -361,6 +476,14 @@ async fn session(
         ))
         .await
         .is_err()
+    {
+        return;
+    }
+    if inner.want_slot_updates.load(Ordering::Acquire)
+        && sink
+            .send(Message::text(slot_updates_msg.clone()))
+            .await
+            .is_err()
     {
         return;
     }
@@ -399,6 +522,20 @@ async fn session(
                 };
                 match parse_message(text.as_str()) {
                     WsEvent::Ack { req_id, sub_id } if req_id == SLOT_REQ_ID => slot_sub = Some(sub_id),
+                    WsEvent::Ack { req_id, .. } if req_id == SLOT_UPDATES_REQ_ID => {
+                        *inner.slot_updates_supported.lock() = Some(true);
+                    }
+                    WsEvent::ReqError { req_id } if req_id == SLOT_UPDATES_REQ_ID => {
+                        *inner.slot_updates_supported.lock() = Some(false);
+                    }
+                    WsEvent::ReqError { .. } => {}
+                    WsEvent::SlotUpdate { slot, kind, ts_ms } => {
+                        let mut t = inner.timeline.lock();
+                        t.touch(slot);
+                        let now = Instant::now();
+                        t.first_seen.entry(slot).or_insert(now);
+                        t.events.entry(slot).or_default().push((kind, now, ts_ms));
+                    }
                     WsEvent::Ack { req_id, sub_id } if pending_sigs.contains_key(&req_id) => {
                         if let Some(sig) = pending_sigs.remove(&req_id) {
                             sig_subs.insert(sub_id, sig);
@@ -414,7 +551,11 @@ async fn session(
                     WsEvent::Slot { slot } => {
                         let _ = slot_sub;
                         inner.last_slot.fetch_max(slot, Ordering::AcqRel);
-                        *inner.last_slot_at.lock() = Some(Instant::now());
+                        let now = Instant::now();
+                        *inner.last_slot_at.lock() = Some(now);
+                        let mut t = inner.timeline.lock();
+                        t.touch(slot);
+                        t.first_seen.entry(slot).or_insert(now);
                     }
                     WsEvent::Account { sub_id, slot, account } => {
                         let mut st = inner.state.write();
@@ -453,6 +594,9 @@ async fn session(
                             pending.insert(id, k);
                             if sink.send(Message::text(sub_msg(id, &k))).await.is_err() { return; }
                         }
+                    }
+                    Some(Cmd::SlotUpdates) => {
+                        if sink.send(Message::text(slot_updates_msg.clone())).await.is_err() { return; }
                     }
                     Some(Cmd::Signature(sig)) => {
                         let id = next_id;
@@ -545,6 +689,22 @@ mod tests {
             WsEvent::Account { account: None, .. }
         ));
         assert_eq!(parse_message("not json"), WsEvent::Other);
+        assert_eq!(
+            parse_message(
+                r#"{"jsonrpc":"2.0","method":"slotsUpdatesNotification","params":{"result":{"parent":9,"slot":10,"timestamp":1700000000000,"type":"firstShredReceived"},"subscription":5}}"#
+            ),
+            WsEvent::SlotUpdate {
+                slot: 10,
+                kind: "firstShredReceived".into(),
+                ts_ms: Some(1_700_000_000_000)
+            }
+        );
+        assert_eq!(
+            parse_message(
+                r#"{"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found"},"id":2}"#
+            ),
+            WsEvent::ReqError { req_id: 2 }
+        );
         assert_eq!(
             parse_message(
                 r#"{"jsonrpc":"2.0","method":"signatureNotification","params":{"result":{"context":{"slot":77},"value":{"err":null}},"subscription":9}}"#

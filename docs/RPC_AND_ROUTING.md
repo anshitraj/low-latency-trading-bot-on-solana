@@ -65,6 +65,29 @@ and Pump `user_volume_accumulator`; `slotSubscribe` as heartbeat.
   it in the background; `mainnet-canary` and `trader-bench live` warm explicitly.
 - Env: `WS_URL` (default: `RPC_URL` with http→ws), `WS_STREAMING=false` to disable.
 
+## Multi-provider pool (`crates/market-data/src/pool.rs`)
+`RPC_URL` (or `--rpc`) is provider 0; extra providers come from `~/.trader/rpc_urls`
+(override with `RPC_URLS_FILE`), one per line:
+
+```
+# <http-url> [<ws-url>] [rps=<n>]      — '#' comments ok; keep this file mode 600
+https://solana-mainnet.g.alchemy.com/v2/KEY
+https://rpc.ankr.com/solana/KEY  wss://rpc.ankr.com/solana/ws/KEY
+https://lb.drpc.org/ogrpc?network=solana&dkey=KEY  wss://lb.drpc.org/ogws?network=solana&dkey=KEY
+```
+- The ws URL is derived (http→ws, same path) when omitted; Ankr and dRPC use a
+  different WebSocket path, so give it explicitly.
+- Every provider's genesis hash is checked at startup: a wrong cluster is fatal, an
+  unreachable provider is skipped.
+- Per-provider token bucket (default 8 req/s, `rps=` overrides); background calls
+  cannot take the last 2 tokens, so polling never starves a trade read. 429 → that
+  provider cools down (250 ms doubling to 10 s) and reads move to the next one.
+  `sendTransaction` never fails over automatically (the sender layer owns it).
+- One WebSocket per provider: provider 0 feeds account state and balances; **all**
+  subscribe to each trade's signature and slots, so the observer stamps the earliest
+  processed notification and the canary reports each provider separately.
+- Logs and reports print only the host, never the path or query (where keys live).
+
 ## Connection handling
 `reqwest` clients per endpoint with keep-alive pools (90 s idle, TCP_NODELAY, keepalive 30 s). No per-trade connection bootstrap. Blockhash refreshed every 500 ms (`confirmed`), block height every ~2 s.
 

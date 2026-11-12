@@ -35,14 +35,14 @@ test("first run -> buy with confirmation sheet -> on-chain finalized -> sell -> 
   await expect(page.getByTestId("max-spend")).toContainText("SOL");
   await expect(sheet).toContainText("MOCK pool (not real)");
   await sheet.getByRole("button", { name: "Confirm trade" }).click();
-  await expect(page.getByTestId("order-status")).toContainText("filled (finalized)", { timeout: 30_000 });
+  await expect(page.getByTestId("order-status")).toContainText("complete", { timeout: 30_000 });
   await expect(page.getByText("Tokens received")).toBeVisible();
 
   await page.getByRole("button", { name: "Sell 50%" }).click();
   const sellSheet = page.getByRole("dialog", { name: "Confirm sell" });
   await expect(sellSheet).toBeVisible();
   await sellSheet.getByRole("button", { name: "Confirm trade" }).click();
-  await expect(page.getByTestId("order-status")).toContainText("filled (finalized)", { timeout: 30_000 });
+  await expect(page.getByTestId("order-status")).toContainText("complete", { timeout: 30_000 });
 
   await page.getByRole("button", { name: "Portfolio" }).click();
   await expect(page.getByTestId("position")).toHaveCount(1);

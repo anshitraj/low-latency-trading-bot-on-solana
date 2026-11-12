@@ -208,20 +208,31 @@ impl Commitment {
     }
 }
 
-/// User-facing text. Never says "filled" unless confirmed on-chain success.
+/// User-facing text. Stages: processing -> submitted -> executed (awaiting
+/// finality) -> complete. A sender accepting the transaction is only
+/// "submitted"; "executed" needs on-chain evidence; "complete" needs
+/// finality (use [`user_status_with_fill`] to also require the verified fill).
 pub fn user_status(state: OrderState) -> &'static str {
     match state {
-        Created | Quoted => "preparing",
+        Created | Quoted => "processing",
         AwaitingAuth => "awaiting your confirmation",
-        Signing | Signed => "signed, sending",
-        Submitted => "submitted — not yet seen on-chain",
-        Observed => "landed (processed) — awaiting confirmation",
-        Confirmed => "filled (confirmed)",
-        Finalized => "filled (finalized)",
+        Signing | Signed => "processing — sending",
+        Submitted => "submitted — waiting for the network",
+        Observed | Confirmed => "executed — awaiting finality",
+        Finalized => "complete",
         FailedOnchain => "failed on-chain — network fee paid, no swap",
         Expired => "expired — never landed, no fee paid",
         Rejected => "rejected before sending — no fee paid",
         UnknownReconcile => "pending verification — do NOT retry, reconciling",
+    }
+}
+
+/// Like [`user_status`], but a finalized order only reads "complete" once its
+/// fill has been decoded and verified from the confirmed transaction.
+pub fn user_status_with_fill(state: OrderState, fill_verified: bool) -> &'static str {
+    match (state, fill_verified) {
+        (Finalized, false) => "executed — finalized, verifying fill",
+        _ => user_status(state),
     }
 }
 
@@ -330,12 +341,22 @@ mod tests {
                 format!("\"{}\"", s.as_str())
             );
             let msg = user_status(s);
-            if !matches!(s, Confirmed | Finalized) {
-                assert!(!msg.contains("filled"), "{s}: {msg}");
+            // Never claim success before on-chain evidence.
+            if !matches!(s, Observed | Confirmed | Finalized) {
+                assert!(
+                    !msg.contains("executed") && !msg.contains("complete"),
+                    "{s}: {msg}"
+                );
             }
+            assert!(
+                !msg.contains("filled") && !msg.contains("bought") && !msg.contains("sold"),
+                "{s}: {msg}"
+            );
         }
         assert_eq!(Commitment::Processed.landed_state(true), Observed);
         assert_eq!(Commitment::Confirmed.landed_state(true), FailedOnchain);
         assert_eq!(Commitment::Finalized.landed_state(false), Finalized);
+        assert_eq!(user_status_with_fill(Finalized, true), "complete");
+        assert_ne!(user_status_with_fill(Finalized, false), "complete");
     }
 }

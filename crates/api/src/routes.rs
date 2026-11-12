@@ -505,7 +505,7 @@ async fn get_order(
     let o = service::order_for_user(&st, &u, id).await?;
     let ev = st.orders.events(id).await.unwrap_or_default();
     Ok(Json(
-        json!({"order": o, "status_text": trader_domain::user_status(o.state), "events": ev}),
+        json!({"order": o, "status_text": trader_domain::user_status_with_fill(o.state, o.fill.is_some()), "events": ev}),
     ))
 }
 

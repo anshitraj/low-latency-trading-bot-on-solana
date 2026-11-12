@@ -89,12 +89,12 @@ pub struct ObserverHandle {
     inner: Arc<Mutex<HashMap<String, Tracked>>>,
     /// Optional WebSocket stream: each tracked signature gets a one-shot
     /// `signatureSubscribe`, whose notification wakes the poll loop at once.
-    stream: Arc<parking_lot::RwLock<Option<trader_market_data::AccountStream>>>,
+    streams: Arc<parking_lot::RwLock<Vec<trader_market_data::AccountStream>>>,
 }
 
 impl ObserverHandle {
     pub fn track(&self, t: Track) {
-        if let Some(s) = self.stream.read().as_ref() {
+        for s in self.streams.read().iter() {
             s.subscribe_signature(&t.signature);
         }
         let mut g = self.inner.lock();
@@ -138,7 +138,7 @@ impl Observer {
         Self {
             handle: ObserverHandle {
                 inner: Default::default(),
-                stream: Default::default(),
+                streams: Default::default(),
             },
             store,
             rpc,
@@ -154,8 +154,17 @@ impl Observer {
     /// Wake the poll loop as soon as a tracked signature is reported
     /// `processed` over the WebSocket stream (polling continues as the fallback).
     pub fn with_stream(self, stream: trader_market_data::AccountStream) -> Self {
-        stream.set_signature_notify(self.wake.clone());
-        *self.handle.stream.write() = Some(stream);
+        self.with_streams(vec![stream])
+    }
+
+    /// Several providers' streams: every tracked signature is subscribed on all
+    /// of them; the earliest notification wakes the loop and sets the
+    /// first-observed timestamp.
+    pub fn with_streams(self, streams: Vec<trader_market_data::AccountStream>) -> Self {
+        for s in &streams {
+            s.set_signature_notify(self.wake.clone());
+        }
+        *self.handle.streams.write() = streams;
         self
     }
 
@@ -328,11 +337,12 @@ impl Observer {
                 // independent of the poll interval) when one was received.
                 let ws_seen = self
                     .handle
-                    .stream
+                    .streams
                     .read()
-                    .as_ref()
-                    .and_then(|s| s.seen_signature(&tr.t.signature))
-                    .map(|(_, at)| at);
+                    .iter()
+                    .filter_map(|s| s.seen_signature(&tr.t.signature))
+                    .map(|(_, at)| at)
+                    .min();
                 if let Some(t) = tr.t.trace.as_mut() {
                     if let Some(at) = ws_seen {
                         t.mark_at(Stage::FirstObservedProcessed, at);

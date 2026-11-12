@@ -2,7 +2,7 @@
 
 pub use super::client::esc;
 use trader_domain::money::format_units;
-use trader_domain::{user_status, Network, OrderState, Quote, Side};
+use trader_domain::{user_status_with_fill, Network, OrderState, Quote, Side};
 use trader_orders::{FillRecord, Order};
 
 pub fn short(s: &str) -> String {
@@ -111,7 +111,7 @@ pub fn order_status(o: &Order, network: Network, detail: &str) -> String {
         if side == Side::Buy { "BUY" } else { "SELL" },
         esc(&short(&o.intent.mint.to_string())),
         o.state.as_str(),
-        user_status(o.state),
+        user_status_with_fill(o.state, o.fill.is_some()),
         esc(detail)
     );
     if let Some(sig) = o.signed.as_ref().map(|s| s.signature.clone()) {

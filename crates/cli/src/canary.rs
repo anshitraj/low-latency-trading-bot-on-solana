@@ -38,7 +38,7 @@ use trader_execution::{BlockhashService, WalletLocks};
 use trader_market_data::token::{
     associated_token_address, parse_token_account, TOKEN_2022_PROGRAM,
 };
-use trader_market_data::{ws_url_from_http, AccountStream, RpcClient, RpcConfig};
+use trader_market_data::{AccountStream, RpcClient, RpcConfig};
 use trader_orders::balances::{RpcBalances, StreamBalances};
 use trader_orders::BalanceSource;
 use trader_orders::{Engine, EngineConfig, MemStore, Observer, ObserverConfig, Order, OrderStore};
@@ -54,7 +54,8 @@ use uuid::Uuid;
 pub const MAX_BUY_LAMPORTS: u64 = 1_000_000;
 /// ~US$0.01 at ~US$83/SOL (2026-11-12).
 pub const DEFAULT_BUY_LAMPORTS: u64 = 120_000;
-pub const MAX_ITERATIONS: usize = 10;
+/// Round trips per run (raised for latency samples; each is ~US$0.002).
+pub const MAX_ITERATIONS: usize = 25;
 /// Priority fee ceiling (micro-lamports per CU).
 pub const MAX_CU_PRICE: u64 = 200_000;
 /// Tip ceiling per transaction (0.00005 SOL).
@@ -306,12 +307,38 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         .cloned()
         .or_else(|| std::env::var("RPC_URL").ok().filter(|s| !s.is_empty()))
         .ok_or_else(|| anyhow!("set RPC_URL to a mainnet RPC endpoint (or pass --rpc)"))?;
-    let mut cfg = RpcConfig::new(url.clone());
-    cfg.timeout = Duration::from_secs(20);
-    let rpc = RpcClient::new(cfg)?;
-    let genesis = rpc.get_genesis_hash().await?;
-    net.verify_genesis(&genesis)
-        .map_err(|e| anyhow!("refusing: {e}"))?;
+    // Providers: --rpc / RPC_URL first, then ~/.trader/rpc_urls (mainnet only;
+    // a local test never mixes in other endpoints). EVERY provider must be on
+    // the expected cluster; one that cannot be reached is dropped.
+    let candidates = if net == Network::Localnet {
+        trader_market_data::parse_endpoint_lines(&url)
+    } else {
+        trader_market_data::load_endpoint_specs(Some(&url))
+    };
+    let mut specs = vec![];
+    for sp in candidates {
+        let host = trader_market_data::rpc::url_host(&sp.http);
+        let mut c = RpcConfig::new(sp.http.clone());
+        c.timeout = Duration::from_secs(10);
+        match RpcClient::new(c)?.get_genesis_hash().await {
+            Ok(g) => {
+                net.verify_genesis(&g)
+                    .map_err(|e| anyhow!("refusing provider {host}: {e}"))?;
+                specs.push(sp);
+            }
+            Err(e) => eprintln!("provider {host} unreachable, skipped: {e}"),
+        }
+    }
+    if specs.is_empty() {
+        bail!("no reachable RPC provider");
+    }
+    let rpc = if net == Network::Localnet {
+        let mut cfg = RpcConfig::new(specs[0].http.clone());
+        cfg.timeout = Duration::from_secs(20);
+        RpcClient::new(cfg)?
+    } else {
+        RpcClient::pool(&specs, Duration::from_secs(20))?
+    };
     let rent_per_byte = trader_market_data::rent::sync_rent(&rpc)
         .await
         .map_err(|e| anyhow!("reading rent rate: {e}"))?;
@@ -335,7 +362,14 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     if iterations == 0 || iterations > MAX_ITERATIONS {
         bail!("--iterations must be 1..={MAX_ITERATIONS}");
     }
-    let cu_price: u64 = parse(a, "cu-price", 20_000)?;
+    // `--cu-price auto`: p75 of getRecentPrioritizationFees for the Pump program
+    // and this coin's curve, per order, capped at MAX_CU_PRICE.
+    let cu_auto = a.get("cu-price").map(String::as_str) == Some("auto");
+    let cu_price: u64 = if cu_auto {
+        MAX_CU_PRICE
+    } else {
+        parse(a, "cu-price", 20_000)?
+    };
     if cu_price > MAX_CU_PRICE {
         bail!("--cu-price must be <= {MAX_CU_PRICE} micro-lamports/CU");
     }
@@ -378,17 +412,27 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     if use_jito && use_helius {
         bail!("pick one tipped sender per run: jito and helius use different tip accounts");
     }
-    let tip: u64 = parse(
-        a,
-        "tip-lamports",
-        if use_helius {
-            trader_sender_rpc::HELIUS_SWQOS_MIN_TIP
-        } else if use_jito {
-            1_000
-        } else {
-            0
-        },
-    )?;
+    // `--tip-lamports auto` (Jito only): median landed tip from Jito's tip floor
+    // API, per order, capped at MAX_TIP_LAMPORTS.
+    let tip_auto = a.get("tip-lamports").map(String::as_str) == Some("auto");
+    if tip_auto && !use_jito {
+        bail!("--tip-lamports auto needs --senders ...,jito");
+    }
+    let tip: u64 = if tip_auto {
+        MAX_TIP_LAMPORTS
+    } else {
+        parse(
+            a,
+            "tip-lamports",
+            if use_helius {
+                trader_sender_rpc::HELIUS_SWQOS_MIN_TIP
+            } else if use_jito {
+                1_000
+            } else {
+                0
+            },
+        )?
+    };
     if use_helius && tip < trader_sender_rpc::HELIUS_SWQOS_MIN_TIP {
         bail!(
             "helius (SWQoS-only) needs --tip-lamports >= {}",
@@ -407,6 +451,21 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
             "jito needs --tip-lamports >= {}",
             trader_sender_jito::JITO_MIN_TIP_LAMPORTS
         );
+    }
+    // `--jito-regions frankfurt,amsterdam,ny,tokyo`: the same signed bytes go to
+    // each regional block engine (it lands once; the tip is paid once).
+    let jito_regions: Vec<String> = a
+        .get("jito-regions")
+        .map(|v| {
+            v.split(',')
+                .map(|x| x.trim().to_lowercase())
+                .filter(|x| !x.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+    let tpu_leaders: usize = parse(a, "tpu-leaders", 3)?;
+    if !(1..=8).contains(&tpu_leaders) {
+        bail!("--tpu-leaders must be 1..=8");
     }
     let jito_url = a
         .get("jito-url")
@@ -462,7 +521,11 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         "buy_lamports_per_iteration": buy,
         "iterations": iterations,
         "websocket": !a.contains_key("no-ws"),
-        "cu_price_micro_lamports": cu_price,
+        "cu_price_micro_lamports": if cu_auto { json!("auto") } else { json!(cu_price) },
+        "tip_mode": if tip_auto { "auto" } else { "fixed" },
+        "providers": rpc.hosts(),
+        "tpu_leaders": tpu_leaders,
+        "jito_regions": jito_regions,
         "senders": sender_names,
         "tip_lamports_per_tx": tip,
         "est_fee_per_tx_lamports": fee_per_tx,
@@ -503,15 +566,24 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     let locks = WalletLocks::default();
     // WebSocket account stream (default on): coin state and wallet balances are
     // pushed by the RPC, so a warm order needs no read round trip before signing.
-    let stream = if a.contains_key("no-ws") {
-        None
+    let streams: Vec<AccountStream> = if a.contains_key("no-ws") {
+        vec![]
+    } else if let Some(w) = a.get("ws") {
+        vec![AccountStream::spawn(w.clone())]
     } else {
-        Some(AccountStream::spawn(
-            a.get("ws")
-                .cloned()
-                .unwrap_or_else(|| ws_url_from_http(&url)),
-        ))
+        specs
+            .iter()
+            .map(|sp| AccountStream::spawn(sp.ws_url()))
+            .collect()
     };
+    if !a.contains_key("no-slot-updates") {
+        for st in &streams {
+            st.enable_slot_updates();
+        }
+    }
+    // The first provider's stream feeds coin state and balances; all of them
+    // report signatures (independent landing observers) and slots.
+    let stream = streams.first().cloned();
     let mut adapter = PumpAdapter::new(rpc.clone());
     if let Some(s) = &stream {
         adapter = adapter.with_stream(s.clone());
@@ -548,9 +620,17 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     blockhash.spawn(rpc.clone(), Duration::from_secs(2));
     let sims = Arc::new(Mutex::new(vec![]));
     let mut router = Router::new();
+    let jito_urls: Vec<String> = if jito_regions.is_empty() {
+        vec![jito_url.clone()]
+    } else {
+        jito_regions
+            .iter()
+            .map(|r| format!("https://{r}.mainnet.block-engine.jito.wtf"))
+            .collect()
+    };
     let jito_tip_accounts = if use_jito {
         let j = trader_sender_jito::JitoSender::new(
-            jito_url.clone(),
+            jito_urls[0].clone(),
             false,
             None,
             Duration::from_secs(5),
@@ -575,27 +655,33 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
                     None,
                 )),
                 SenderKind::Tpu => {
-                    let t = trader_sender_tpu::TpuSender::start(rpc.clone(), stream.clone(), 2)
-                        .await
-                        .map_err(|e| anyhow!("tpu sender: {e}"))?;
+                    let t = trader_sender_tpu::TpuSender::start(
+                        rpc.clone(),
+                        stream.clone(),
+                        tpu_leaders,
+                    )
+                    .await
+                    .map_err(|e| anyhow!("tpu sender: {e}"))?;
                     router.add(ManagedSender::new(t, Duration::from_secs(3), None));
                 }
                 SenderKind::Jito => {
                     let accts = jito_tip_accounts.clone().expect("jito set up above");
                     // Jito's default limit is 1 request/s per IP per region.
-                    router.add(ManagedSender::new(
-                        Arc::new(
-                            trader_sender_jito::JitoSender::new(
-                                jito_url.clone(),
-                                false,
-                                None,
-                                Duration::from_secs(5),
-                            )
-                            .with_tip_accounts(accts),
-                        ),
-                        Duration::from_secs(5),
-                        Some(trader_router::TokenBucket::new(1, Duration::from_secs(1))),
-                    ));
+                    for ju in &jito_urls {
+                        router.add(ManagedSender::new(
+                            Arc::new(
+                                trader_sender_jito::JitoSender::new(
+                                    ju.clone(),
+                                    false,
+                                    None,
+                                    Duration::from_secs(5),
+                                )
+                                .with_tip_accounts(accts.clone()),
+                            ),
+                            Duration::from_secs(5),
+                            Some(trader_router::TokenBucket::new(1, Duration::from_secs(1))),
+                        ));
+                    }
                 }
                 SenderKind::Helius => {
                     let mut hc = RpcConfig::new(helius_url.clone());
@@ -654,9 +740,9 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
             max_rebroadcasts: 10,
         },
     );
-    if let Some(s) = &stream {
-        // signatureSubscribe wakes the observer the moment a send is processed.
-        observer = observer.with_stream(s.clone());
+    if !streams.is_empty() {
+        // signatureSubscribe on every provider; the first notification wakes the observer.
+        observer = observer.with_streams(streams.clone());
     }
     let observer = Arc::new(observer);
     observer.clone().spawn();
@@ -699,7 +785,14 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     let user_id = Uuid::new_v4();
     let wallet_id = Uuid::new_v4();
     let run_tag = Uuid::new_v4().simple().to_string();
-    let mk = |side: Side, amount: AmountSpec, key: String| TradeIntent {
+    let http = reqwest::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .build()?;
+    let fee_keys = [
+        trader_protocol_pump::PUMP_PROGRAM_ID,
+        pump_rust_client::pda::pump::bonding_curve(&mint).0,
+    ];
+    let mk = |side: Side, amount: AmountSpec, key: String, cu_price: u64, tip: u64| TradeIntent {
         id: Uuid::new_v4(),
         user_id,
         wallet_id,
@@ -747,15 +840,34 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
                 },
                 Side::Sell => AmountSpec::SellPercent { bps: Bps::MAX },
             };
+            let (cu_now, cu_info) = if cu_auto {
+                auto_cu_price(&rpc, &fee_keys, MAX_CU_PRICE).await
+            } else {
+                (cu_price, json!(null))
+            };
+            let (tip_now, tip_info) = if tip_auto {
+                auto_jito_tip(&http, MAX_TIP_LAMPORTS).await
+            } else {
+                (tip, json!(null))
+            };
             let intent = mk(
                 side,
                 amount,
                 format!("canary-{run_tag}-{it}-{}", side.as_str()),
+                cu_now,
+                tip_now,
             );
-            let send_slot = retry("getSlot", || async {
-                Ok(rpc.get_slot(Commitment::Processed).await?)
-            })
-            .await?;
+            // Slot at submit: the stream's live slot (no extra round trip), else RPC.
+            let (send_slot, send_slot_source) = match &stream {
+                Some(st) if st.is_live(Duration::from_millis(1500)) => (st.last_slot(), "ws"),
+                _ => (
+                    retry("getSlot", || async {
+                        Ok(rpc.get_slot(Commitment::Processed).await?)
+                    })
+                    .await?,
+                    "rpc",
+                ),
+            };
             let o = match engine
                 .submit(intent, wallet, Some(LatencyTrace::start()))
                 .await
@@ -796,6 +908,53 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
                 _ => false,
             };
             let sig = o.signed.as_ref().map(|s| s.signature.clone());
+            let signed_at = trace.as_ref().and_then(|t| t.instant(Stage::Signed));
+            let ms_after = |t: std::time::Instant| -> Option<f64> {
+                signed_at.map(|s0| {
+                    if t >= s0 {
+                        t.duration_since(s0).as_secs_f64() * 1e3
+                    } else {
+                        -(s0.duration_since(t).as_secs_f64() * 1e3)
+                    }
+                })
+            };
+            let landed = fill.as_ref().map(|f| f.slot);
+            let mut providers = vec![];
+            for (i, st) in streams.iter().enumerate() {
+                let seen = sig
+                    .as_deref()
+                    .and_then(|sg| st.seen_signature(sg))
+                    .and_then(|(_, t)| ms_after(t));
+                let slot_first = landed
+                    .and_then(|ls| st.slot_first_seen(ls))
+                    .and_then(ms_after);
+                let events: serde_json::Map<String, serde_json::Value> = landed
+                    .map(|ls| st.slot_events(ls))
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|e| (e.kind, json!(ms_after(e.arrived))))
+                    .collect();
+                providers.push(json!({
+                    "provider": format!("p{i}:{}", st.host()),
+                    "signature_processed_ms_after_signed": seen,
+                    "landed_slot_first_seen_ms_after_signed": slot_first,
+                    "landed_slot_events_ms_after_signed": events,
+                    "slot_updates_supported": st.slot_updates_supported(),
+                }));
+            }
+            let senders: Vec<serde_json::Value> = store
+                .attempts()
+                .into_iter()
+                .filter(|r| r.order_id == o.id && !r.rebroadcast)
+                .map(|r| {
+                    json!({
+                        "sender": r.attempt.sender.as_str(),
+                        "endpoint": r.attempt.endpoint,
+                        "latency_us": r.attempt.latency_us,
+                        "outcome": r.attempt.outcome.code(),
+                    })
+                })
+                .collect();
             let row = json!({
                 "iteration": it,
                 "side": side.as_str(),
@@ -805,6 +964,13 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
                 "signature": sig,
                 "explorer": sig.as_ref().filter(|_| send && net == Network::Mainnet).map(|s| format!("https://solscan.io/tx/{s}")),
                 "send_slot": send_slot,
+                "send_slot_source": send_slot_source,
+                "cu_price_micro_lamports": o.signed.as_ref().map(|s| s.compute_unit_price_micro_lamports),
+                "tip_lamports": o.signed.as_ref().map(|s| s.tip_lamports),
+                "cu_price_auto": cu_info,
+                "tip_auto": tip_info,
+                "senders": senders,
+                "providers": providers,
                 "landed_slot": fill.as_ref().map(|f| f.slot),
                 "slots_to_land": fill.as_ref().map(|f| f.slot.saturating_sub(send_slot)),
                 "fee_lamports": fill.as_ref().map(|f| f.fee_lamports),
@@ -840,8 +1006,14 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
             );
         }
     }
+    let summary = summarize(&rows);
+    if send || !rows.is_empty() {
+        println!("{}", json!({ "summary": summary }));
+    }
     let report = json!({
         "kind": "mainnet_pump_canary",
+        "summary": summary,
+        "rpc_providers": rpc.stats(),
         "network": net.as_str(),
         "mode": if send { "send" } else { "dry_run" },
         "generated_at": chrono::Utc::now().to_rfc3339(),
@@ -890,6 +1062,124 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// p75 of recent prioritization fees (micro-lamports/CU) for `keys`, clamped
+/// to [1_000, cap]. Falls back to 1_000 when nothing is reported.
+async fn auto_cu_price(rpc: &RpcClient, keys: &[Pubkey], cap: u64) -> (u64, serde_json::Value) {
+    let ks: Vec<String> = keys.iter().map(|k| k.to_string()).collect();
+    match rpc
+        .call::<Vec<serde_json::Value>>("getRecentPrioritizationFees", json!([ks]))
+        .await
+    {
+        Ok(v) => {
+            let mut fees: Vec<u64> = v
+                .iter()
+                .filter_map(|x| x["prioritizationFee"].as_u64())
+                .filter(|f| *f > 0)
+                .collect();
+            fees.sort_unstable();
+            let p = |q: f64| -> Option<u64> {
+                (!fees.is_empty()).then(|| fees[((fees.len() - 1) as f64 * q).round() as usize])
+            };
+            let chosen = p(0.75).unwrap_or(1_000).clamp(1_000, cap);
+            (
+                chosen,
+                json!({"samples": v.len(), "nonzero": fees.len(), "p50": p(0.5), "p75": p(0.75), "chosen": chosen, "cap": cap}),
+            )
+        }
+        Err(e) => (1_000, json!({"error": e.to_string(), "chosen": 1_000})),
+    }
+}
+
+/// Median landed Jito tip (lamports) from the public tip-floor API, clamped to
+/// [JITO_MIN_TIP_LAMPORTS, cap]. Falls back to the minimum on any error.
+async fn auto_jito_tip(http: &reqwest::Client, cap: u64) -> (u64, serde_json::Value) {
+    let min = trader_sender_jito::JITO_MIN_TIP_LAMPORTS;
+    let url = "https://bundles.jito.wtf/api/v1/bundles/tip_floor";
+    let res = async {
+        let v: serde_json::Value = http.get(url).send().await?.json().await?;
+        Ok::<_, reqwest::Error>(v)
+    }
+    .await;
+    match res {
+        Ok(v) => {
+            let row = if v.is_array() {
+                v[0].clone()
+            } else {
+                v.clone()
+            };
+            let sol = row["landed_tips_50th_percentile"].as_f64();
+            let lamports = sol.map(|x| (x * 1e9).ceil() as u64);
+            let chosen = lamports.unwrap_or(min).clamp(min, cap);
+            (
+                chosen,
+                json!({"p50_sol": sol, "p75_sol": row["landed_tips_75th_percentile"].as_f64(), "chosen": chosen, "cap": cap}),
+            )
+        }
+        Err(e) => (
+            min,
+            json!({"error": e.without_url().to_string(), "chosen": min}),
+        ),
+    }
+}
+
+/// Nearest-rank p50/p95/p99/max over the numeric values found at `path`.
+fn stat(
+    rows: &[serde_json::Value],
+    f: impl Fn(&serde_json::Value) -> Option<f64>,
+) -> serde_json::Value {
+    let mut v: Vec<f64> = rows.iter().filter_map(&f).collect();
+    if v.is_empty() {
+        return json!({"n": 0});
+    }
+    v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let q = |p: f64| v[(((v.len() as f64) * p).ceil() as usize).clamp(1, v.len()) - 1];
+    json!({"n": v.len(), "p50": q(0.50), "p95": q(0.95), "p99": q(0.99), "max": v[v.len() - 1], "min": v[0]})
+}
+
+/// Benchmark v3 summary (ms unless noted). "landed" = first processed
+/// signature notification from any provider; sender acks are reported apart
+/// from inclusion evidence.
+fn summarize(rows: &[serde_json::Value]) -> serde_json::Value {
+    let ms = |k: &'static str| move |r: &serde_json::Value| r[k].as_f64().map(|us| us / 1e3);
+    let mut by_provider = serde_json::Map::new();
+    let names: Vec<String> = rows
+        .iter()
+        .flat_map(|r| r["providers"].as_array().cloned().unwrap_or_default())
+        .filter_map(|p| p["provider"].as_str().map(str::to_string))
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    for name in names {
+        let pick = |field: &'static str, name: String| {
+            move |r: &serde_json::Value| {
+                r["providers"]
+                    .as_array()?
+                    .iter()
+                    .find(|p| p["provider"].as_str() == Some(name.as_str()))?[field]
+                    .as_f64()
+            }
+        };
+        by_provider.insert(
+            name.clone(),
+            json!({
+                "signature_processed_ms": stat(rows, pick("signature_processed_ms_after_signed", name.clone())),
+                "landed_slot_first_seen_ms": stat(rows, pick("landed_slot_first_seen_ms_after_signed", name.clone())),
+            }),
+        );
+    }
+    json!({
+        "trades": rows.len(),
+        "order_to_signed_ms": stat(rows, ms("intent_to_signed_us")),
+        "signed_to_all_senders_returned_ms": stat(rows, ms("signed_to_sender_ack_us")),
+        "signed_to_first_landed_notification_ms": stat(rows, ms("signed_to_processed_us")),
+        "signed_to_bot_final_ms": stat(rows, ms("signed_to_finalized_us")),
+        "slots_to_land": stat(rows, |r| r["slots_to_land"].as_f64()),
+        "fee_lamports": stat(rows, |r| r["fee_lamports"].as_f64()),
+        "tip_lamports": stat(rows, |r| r["tip_lamports"].as_f64()),
+        "by_provider": by_provider,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -903,6 +1193,22 @@ mod tests {
         assert!(wire[1..65].iter().all(|b| *b == 0));
         assert!(wire[65..].iter().all(|b| *b == 9));
         assert_eq!(wire[0], 1);
+    }
+
+    #[test]
+    fn summary_percentiles_nearest_rank() {
+        let rows: Vec<serde_json::Value> = (1..=20)
+            .map(|i| json!({"intent_to_signed_us": i * 1000, "providers": [{"provider": "p0:a", "signature_processed_ms_after_signed": i as f64}]}))
+            .collect();
+        let s = summarize(&rows);
+        assert_eq!(s["order_to_signed_ms"]["n"], 20);
+        assert_eq!(s["order_to_signed_ms"]["p50"], 10.0);
+        assert_eq!(s["order_to_signed_ms"]["p95"], 19.0);
+        assert_eq!(s["order_to_signed_ms"]["p99"], 20.0);
+        assert_eq!(
+            s["by_provider"]["p0:a"]["signature_processed_ms"]["max"],
+            20.0
+        );
     }
 
     #[test]

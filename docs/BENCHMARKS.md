@@ -263,6 +263,34 @@ notification). Regression test: `fill_is_retried_when_get_transaction_is_rate_li
 - Local validator numbers in this file (sections 3, 2f) were measured with the older rules
   (400 ms slots, ~13 s finality) and are not mainnet predictions.
 
+### 2h. Benchmark v3 — landing vs notification (tooling ready, NOT YET RUN)
+Question: did trades land well before the ~220 ms WebSocket notification, i.e. is the
+gap observation delay (fixable without touching the send path) or inclusion delay
+(fees, admission, leader routing)?
+
+Same VM, wallet, size limits. Run on the VM after filling `~/.trader/rpc_urls`
+(RPC_AND_ROUTING.md "Multi-provider pool"):
+
+```
+trader-cli mainnet-canary --mint <bonding-curve coin> --senders tpu,jito --tpu-leaders 3 --iterations 25 --send
+```
+Optional: `--cu-price auto` (p75 of `getRecentPrioritizationFees`, capped),
+`--tip-lamports auto` (Jito tip-floor p50, capped), `--jito-regions frankfurt,amsterdam`
+(same signed bytes to each region; the tip is paid once), `--no-slot-updates`.
+25 round trips = 50 trades ≈ US$0.10 in fees + tips (rent is recovered on the sell).
+
+What the report records per trade (and the `summary` as n/p50/p95/p99/min/max):
+- A–C: per provider, `signature_processed_ms_after_signed` (each provider's own
+  `signatureSubscribe`) and when that provider first announced the landed slot
+  (`slotSubscribe`, plus `slotsUpdatesSubscribe` lifecycle events
+  — firstShredReceived / completed / frozen … — where the provider supports it).
+- D: per-sender ack latency and outcome (TPU leaders vs each Jito region), kept apart
+  from inclusion evidence.
+- E: landed slot − slot at submit (slot now taken from the live stream, not a separate
+  RPC read), fee, CU price and tip actually paid.
+Not measurable with this setup: the exact execution time inside the slot; a
+transaction-filtered Geyser stream (no free provider available to us).
+
 ### 2f. Send hop and direct TPU
 Read-only probe from the GCP VM (`trader-cli send-probe`; no transaction sent):
 

@@ -773,7 +773,7 @@ async fn handle_callback(st: &AppState, cb: &Value) {
             }
             CallbackAction::Cancel { order_id } => {
                 let o = st.engine.cancel(order_id, user.id).await?;
-                reply(st, chat_id, format!("Order <code>{}</code>: {}", o.id, trader_domain::user_status(o.state)), json!(null)).await;
+                reply(st, chat_id, format!("Order <code>{}</code>: {}", o.id, trader_domain::user_status_with_fill(o.state, o.fill.is_some())), json!(null)).await;
                 Ok(())
             }
             CallbackAction::Refresh { mint } => token_panel(st, &user, chat_id, &mint).await,

@@ -12,7 +12,7 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 use trader_domain::{Network, SenderKind};
 use trader_execution::{BlockhashService, ProtocolAdapter, WalletLocks};
-use trader_market_data::{ws_url_from_http, AccountStream, RpcClient, RpcConfig};
+use trader_market_data::{AccountStream, RpcClient, RpcConfig};
 use trader_observability::Metrics;
 use trader_orders::balances::{RpcBalances, StreamBalances};
 use trader_orders::{
@@ -72,6 +72,7 @@ pub async fn build(cfg: Config) -> anyhow::Result<Built> {
     let cfg = Arc::new(cfg);
     let metrics = Metrics::default();
     // --- chain access
+    let mut provider_specs: Vec<trader_market_data::EndpointSpec> = vec![];
     let (rpc, mock) = if cfg.mode == Network::Mock {
         let dex = MockDex::new();
         let demo_mint = Pubkey::new_from_array(*b"MOCKdemoTOKEN-not-a-real-mint!!!");
@@ -105,13 +106,30 @@ pub async fn build(cfg: Config) -> anyhow::Result<Built> {
             })),
         )
     } else {
-        let mut rc = RpcConfig::new(cfg.rpc_url.clone().unwrap());
-        rc.timeout = Duration::from_secs(5);
-        let rpc = RpcClient::new(rc)?;
-        let genesis = rpc.get_genesis_hash().await?;
-        cfg.mode
-            .verify_genesis(&genesis)
-            .map_err(anyhow::Error::msg)?;
+        // Provider pool: RPC_URL first, then ~/.trader/rpc_urls (or RPC_URLS_FILE).
+        // Every provider must be on the configured cluster; unreachable ones are
+        // skipped, a wrong cluster is fatal.
+        let mut specs = vec![];
+        for sp in trader_market_data::load_endpoint_specs(cfg.rpc_url.as_deref()) {
+            let host = trader_market_data::rpc::url_host(&sp.http);
+            let mut rc = RpcConfig::new(sp.http.clone());
+            rc.timeout = Duration::from_secs(5);
+            match RpcClient::new(rc)?.get_genesis_hash().await {
+                Ok(g) => {
+                    cfg.mode
+                        .verify_genesis(&g)
+                        .map_err(|e| anyhow::anyhow!("provider {host}: {e}"))?;
+                    specs.push(sp);
+                }
+                Err(e) => {
+                    tracing::warn!(provider = %host, error = %e, "RPC provider unreachable; skipped")
+                }
+            }
+        }
+        anyhow::ensure!(!specs.is_empty(), "no reachable RPC provider");
+        let rpc = RpcClient::pool(&specs, Duration::from_secs(5))?;
+        tracing::info!(providers = ?rpc.hosts(), "RPC provider pool");
+        provider_specs = specs;
         (rpc, None)
     };
     // --- stores
@@ -191,12 +209,23 @@ pub async fn build(cfg: Config) -> anyhow::Result<Built> {
     // --- WebSocket account stream (real clusters only; WS_STREAMING=false disables).
     // Coin state and wallet balances are pushed by the RPC; reads fall back to
     // RPC whenever the stream is not live or an account is not seeded yet.
-    let stream = match (&mock, cfg.ws_streaming, &cfg.rpc_url) {
-        (None, true, Some(http)) => Some(AccountStream::spawn(
-            cfg.ws_url.clone().unwrap_or_else(|| ws_url_from_http(http)),
-        )),
-        _ => None,
+    // One WebSocket stream per provider (WS_URL overrides the first). The first
+    // feeds coin state + balances; all report signatures to the observer.
+    let streams: Vec<AccountStream> = match (&mock, cfg.ws_streaming) {
+        (None, true) => provider_specs
+            .iter()
+            .enumerate()
+            .map(|(i, sp)| {
+                let url = match (i, &cfg.ws_url) {
+                    (0, Some(w)) => w.clone(),
+                    _ => sp.ws_url(),
+                };
+                AccountStream::spawn(url)
+            })
+            .collect(),
+        _ => vec![],
     };
+    let stream = streams.first().cloned();
     // --- adapters
     let adapters: Vec<Arc<dyn ProtocolAdapter>> = match &mock {
         Some(m) => vec![Arc::new(m.dex.clone())],
@@ -224,7 +253,7 @@ pub async fn build(cfg: Config) -> anyhow::Result<Built> {
         }
     }
     blockhash.spawn(rpc.clone(), Duration::from_millis(500));
-    let observer = Arc::new(Observer::new(
+    let observer = Observer::new(
         orders.clone(),
         rpc.clone(),
         locks.clone(),
@@ -234,7 +263,12 @@ pub async fn build(cfg: Config) -> anyhow::Result<Built> {
             rebroadcast_interval: Duration::from_secs(2),
             max_rebroadcasts: 30,
         },
-    ));
+    );
+    let observer = Arc::new(if streams.is_empty() {
+        observer
+    } else {
+        observer.with_streams(streams.clone())
+    });
     let mut policy_senders = engine_senders.clone();
     if cfg.mode == Network::Mock {
         policy_senders.push(SenderKind::Mock);

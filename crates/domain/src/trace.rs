@@ -97,6 +97,13 @@ impl LatencyTrace {
             .find(|(s, _)| *s == stage)
             .map(|(_, t)| t.saturating_duration_since(self.origin).as_micros() as u64)
     }
+    /// Absolute instant of a stamped stage.
+    pub fn instant(&self, stage: Stage) -> Option<Instant> {
+        self.stamps
+            .iter()
+            .find(|(s, _)| *s == stage)
+            .map(|(_, t)| *t)
+    }
     pub fn between_us(&self, a: Stage, b: Stage) -> Option<u64> {
         Some(self.us(b)?.saturating_sub(self.us(a)?))
     }

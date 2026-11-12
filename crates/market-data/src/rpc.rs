@@ -6,6 +6,7 @@
 //! backoff, and (c) a small dependency surface. Only methods we use are here.
 //! Method semantics follow https://solana.com/docs/rpc (accessed 2026-11-11).
 
+use crate::pool::{EndpointSpec, EndpointStats, Health, RateLimiter};
 use base64::Engine;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
@@ -13,8 +14,9 @@ use serde_json::{json, Value};
 use solana_hash::Hash;
 use solana_pubkey::Pubkey;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use trader_domain::Commitment;
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -77,19 +79,44 @@ impl RpcConfig {
     }
 }
 
+/// One endpoint (single-provider client) or a pool of providers. A pool
+/// spreads calls round-robin, rate-limits each provider client-side and fails
+/// over on 429 / transport errors (see `crate::pool`).
 #[derive(Clone)]
 pub struct RpcClient {
-    http: reqwest::Client,
+    inner: Arc<PoolInner>,
+}
+
+struct Endpoint {
     cfg: RpcConfig,
-    id: std::sync::Arc<AtomicU64>,
+    http: reqwest::Client,
+    limiter: Option<RateLimiter>,
+    health: Health,
+    stats: EndpointStats,
+}
+
+struct PoolInner {
+    endpoints: Vec<Endpoint>,
+    next: AtomicUsize,
+    id: AtomicU64,
 }
 
 impl std::fmt::Debug for RpcClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // URL may embed an API key; print host only.
-        let host = url_host(&self.cfg.url);
-        f.debug_struct("RpcClient").field("host", &host).finish()
+        // URLs may embed API keys; print hosts only.
+        f.debug_struct("RpcClient")
+            .field("hosts", &self.hosts())
+            .finish()
     }
+}
+
+/// Per-endpoint counters (host only, never the URL).
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct EndpointReport {
+    pub host: String,
+    pub ok: u64,
+    pub rate_limited: u64,
+    pub errors: u64,
 }
 
 pub fn url_host(u: &str) -> String {
@@ -169,7 +196,7 @@ struct RpcErrorObj {
 }
 
 impl RpcClient {
-    pub fn new(cfg: RpcConfig) -> Result<Self, RpcError> {
+    fn endpoint(cfg: RpcConfig, rps: Option<f64>) -> Result<Endpoint, RpcError> {
         let http = reqwest::Client::builder()
             .tcp_nodelay(true)
             .pool_idle_timeout(Duration::from_secs(90))
@@ -178,27 +205,199 @@ impl RpcClient {
             .timeout(cfg.timeout)
             .build()
             .map_err(|e| RpcError::Transport(e.to_string()))?;
-        Ok(Self {
-            http,
+        Ok(Endpoint {
             cfg,
-            id: std::sync::Arc::new(AtomicU64::new(1)),
+            http,
+            limiter: rps.map(RateLimiter::new),
+            health: Health::default(),
+            stats: EndpointStats::default(),
         })
     }
 
+    /// Single endpoint, no client-side rate limit (tests, local validator, senders).
+    pub fn new(cfg: RpcConfig) -> Result<Self, RpcError> {
+        Ok(Self {
+            inner: Arc::new(PoolInner {
+                endpoints: vec![Self::endpoint(cfg, None)?],
+                next: AtomicUsize::new(0),
+                id: AtomicU64::new(1),
+            }),
+        })
+    }
+
+    /// Pool of providers, each rate-limited client-side (default
+    /// `pool::DEFAULT_RPS` req/s unless the spec says otherwise).
+    pub fn pool(specs: &[EndpointSpec], timeout: Duration) -> Result<Self, RpcError> {
+        if specs.is_empty() {
+            return Err(RpcError::Decode("no RPC endpoints configured".into()));
+        }
+        let mut endpoints = vec![];
+        for s in specs {
+            let mut cfg = RpcConfig::new(s.http.clone());
+            cfg.timeout = timeout;
+            endpoints.push(Self::endpoint(
+                cfg,
+                Some(s.rps.unwrap_or(crate::pool::DEFAULT_RPS)),
+            )?);
+        }
+        Ok(Self {
+            inner: Arc::new(PoolInner {
+                endpoints,
+                next: AtomicUsize::new(0),
+                id: AtomicU64::new(1),
+            }),
+        })
+    }
+
+    /// Host of the first endpoint (`+N` when pooled). Never the URL.
     pub fn host(&self) -> String {
-        url_host(&self.cfg.url)
+        let eps = &self.inner.endpoints;
+        let h = url_host(&eps[0].cfg.url);
+        if eps.len() > 1 {
+            format!("{h}+{}", eps.len() - 1)
+        } else {
+            h
+        }
+    }
+
+    pub fn hosts(&self) -> Vec<String> {
+        self.inner
+            .endpoints
+            .iter()
+            .map(|e| url_host(&e.cfg.url))
+            .collect()
+    }
+
+    pub fn endpoint_count(&self) -> usize {
+        self.inner.endpoints.len()
+    }
+
+    pub fn stats(&self) -> Vec<EndpointReport> {
+        self.inner
+            .endpoints
+            .iter()
+            .map(|e| EndpointReport {
+                host: url_host(&e.cfg.url),
+                ok: e.stats.ok.load(Ordering::Relaxed),
+                rate_limited: e.stats.rate_limited.load(Ordering::Relaxed),
+                errors: e.stats.errors.load(Ordering::Relaxed),
+            })
+            .collect()
+    }
+
+    /// Pick an endpoint: round-robin over those not cooling down whose limiter
+    /// grants a token; otherwise wait (bounded by the request timeout).
+    async fn pick(&self, critical: bool, tried: &[bool]) -> Option<usize> {
+        let eps = &self.inner.endpoints;
+        let n = eps.len();
+        let start = self.inner.next.fetch_add(1, Ordering::Relaxed) % n;
+        let deadline = Instant::now() + eps[0].cfg.timeout;
+        loop {
+            let mut wait = Duration::from_millis(25);
+            let all_tried = tried.iter().all(|t| *t);
+            for i in 0..n {
+                let idx = (start + i) % n;
+                if tried[idx] && !all_tried {
+                    continue;
+                }
+                let ep = &eps[idx];
+                if let Some(c) = ep.health.cooling_for() {
+                    wait = wait.min(c);
+                    continue;
+                }
+                match &ep.limiter {
+                    None => return Some(idx),
+                    Some(l) => match l.try_take(critical) {
+                        Ok(()) => return Some(idx),
+                        Err(w) => wait = wait.min(w),
+                    },
+                }
+            }
+            if Instant::now() + wait > deadline {
+                return None;
+            }
+            tokio::time::sleep(wait.max(Duration::from_millis(1))).await;
+        }
     }
 
     pub async fn call_raw(&self, method: &str, params: Value) -> Result<Value, RpcError> {
-        let id = self.id.fetch_add(1, Ordering::Relaxed);
+        let n = self.inner.endpoints.len();
+        if n == 1 {
+            let ep = &self.inner.endpoints[0];
+            if let Some(l) = &ep.limiter {
+                while let Err(w) = l.try_take(crate::pool::is_critical(method)) {
+                    tokio::time::sleep(w).await;
+                }
+            }
+            return self.call_on(0, method, &params).await;
+        }
+        let critical = crate::pool::is_critical(method);
+        // Sends never fail over automatically (the sender owns ambiguity).
+        let max_attempts = if method == "sendTransaction" {
+            1
+        } else {
+            n.min(4)
+        };
+        let mut tried = vec![false; n];
+        let mut last_err = None;
+        for _ in 0..max_attempts {
+            let Some(idx) = self.pick(critical, &tried).await else {
+                break;
+            };
+            tried[idx] = true;
+            match self.call_on(idx, method, &params).await {
+                Ok(v) => return Ok(v),
+                Err(e) if matches!(e, RpcError::Rpc { .. }) && !e.is_rate_limited() => {
+                    return Err(e)
+                }
+                Err(e) if e.is_retryable() => last_err = Some(e),
+                Err(e) => return Err(e),
+            }
+        }
+        Err(last_err.unwrap_or_else(|| RpcError::Http {
+            status: 429,
+            body: "all RPC endpoints rate-limited or cooling down".into(),
+        }))
+    }
+
+    async fn call_on(&self, idx: usize, method: &str, params: &Value) -> Result<Value, RpcError> {
+        let ep = &self.inner.endpoints[idx];
+        let r = self.call_endpoint(ep, method, params).await;
+        match &r {
+            Ok(_) => {
+                ep.health.ok();
+                ep.stats.ok.fetch_add(1, Ordering::Relaxed);
+            }
+            Err(e) if e.is_rate_limited() => {
+                ep.health.strike();
+                ep.stats.rate_limited.fetch_add(1, Ordering::Relaxed);
+            }
+            Err(e) if e.is_ambiguous() => {
+                ep.health.strike();
+                ep.stats.errors.fetch_add(1, Ordering::Relaxed);
+            }
+            Err(_) => {
+                ep.stats.errors.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        r
+    }
+
+    async fn call_endpoint(
+        &self,
+        ep: &Endpoint,
+        method: &str,
+        params: &Value,
+    ) -> Result<Value, RpcError> {
+        let id = self.inner.id.fetch_add(1, Ordering::Relaxed);
         let body = json!({"jsonrpc":"2.0","id":id,"method":method,"params":params});
-        let mut req = self.http.post(&self.cfg.url).json(&body);
-        for (k, v) in &self.cfg.headers {
+        let mut req = ep.http.post(&ep.cfg.url).json(&body);
+        for (k, v) in &ep.cfg.headers {
             req = req.header(k, v);
         }
         let resp = req.send().await.map_err(|e| {
             if e.is_timeout() {
-                RpcError::Timeout(self.cfg.timeout)
+                RpcError::Timeout(ep.cfg.timeout)
             } else {
                 RpcError::Transport(redact(&e.to_string()))
             }
@@ -206,7 +405,7 @@ impl RpcClient {
         let status = resp.status().as_u16();
         let bytes = resp.bytes().await.map_err(|e| {
             if e.is_timeout() {
-                RpcError::Timeout(self.cfg.timeout)
+                RpcError::Timeout(ep.cfg.timeout)
             } else {
                 RpcError::Transport(redact(&e.to_string()))
             }
@@ -709,6 +908,67 @@ mod tests {
         let addr = l.local_addr().unwrap();
         tokio::spawn(async move { axum::serve(l, router).await.unwrap() });
         format!("http://{addr}")
+    }
+
+    #[tokio::test]
+    async fn pool_fails_over_from_rate_limited_endpoint_and_counts_it() {
+        let bad = serve(Router::new().route(
+            "/",
+            post(|| async { (axum::http::StatusCode::TOO_MANY_REQUESTS, Json(json!({}))) }),
+        ))
+        .await;
+        let good = serve(Router::new().route(
+            "/",
+            post(|| async { Json(json!({"jsonrpc":"2.0","id":1,"result":7})) }),
+        ))
+        .await;
+        let specs = crate::pool::parse_endpoint_lines(&format!(
+            "{bad}
+{good}
+"
+        ));
+        let pool = RpcClient::pool(&specs, Duration::from_secs(2)).unwrap();
+        assert_eq!(pool.endpoint_count(), 2);
+        for _ in 0..4 {
+            assert_eq!(pool.get_slot(Commitment::Processed).await.unwrap(), 7);
+        }
+        let st = pool.stats();
+        assert!(st[0].rate_limited >= 1, "{st:?}");
+        assert_eq!(st[1].ok, 4, "{st:?}");
+        // While cooling down, the bad endpoint is skipped (fewer 429s than calls).
+        assert!(st[0].rate_limited < 4, "{st:?}");
+    }
+
+    #[tokio::test]
+    async fn pool_does_not_fail_over_sends() {
+        let bad = serve(Router::new().route(
+            "/",
+            post(|| async { (axum::http::StatusCode::TOO_MANY_REQUESTS, Json(json!({}))) }),
+        ))
+        .await;
+        let good = serve(Router::new().route(
+            "/",
+            post(|| async { Json(json!({"jsonrpc":"2.0","id":1,"result":"SIG"})) }),
+        ))
+        .await;
+        let specs = crate::pool::parse_endpoint_lines(&format!(
+            "{bad}
+{good}
+"
+        ));
+        let pool = RpcClient::pool(&specs, Duration::from_secs(2)).unwrap();
+        let mut errs = 0;
+        for _ in 0..2 {
+            if pool
+                .send_transaction(&[1, 2, 3], false, Some(0), Commitment::Processed)
+                .await
+                .is_err()
+            {
+                errs += 1;
+            }
+        }
+        // Round-robin: one send hits the 429 endpoint and is NOT retried elsewhere.
+        assert_eq!(errs, 1);
     }
 
     #[tokio::test]

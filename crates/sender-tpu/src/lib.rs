@@ -9,7 +9,7 @@
 //! - [`ConnCache`]: one QUIC connection per leader address, pre-warmed for
 //!   leaders of the next few slots so a send does not pay the handshake.
 //! - Each send writes the same signed bytes on a fresh unidirectional stream to
-//!   the leaders of the next `fanout_slots` slots (deduplicated).
+//!   the current leader plus the next distinct leaders (`fanout_leaders` total).
 //!
 //! Identity: a random, throwaway ed25519 key per process is used only for the
 //! QUIC TLS handshake (validators require a client certificate). It is never
@@ -198,6 +198,18 @@ impl LeaderTracker {
         out
     }
 
+    /// The current leader plus the next distinct leaders, up to `n_leaders`,
+    /// looking at most `horizon_slots` ahead.
+    pub fn upcoming_leaders(
+        &self,
+        n_leaders: usize,
+        horizon_slots: u64,
+    ) -> Vec<(Pubkey, SocketAddr)> {
+        let mut v = self.upcoming(horizon_slots);
+        v.truncate(n_leaders.max(1));
+        v
+    }
+
     pub fn known_nodes(&self) -> usize {
         self.st.read().tpu.len()
     }
@@ -334,10 +346,13 @@ impl ConnCache {
     }
 }
 
+/// Leaders hold 4 consecutive slots; 64 slots of look-ahead is plenty.
+const HORIZON_SLOTS: u64 = 64;
+
 pub struct TpuSender {
     tracker: Arc<LeaderTracker>,
     conns: Arc<ConnCache>,
-    fanout_slots: u64,
+    fanout_leaders: usize,
     last_error: Mutex<Option<String>>,
 }
 
@@ -347,7 +362,7 @@ impl TpuSender {
     pub async fn start(
         rpc: RpcClient,
         stream: Option<AccountStream>,
-        fanout_slots: u64,
+        fanout_leaders: usize,
     ) -> Result<Arc<Self>, String> {
         let tracker = Arc::new(LeaderTracker::new(rpc, stream));
         tracker.refresh().await?;
@@ -355,7 +370,7 @@ impl TpuSender {
         let me = Arc::new(Self {
             tracker,
             conns,
-            fanout_slots: fanout_slots.max(1),
+            fanout_leaders: fanout_leaders.clamp(1, 8),
             last_error: Mutex::new(None),
         });
         let bg = me.clone();
@@ -369,7 +384,10 @@ impl TpuSender {
                     continue;
                 }
                 // Pre-warm connections to the leaders of the next few slots.
-                for (_, addr) in bg.tracker.upcoming(bg.fanout_slots + 8) {
+                for (_, addr) in bg
+                    .tracker
+                    .upcoming_leaders(bg.fanout_leaders + 3, HORIZON_SLOTS)
+                {
                     if bg.conns.cached(&addr).is_none() {
                         let c = bg.conns.clone();
                         tokio::spawn(async move {
@@ -406,13 +424,15 @@ impl TransactionSender for TpuSender {
         SenderKind::Tpu
     }
     fn endpoint(&self) -> String {
-        format!("tpu-quic:fanout{}", self.fanout_slots)
+        format!("tpu-quic:leaders{}", self.fanout_leaders)
     }
     fn tip_policy(&self) -> TipPolicy {
         TipPolicy::None
     }
     async fn submit(&self, wire: &[u8], _ctx: &SendContext) -> SendOutcome {
-        let targets = self.tracker.upcoming(self.fanout_slots);
+        let targets = self
+            .tracker
+            .upcoming_leaders(self.fanout_leaders, HORIZON_SLOTS);
         if targets.is_empty() {
             return SendOutcome::NotSent {
                 reason: "no upcoming leader with a known TPU QUIC address".into(),
@@ -485,5 +505,14 @@ mod tests {
         let up = t.upcoming(4);
         assert_eq!(up.iter().map(|x| x.0).collect::<Vec<_>>(), vec![a, b]);
         assert_eq!(t.upcoming(1).len(), 1);
+        // Current leader holds slots 102-103 only; distinct-leader fan-out reaches b.
+        assert_eq!(
+            t.upcoming_leaders(2, 64)
+                .iter()
+                .map(|x| x.0)
+                .collect::<Vec<_>>(),
+            vec![a, b]
+        );
+        assert_eq!(t.upcoming_leaders(1, 64).len(), 1);
     }
 }
