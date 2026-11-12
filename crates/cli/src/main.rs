@@ -1,7 +1,9 @@
-//! trader-cli — developer/operator tooling. Never touches mainnet unless the
-//! explicit `--network mainnet --i-understand-mainnet` pair is passed, and
-//! even then only read-only commands are allowed (fixture capture).
+//! trader-cli — developer/operator tooling. State-changing commands run on a
+//! local validator only, except `mainnet-canary`, which is a dry run
+//! (simulate only) unless `--send`, MAINNET_TRADING_ENABLED and an interactive
+//! confirmation are all present. Fixture capture is read-only.
 
+mod canary;
 mod localnet;
 mod smoke;
 
@@ -37,6 +39,13 @@ const HELP: &str = r#"trader-cli <command> [--flags]
       Read-only: capture Global/FeeConfig/BondingCurve/Mint account bytes.
   smoke-pump --rpc http://127.0.0.1:8899 --mint <mint> [--buy-sol 0.05] [--iterations 1] [--report out.json]
       Real engine (PumpAdapter + RpcSender + observer) buy/sell on LOCALNET; verifies balances on-chain.
+  keygen [--keypair <path>]
+      Create a canary wallet file (default ~/.trader/canary-keypair.json). Prints the pubkey only.
+  mainnet-canary --mint <mint> [--buy-lamports 120000] [--iterations 1] [--cu-price 20000] [--keypair <path>] [--send]
+      MAINNET. Without --send: DRY RUN (full engine path, signature zeroed, simulateTransaction only;
+      nothing broadcast). With --send: real buy -> sell-100% round trips; needs RPC_URL (mainnet),
+      MAINNET_TRADING_ENABLED=I_UNDERSTAND_REAL_FUNDS_AT_RISK and typing a confirmation phrase.
+      Hard caps: 0.001 SOL per buy, 10 iterations.
 
 Benchmarks live in the `trader-benchmarks` crate (cargo run -p trader-benchmarks --release -- help).
 "#;
@@ -52,6 +61,8 @@ async fn main() -> anyhow::Result<()> {
         "create-coin" => localnet::create_coin(&a).await,
         "capture-fixture" => localnet::capture_fixture(&a).await,
         "smoke-pump" => smoke::smoke_pump(&a).await,
+        "keygen" => canary::keygen(&a).await,
+        "mainnet-canary" => canary::mainnet_canary(&a).await,
         _ => {
             println!("{HELP}");
             Ok(())

@@ -94,3 +94,18 @@ E2E_DATABASE_URL=...trader_e2e pnpm exec playwright test     # 15 passed, 1 fail
 ```
 
 Not claimed: anything about GMGN/BullX or other bots (no comparable data); mainnet landing; cloud Postgres latency.
+
+## 2026-11-12 — session 1, part 4 (mainnet canary tooling)
+Owner wants a real mainnet test with ~US$1 (US$0.01 buys). Built `trader-cli keygen` and
+`trader-cli mainnet-canary` (RUNBOOK "Mainnet canary"). Dry run is the default and cannot
+broadcast (signatures zeroed, `simulateTransaction` with `sigVerify=false`); `--send` needs
+the env acknowledgement plus a typed confirmation on an interactive terminal, so it is
+run by the owner, not by an agent.
+
+Verified on localnet with the real `pump.so` (`--localnet-test`): dry run simulated OK
+(67,871 CU) and its signature was absent from the chain afterwards; 3 send round trips
+→ 6/6 FINALIZED, balances independently verified, all landed 1 slot after send. Cost:
+first buy −4,046,480 lamports (120,000 swap + 3,918,480 rent + 8,000 fee); later
+round trips −18,965 lamports each.
+
+Not done: mainnet run (owner action), close-token-account / sweep commands.

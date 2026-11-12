@@ -32,6 +32,35 @@ Symptoms: `/v1/ready` 503 (`rpc_reachable=false` or stale blockhash), quotes fai
 ## Rollback
 `ROLLBACK=1 deploy/gcp/scripts/deploy.sh`. If a migration must be reverted, restore the pre-deploy backup.
 
+## Mainnet canary from the CLI (owner runs it; ~US$1 budget)
+`trader-cli mainnet-canary` drives the real engine (PumpAdapter → RpcSender → observer)
+from a disposable keypair file. No Telegram, database or KEK needed.
+
+| step | command (PowerShell) | moves funds? |
+|---|---|---|
+| build | `cargo build --release -p trader-cli` | no |
+| wallet | `.\target\release\trader-cli.exe keygen` → prints pubkey; file at `%USERPROFILE%\.trader\canary-keypair.json` | no |
+| fund | send ~0.012 SOL (~US$1) to that pubkey from your own wallet/exchange | owner |
+| RPC | `$env:RPC_URL = "https://api.mainnet-beta.solana.com"` (or a free Helius/QuickNode URL; it may contain an API key, keep it out of git and chat) | no |
+| dry run | `.\target\release\trader-cli.exe mainnet-canary --mint <PUMP_MINT>` | **no**: full engine path, signature zeroed, `simulateTransaction` only |
+| send | `$env:MAINNET_TRADING_ENABLED = "I_UNDERSTAND_REAL_FUNDS_AT_RISK"` then `... mainnet-canary --mint <PUMP_MINT> --iterations 3 --send`, type `SEND 3 MAINNET` | **yes** |
+
+Hard caps in code: 0.001 SOL per buy (default 120,000 lamports ≈ US$0.01 at US$83/SOL),
+10 round trips per run, priority ≤ 200,000 µlamports/CU, preflight always on, genesis
+must be mainnet. Each round trip is buy → sell 100%; the run stops at the first trade
+that is not FINALIZED with balances independently verified. Report:
+`benchmarks/results/mainnet-canary-send-*.json` (contains the wallet address and signatures, which are public on-chain anyway).
+
+Cost (measured on localnet with the real `pump.so`, 2026-11-12): first buy of a coin
+locks 3,918,480 lamports of rent (token account 2,074,080 + Pump `user_volume_accumulator`
+1,844,400; recoverable only by closing those accounts, not automated yet); after that a
+120,000-lamport round trip loses ~19,000 lamports (2 × 8,000 tx fee at the default
+priority + Pump fees). Mainnet Pump fee tiers can differ from the devnet config used locally.
+
+The mint must be a Pump coin still on its bonding curve (not migrated, not mayhem mode);
+the adapter refuses others. `--localnet-test` runs the same command against a local
+validator (airdrops, no confirmation; refuses public clusters).
+
 ## Enabling a tiny, allowlisted mainnet trial (owner action only)
 Preconditions: PgStore integration tests passing against Postgres; security review of SECURITY.md residual risks; budget ≤ $20 cash approved in writing.
 1. Fresh disposable wallet per tester; fund ≤ 0.05 SOL.

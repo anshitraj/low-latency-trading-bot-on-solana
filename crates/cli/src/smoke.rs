@@ -34,14 +34,14 @@ use trader_sender_rpc::RpcSender;
 use trader_wallets::{ManagedLocalSigner, TxSigner};
 use uuid::Uuid;
 
-struct OneSigner(Arc<dyn TxSigner>);
+pub(crate) struct OneSigner(pub(crate) Arc<dyn TxSigner>);
 #[async_trait]
 impl SignerProvider for OneSigner {
     async fn signer_for(&self, _: Uuid) -> Result<Arc<dyn TxSigner>, String> {
         Ok(self.0.clone())
     }
 }
-struct FixedPolicy(Mutex<WalletPolicy>);
+pub(crate) struct FixedPolicy(pub(crate) Mutex<WalletPolicy>);
 #[async_trait]
 impl PolicySource for FixedPolicy {
     async fn policy(&self, _: Uuid) -> Result<WalletPolicy, String> {

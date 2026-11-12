@@ -358,10 +358,21 @@ impl RpcClient {
         wire_tx: &[u8],
         c: Commitment,
     ) -> Result<Value, RpcError> {
+        self.simulate_transaction_opts(wire_tx, c, true).await
+    }
+
+    /// `sig_verify = false` lets callers simulate bytes whose signatures were
+    /// zeroed, so the payload sent to the RPC can never be broadcast.
+    pub async fn simulate_transaction_opts(
+        &self,
+        wire_tx: &[u8],
+        c: Commitment,
+        sig_verify: bool,
+    ) -> Result<Value, RpcError> {
         let b64 = base64::engine::general_purpose::STANDARD.encode(wire_tx);
         self.call(
             "simulateTransaction",
-            json!([b64, {"encoding":"base64","commitment": c.as_str(), "sigVerify": true, "replaceRecentBlockhash": false}]),
+            json!([b64, {"encoding":"base64","commitment": c.as_str(), "sigVerify": sig_verify, "replaceRecentBlockhash": false}]),
         )
         .await
     }
