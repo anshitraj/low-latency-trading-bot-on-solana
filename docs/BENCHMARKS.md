@@ -202,6 +202,27 @@ order→signed 0.22–0.67 ms.
 Not measured yet: send round trip to a sender in Frankfurt (Helius/Jito), mainnet
 landing, Telegram tap → server.
 
+### 2f. Send hop and direct TPU
+Read-only probe from the GCP VM (`trader-cli send-probe`; no transaction sent):
+
+| path | round trip p50 (min–max) |
+|---|---|
+| Helius Sender Frankfurt (HTTP) | **1.43 ms** (1.31–1.65) |
+| Jito block engine Frankfurt (`getTipAccounts`) | **2.27 ms** (1.96–2.38) |
+| Jito Amsterdam | 7.75 ms |
+| QUIC handshake to the next 12 mainnet leaders' TPU | p50 29.6 ms; **2.2 ms** for leaders in Europe, up to 232 ms for US/Asia |
+| public RPC `getSlot` | 28 ms (14.9–43.6) |
+
+Local validator with the real `pump.so`, sending **only** over direct TPU QUIC
+(`localnet-canary-tpu-send-20261112.json`) and RPC+TPU (`localnet-canary-rpc-tpu-send-20261112.json`),
+WebSocket streaming + signature notifications on: 12/12 trades FINALIZED, balances
+verified, all 1 slot. Signed → handed to sender 0.0–1.7 ms. Signed → seen processed
+24–409 ms (where in the 400 ms slot it arrived; best cases 24, 35, 39 ms).
+
+Mainnet dry runs with tipped senders (`mainnet-canary-dryrun-20261112T102819Z.json`, `…102827Z.json`):
+`--senders tpu,jito` (tip 1,000) and `--senders tpu,helius` (tip 5,000) simulate cleanly
+(69,973 CU incl. the tip transfer); order→signed 0.43–0.92 ms.
+
 ### 3. Real Pump program on a local validator — `trader-cli smoke-pump --iterations 10`
 Official `pump.so` (pump-rust-client 0.5.0 artifacts) + admin PDAs cloned from
 devnet, `solana-test-validator` 4.2 in WSL2, full engine → `RpcSender`
@@ -266,7 +287,7 @@ landed once.
 | item | reason |
 |---|---|
 | Postgres on a GCP VM / Cloud SQL / Supabase | Only measured on WSL2 on the dev desktop; no cloud database authorized |
-| Mainnet landing, sender A/B (RPC vs Jito vs Helius vs TPU) | Mainnet trading not authorized; TPU sender not implemented |
+| Mainnet landing, sender A/B (RPC vs Jito vs Helius vs TPU) | Needs real sends (owner runs `mainnet-canary --send`); not run yet |
 | GCP region RTT (Frankfurt vs Singapore) | No GCP deployment authorized; script ready: `deploy/gcp/scripts/region-ab.sh` |
 | Telegram ingress→confirmation | Requires a real bot token + public HTTPS endpoint |
 | KMS signing overhead | KMS signer not implemented |

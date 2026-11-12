@@ -7,7 +7,7 @@
 | Standard RPC `sendTransaction` | implemented/tested (mock chain, localnet) | any RPC; free public endpoints are rate-limited | `maxRetries=0` (engine rebroadcasts), preflight on, base64 |
 | Jito Block Engine `POST /api/v1/transactions` | implemented, tested vs mock only | default sends need no auth key; optional `x-jito-auth` UUID; 429 on limit | always skip_preflight; `bundleOnly=true` = revert protection; min tip 1,000 lamports (bundles); tip accounts via `getTipAccounts` |
 | Helius Sender `/fast` | implemented, tested vs mock only | keyless 1 req/s, 50 TPS with key; no credits consumed | requires `skipPreflight=true`, `maxRetries=0` and a tip to a designated account: ≥0.001 SOL (Sender Max) or ≥0.000005 SOL with `?swqos_only=true` |
-| Direct TPU/QUIC (Yellowstone Jet 0.8.1) | **not implemented** | free to send, but **no stake-weighted QoS** without stake or peering | stub reports `NotSent`; the crate targets newer Solana crates (see ADR 0005) |
+| Direct TPU/QUIC (`crates/sender-tpu`, own client on quinn) | implemented; localnet-tested | free to send, but **no stake-weighted QoS** without stake or peering | leader schedule + gossip `tpuQuic`; pre-warmed QUIC connections; same bytes to the leaders of the next 2 slots |
 | Jito FullSend / bundles / ShredStream | not used | require approval and/or tips | |
 
 Sources: docs/DEPENDENCIES_AND_SOURCES.md.
@@ -30,6 +30,24 @@ timeouts, transport → Ambiguous.
 - Fan-out: all chosen senders receive the identical bytes concurrently; per-sender timeout (5 s default) and token-bucket rate limits (Jito default 1 rps, Helius 1 rps — configurable, not assumed).
 - Circuit breaker: 5 consecutive bad outcomes → open 10 s → single half-open trial.
 - Tips: see EXECUTION_ENGINE.md; the tip is paid once, by the transaction, whichever path lands it.
+
+## Fastest send path (measured from the GCP VM in Frankfurt, read-only)
+Sign once, send the same bytes in parallel to a staked path near the VM and straight to
+the leaders. Round trips (`benchmarks/results/gcp-vm/send-probe-20261112.json`):
+
+| path | p50 | notes |
+|---|---|---|
+| Helius Sender `http://fra-sender.helius-rpc.com` | 1.43 ms | regional endpoints are plain HTTP; SWQoS-only tip ≥ 5,000 lamports |
+| Jito block engine Frankfurt | 2.27 ms | tip ≥ 1,000 lamports; default 1 req/s per IP per region |
+| TPU QUIC handshake, leader in Europe | ~2.2 ms | far leaders 85–232 ms (US/Asia) |
+| public RPC `api.mainnet-beta.solana.com` | 28 ms | not for sending at speed |
+
+Jito and Helius use different tip accounts, so a transaction tips one of them; the router
+refuses incompatible combinations. Landing still waits for the leader's slot (~400 ms each);
+nobody can guarantee sub-slot landing.
+
+Landing detection: each tracked signature gets a one-shot `signatureSubscribe` (processed);
+the notification wakes the observer immediately (polling stays as fallback).
 
 ## WebSocket account stream (`crates/market-data/src/ws.rs`)
 `accountSubscribe` (base64, `processed`) for each coin's Global, FeeConfig, bonding

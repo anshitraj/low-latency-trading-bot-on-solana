@@ -14,7 +14,7 @@ durable idempotent state machine), Pump bonding-curve trading via the official
 - Telegram: `/start`, wallet creation, paste-mint token panel, preset buy / 25–100% sell buttons, confirmation with full cost breakdown and max total spend, live status edits, positions, orders, settings, `/pause`. Replay-, double-tap- and spoof-safe callbacks.
 - Mini App: Telegram initData sign-in (server-validated, single-use), trade + confirmation sheet, order tracker, portfolio (weighted-average PnL), orders, wallet tracker, settings + kill switch.
 - Engine: integer money math, per-wallet hard limits, fail-closed stale state, pre-sign transaction guard, durable SIGNED before send, ambiguous-send handling, same-signature rebroadcast, block-height expiry, fork drop, restart reconciliation, zero duplicate executions under fault injection.
-- Senders: RPC (tested on localnet), Jito and Helius Sender (tested against mocks only). TPU sender: **not implemented**.
+- Senders (same signed bytes fanned out in parallel): RPC and direct TPU/QUIC to the next leaders (both tested on localnet with the real Pump program); Jito and Helius Sender (tested against mocks; tipped mainnet transactions simulate cleanly; no mainnet send yet).
 
 ## Measured (this host, see [docs/BENCHMARKS.md](docs/BENCHMARKS.md))
 - Offline quote→build→guard→sign→serialize: **p50 139 µs, p99 316 µs**.

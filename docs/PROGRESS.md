@@ -132,3 +132,13 @@ localnet streamed send loop 6/6 FINALIZED.
 Issues found: the live bench first failed on the engine gate "mock sender not allowed on
 mainnet" (kept; bench labels orders localnet). A leftover validator inside WSL survived
 TaskStop and was killed mid-test by the next start (environment, documented).
+
+## 2026-11-12 — session 1, part 6 (fast send path)
+Owner asked for faster sending than RPC without paying much. Built: direct TPU QUIC sender
+(own client: leader tracker, pre-warmed connections, fan-out to next 2 leaders, throwaway
+TLS identity), Jito Frankfurt and Helius Frankfurt as canary senders with tips, signature
+notifications that wake the observer, and `trader-cli send-probe` (read-only).
+Measured from the VM: Helius FRA 1.43 ms, Jito FRA 2.27 ms, EU leaders' TPU 2.2 ms, public
+RPC 28 ms. Localnet: TPU-only and RPC+TPU 12/12 FINALIZED; best signed→seen 24–39 ms.
+Mainnet tipped dry runs OK. Not done: real mainnet sends (owner action), staked access,
+choosing Jito region by leader location. Canary key not yet on the VM (owner stopped the copy; nothing was uploaded).

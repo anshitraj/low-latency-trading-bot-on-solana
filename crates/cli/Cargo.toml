@@ -17,6 +17,8 @@ trader-wallets = { workspace = true }
 trader-execution = { workspace = true }
 trader-router = { workspace = true }
 trader-sender-rpc = { workspace = true }
+trader-sender-jito = { workspace = true }
+trader-sender-tpu = { workspace = true }
 trader-orders = { workspace = true }
 trader-protocol-pump = { workspace = true }
 pump-rust-client = { workspace = true }
@@ -30,6 +32,7 @@ solana-compute-budget-interface = { workspace = true }
 solana-hash = { workspace = true }
 bincode = { workspace = true }
 tokio = { workspace = true }
+reqwest = { workspace = true }
 serde_json = { workspace = true }
 base64 = { workspace = true }
 bs58 = { workspace = true }

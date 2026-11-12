@@ -72,10 +72,16 @@ pub type TraceSink = Arc<Mutex<Vec<(Uuid, LatencyTrace, Option<u64>)>>>;
 #[derive(Clone)]
 pub struct ObserverHandle {
     inner: Arc<Mutex<HashMap<String, Tracked>>>,
+    /// Optional WebSocket stream: each tracked signature gets a one-shot
+    /// `signatureSubscribe`, whose notification wakes the poll loop at once.
+    stream: Arc<parking_lot::RwLock<Option<trader_market_data::AccountStream>>>,
 }
 
 impl ObserverHandle {
     pub fn track(&self, t: Track) {
+        if let Some(s) = self.stream.read().as_ref() {
+            s.subscribe_signature(&t.signature);
+        }
         let mut g = self.inner.lock();
         g.entry(t.signature.clone()).or_insert(Tracked {
             t,
@@ -98,6 +104,7 @@ pub struct Observer {
     updates: broadcast::Sender<OrderUpdate>,
     cfg: ObserverConfig,
     pub traces: TraceSink,
+    wake: Arc<tokio::sync::Notify>,
 }
 
 impl Observer {
@@ -111,6 +118,7 @@ impl Observer {
         Self {
             handle: ObserverHandle {
                 inner: Default::default(),
+                stream: Default::default(),
             },
             store,
             rpc,
@@ -118,7 +126,16 @@ impl Observer {
             updates,
             cfg,
             traces: Default::default(),
+            wake: Default::default(),
         }
+    }
+
+    /// Wake the poll loop as soon as a tracked signature is reported
+    /// `processed` over the WebSocket stream (polling continues as the fallback).
+    pub fn with_stream(self, stream: trader_market_data::AccountStream) -> Self {
+        stream.set_signature_notify(self.wake.clone());
+        *self.handle.stream.write() = Some(stream);
+        self
     }
 
     pub fn spawn(self: Arc<Self>) -> tokio::task::JoinHandle<()> {
@@ -126,7 +143,10 @@ impl Observer {
             let mut tick = tokio::time::interval(self.cfg.poll_interval);
             tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             loop {
-                tick.tick().await;
+                tokio::select! {
+                    _ = tick.tick() => {}
+                    _ = self.wake.notified() => {}
+                }
                 if let Err(e) = self.poll_once().await {
                     tracing::warn!(error = %e, "observer poll failed");
                 }

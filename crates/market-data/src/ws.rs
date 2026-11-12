@@ -23,7 +23,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Notify};
 use tokio_tungstenite::tungstenite::Message;
 
 #[derive(Clone, Debug)]
@@ -43,11 +43,21 @@ struct State {
     subs: HashMap<u64, Pubkey>,
 }
 
+enum Cmd {
+    Accounts(Vec<Pubkey>),
+    Signature(String),
+}
+
 struct Inner {
     url: String,
     wanted: RwLock<HashSet<Pubkey>>,
+    /// Signatures awaiting a `processed` notification (resubscribed on reconnect).
+    wanted_sigs: RwLock<HashSet<String>>,
+    /// signature -> (slot, time the notification arrived)
+    seen_sigs: Mutex<HashMap<String, (u64, Instant)>>,
+    sig_notify: RwLock<Option<Arc<Notify>>>,
     state: RwLock<State>,
-    cmd: mpsc::UnboundedSender<Vec<Pubkey>>,
+    cmd: mpsc::UnboundedSender<Cmd>,
     connected: AtomicBool,
     last_slot: AtomicU64,
     last_slot_at: Mutex<Option<Instant>>,
@@ -68,6 +78,9 @@ impl AccountStream {
         let inner = Arc::new(Inner {
             url: url.into(),
             wanted: Default::default(),
+            wanted_sigs: Default::default(),
+            seen_sigs: Default::default(),
+            sig_notify: Default::default(),
             state: Default::default(),
             cmd: tx,
             connected: AtomicBool::new(false),
@@ -91,8 +104,26 @@ impl AccountStream {
             keys.iter().copied().filter(|k| w.insert(*k)).collect()
         };
         if !new.is_empty() {
-            let _ = self.inner.cmd.send(new);
+            let _ = self.inner.cmd.send(Cmd::Accounts(new));
         }
+    }
+
+    /// One-shot `signatureSubscribe` at `processed`; on notification the
+    /// signature is recorded (see [`Self::seen_signature`]) and the notifier set
+    /// by [`Self::set_signature_notify`] is woken.
+    pub fn subscribe_signature(&self, sig: &str) {
+        if self.inner.wanted_sigs.write().insert(sig.to_string()) {
+            let _ = self.inner.cmd.send(Cmd::Signature(sig.to_string()));
+        }
+    }
+
+    pub fn set_signature_notify(&self, n: Arc<Notify>) {
+        *self.inner.sig_notify.write() = Some(n);
+    }
+
+    /// (slot, arrival time) of the processed notification, if one arrived.
+    pub fn seen_signature(&self, sig: &str) -> Option<(u64, Instant)> {
+        self.inner.seen_sigs.lock().get(sig).copied()
     }
 
     pub fn is_acked(&self, key: &Pubkey) -> bool {
@@ -212,6 +243,10 @@ pub(crate) enum WsEvent {
         slot: u64,
         account: Option<AccountData>,
     },
+    Signature {
+        sub_id: u64,
+        slot: u64,
+    },
     Other,
 }
 
@@ -252,13 +287,26 @@ pub(crate) fn parse_message(text: &str) -> WsEvent {
                 account,
             }
         }
+        Some("signatureNotification") => {
+            let p = &v["params"];
+            match (
+                p["subscription"].as_u64(),
+                p["result"]["context"]["slot"].as_u64(),
+            ) {
+                // `receivedSignature` notifications are not requested (no enableReceivedNotification).
+                (Some(sub_id), Some(slot)) if p["result"]["value"].is_object() => {
+                    WsEvent::Signature { sub_id, slot }
+                }
+                _ => WsEvent::Other,
+            }
+        }
         _ => WsEvent::Other,
     }
 }
 
 const SLOT_REQ_ID: u64 = 1;
 
-async fn run(inner: Arc<Inner>, mut rx: mpsc::UnboundedReceiver<Vec<Pubkey>>) {
+async fn run(inner: Arc<Inner>, mut rx: mpsc::UnboundedReceiver<Cmd>) {
     let mut backoff = Duration::from_millis(250);
     loop {
         match tokio_tungstenite::connect_async(inner.url.as_str()).await {
@@ -289,12 +337,19 @@ async fn session(
     ws: tokio_tungstenite::WebSocketStream<
         tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
     >,
-    rx: &mut mpsc::UnboundedReceiver<Vec<Pubkey>>,
+    rx: &mut mpsc::UnboundedReceiver<Cmd>,
 ) {
     let (mut sink, mut stream) = ws.split();
     let mut next_id: u64 = SLOT_REQ_ID + 1;
     let mut pending: HashMap<u64, Pubkey> = HashMap::new();
+    let mut pending_sigs: HashMap<u64, String> = HashMap::new();
+    let mut sig_subs: HashMap<u64, String> = HashMap::new();
     let mut slot_sub: Option<u64> = None;
+    let sig_msg = |id: u64, sig: &str| {
+        json!({"jsonrpc":"2.0","id":id,"method":"signatureSubscribe",
+               "params":[sig, {"commitment":"processed"}]})
+        .to_string()
+    };
     let sub_msg = |id: u64, k: &Pubkey| {
         json!({"jsonrpc":"2.0","id":id,"method":"accountSubscribe",
                "params":[k.to_string(), {"encoding":"base64","commitment":"processed"}]})
@@ -318,6 +373,15 @@ async fn session(
             return;
         }
     }
+    let sigs: Vec<String> = inner.wanted_sigs.read().iter().cloned().collect();
+    for sig in sigs {
+        let id = next_id;
+        next_id += 1;
+        pending_sigs.insert(id, sig.clone());
+        if sink.send(Message::text(sig_msg(id, &sig))).await.is_err() {
+            return;
+        }
+    }
     inner.connected.store(true, Ordering::Release);
     let mut ping = tokio::time::interval(Duration::from_secs(15));
     ping.tick().await;
@@ -335,6 +399,11 @@ async fn session(
                 };
                 match parse_message(text.as_str()) {
                     WsEvent::Ack { req_id, sub_id } if req_id == SLOT_REQ_ID => slot_sub = Some(sub_id),
+                    WsEvent::Ack { req_id, sub_id } if pending_sigs.contains_key(&req_id) => {
+                        if let Some(sig) = pending_sigs.remove(&req_id) {
+                            sig_subs.insert(sub_id, sig);
+                        }
+                    }
                     WsEvent::Ack { req_id, sub_id } => {
                         if let Some(k) = pending.remove(&req_id) {
                             let mut st = inner.state.write();
@@ -356,16 +425,41 @@ async fn session(
                             }
                         }
                     }
+                    WsEvent::Signature { sub_id, slot } => {
+                        // One-shot: the server drops the subscription after notifying.
+                        if let Some(sig) = sig_subs.remove(&sub_id) {
+                            inner.wanted_sigs.write().remove(&sig);
+                            let mut seen = inner.seen_sigs.lock();
+                            if seen.len() > 10_000 {
+                                seen.clear();
+                            }
+                            seen.insert(sig, (slot, Instant::now()));
+                            drop(seen);
+                            if let Some(n) = inner.sig_notify.read().as_ref() {
+                                n.notify_one();
+                            }
+                        }
+                    }
                     WsEvent::Other => {}
                 }
             }
-            keys = rx.recv() => {
-                let Some(keys) = keys else { return };
-                for k in keys {
-                    let id = next_id;
-                    next_id += 1;
-                    pending.insert(id, k);
-                    if sink.send(Message::text(sub_msg(id, &k))).await.is_err() { return; }
+            cmd = rx.recv() => {
+                match cmd {
+                    None => return,
+                    Some(Cmd::Accounts(keys)) => {
+                        for k in keys {
+                            let id = next_id;
+                            next_id += 1;
+                            pending.insert(id, k);
+                            if sink.send(Message::text(sub_msg(id, &k))).await.is_err() { return; }
+                        }
+                    }
+                    Some(Cmd::Signature(sig)) => {
+                        let id = next_id;
+                        next_id += 1;
+                        pending_sigs.insert(id, sig.clone());
+                        if sink.send(Message::text(sig_msg(id, &sig))).await.is_err() { return; }
+                    }
                 }
             }
             _ = ping.tick() => {
@@ -451,6 +545,15 @@ mod tests {
             WsEvent::Account { account: None, .. }
         ));
         assert_eq!(parse_message("not json"), WsEvent::Other);
+        assert_eq!(
+            parse_message(
+                r#"{"jsonrpc":"2.0","method":"signatureNotification","params":{"result":{"context":{"slot":77},"value":{"err":null}},"subscription":9}}"#
+            ),
+            WsEvent::Signature {
+                sub_id: 9,
+                slot: 77
+            }
+        );
     }
 
     #[tokio::test]

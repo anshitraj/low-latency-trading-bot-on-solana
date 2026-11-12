@@ -1,0 +1,141 @@
+{
+  "generated_at": "2026-11-12T10:25:37.029044164+00:00",
+  "helius_sender_ping": {
+    "ams": {
+      "error": null,
+      "first_ms": 20.731164,
+      "reused": {
+        "max_ms": 215.856942,
+        "min_ms": 7.3016879999999995,
+        "n": 5,
+        "p50_ms": 7.351126000000001
+      }
+    },
+    "fra": {
+      "error": null,
+      "first_ms": 4.76668,
+      "reused": {
+        "max_ms": 1.648322,
+        "min_ms": 1.3060649999999998,
+        "n": 5,
+        "p50_ms": 1.426619
+      }
+    }
+  },
+  "host": "",
+  "jito_get_tip_accounts": {
+    "amsterdam": {
+      "error": null,
+      "first_ms": 28.513308000000002,
+      "reused": {
+        "max_ms": 7.8176630000000005,
+        "min_ms": 7.59582,
+        "n": 4,
+        "p50_ms": 7.754148
+      }
+    },
+    "frankfurt": {
+      "error": null,
+      "first_ms": 10.33643,
+      "reused": {
+        "max_ms": 2.3829860000000003,
+        "min_ms": 1.9628290000000002,
+        "n": 4,
+        "p50_ms": 2.267863
+      }
+    }
+  },
+  "kind": "send_probe",
+  "note": "read-only: no transaction sent; QUIC connections opened with a throwaway identity, nothing written",
+  "rpc_getslot": {
+    "first_ms": 6.334524999999999,
+    "reused": {
+      "max_ms": 43.621709,
+      "min_ms": 14.927264000000001,
+      "n": 9,
+      "p50_ms": 27.978908999999998
+    }
+  },
+  "rpc_host": "api.mainnet-beta.solana.com",
+  "tpu_known_nodes": 3263,
+  "tpu_leaders": [
+    {
+      "error": null,
+      "handshake_ms": 2.196328,
+      "leader": "CfgRXmp1LEYr97EaT2RyoL2cSvtWgJh52Bes89RxVSoW",
+      "tpu_quic": "198.13.141.173:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 2.5780339999999997,
+      "leader": "FNKgX9dYUhYQFRTM9bkeKoRpsyEtZGNMxbdQLDzfqB8a",
+      "tpu_quic": "198.13.140.105:12327"
+    },
+    {
+      "error": null,
+      "handshake_ms": 29.873424999999997,
+      "leader": "HMWXfjaeSHhww1wvdBhqhHVP9v96mFB4LJ9xP2MXbDGH",
+      "tpu_quic": "88.216.192.51:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 141.569194,
+      "leader": "9rkJMARqK6VBkcxGfKBAwnA44gPAfGxPbPsfsggFNDSQ",
+      "tpu_quic": "64.130.58.123:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 29.645975,
+      "leader": "HaLanfo94ezLc3JZ55qqxr7W3qbe1PprJyv2uEtriEqN",
+      "tpu_quic": "88.216.192.51:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 85.73942699999999,
+      "leader": "DRpbCBMxVnDK7maPM5tGv6MvB3v1sRMC86PZ8okm21hy",
+      "tpu_quic": "208.91.105.55:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 154.62018999999998,
+      "leader": "radM7PKUpZwJ9bYPAJ7V8FXHeUmH1zim6iaXUKkftP9",
+      "tpu_quic": "198.13.130.9:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 7.698175,
+      "leader": "GBQ2GvTzmjXMu97dr7WUnLKYTNim1aoZsYS53KYXAAAA",
+      "tpu_quic": "63.254.167.199:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 3.573615,
+      "leader": "5ZqveVffQPiUbkjBg4KD9kib1MKHLqiFno4ke9jSq9qk",
+      "tpu_quic": "198.13.140.105:12302"
+    },
+    {
+      "error": null,
+      "handshake_ms": 21.884851,
+      "leader": "3TJsiKUAmotqSU7QgtLn3P9qQbZfpdtJpsWmhQbudJXS",
+      "tpu_quic": "64.130.61.195:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 232.49133,
+      "leader": "HSDTxfgrqY8ZK88Q5Fx2DdX7zxMDqXgxJKgErTBSLoQJ",
+      "tpu_quic": "208.91.109.115:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 8.059241,
+      "leader": "AEHqTB2RtJjegsR2ePjvoJSm6AA5pnYKWVbcsn6kqTBD",
+      "tpu_quic": "84.32.186.105:12002"
+    }
+  ],
+  "tpu_quic_handshake": {
+    "max_ms": 232.49133,
+    "min_ms": 2.196328,
+    "n": 12,
+    "p50_ms": 29.645975
+  }
+}

@@ -19,7 +19,7 @@ process (same origin → no CORS, bearer auth → no CSRF surface).
    │  │ ─▶ AWAITING_AUTH ─approve─▶ wallet lock ─▶ build     │                          │
    │  │ ─▶ guard ─▶ sign once ─▶ persist SIGNED (durable)    │──▶ Router (crates/router)│
    │  │ ─▶ reserve funds ─▶ fan-out same bytes               │    RPC | Jito | Helius   │
-   │  └──────────────────────────────────────────────────────┘    (TPU: not built)     │
+   │  └──────────────────────────────────────────────────────┘    (TPU: QUIC, unstaked)     │
    │  Observer: getSignatureStatuses ─▶ OBSERVED/CONFIRMED/FINALIZED/FAILED/EXPIRED    │
    │            getTransaction ─▶ fill + positions; rebroadcast same bytes              │
    │  OrderUpdate broadcast ─▶ outbox (durable, deduped) ─▶ Telegram sendMessage/edit   │

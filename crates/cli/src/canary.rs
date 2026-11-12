@@ -57,6 +57,11 @@ pub const DEFAULT_BUY_LAMPORTS: u64 = 120_000;
 pub const MAX_ITERATIONS: usize = 10;
 /// Priority fee ceiling (micro-lamports per CU).
 pub const MAX_CU_PRICE: u64 = 200_000;
+/// Tip ceiling per transaction (0.00005 SOL).
+pub const MAX_TIP_LAMPORTS: u64 = 50_000;
+pub const JITO_FRANKFURT: &str = "https://frankfurt.mainnet.block-engine.jito.wtf";
+/// Helius Sender, Frankfurt, SWQoS-only tier (regional endpoints are plain HTTP).
+pub const HELIUS_FRANKFURT: &str = "http://fra-sender.helius-rpc.com/fast?swqos_only=true";
 const MAINNET_ACK: &str = "I_UNDERSTAND_REAL_FUNDS_AT_RISK";
 /// Estimate only (the engine sets the real limit from the adapter).
 const EST_CU_LIMIT: u64 = 150_000;
@@ -129,6 +134,8 @@ fn load_keypair(path: &PathBuf) -> anyhow::Result<Keypair> {
 struct SimulateOnly {
     rpc: RpcClient,
     out: Arc<Mutex<Vec<serde_json::Value>>>,
+    /// Mirrors the tip policy of the real senders so the simulated bytes match.
+    tip: TipPolicy,
 }
 
 /// Zero all signatures of a serialized transaction in place. Returns false if
@@ -154,7 +161,7 @@ impl TransactionSender for SimulateOnly {
         format!("simulate-only:{}", self.rpc.host())
     }
     fn tip_policy(&self) -> TipPolicy {
-        TipPolicy::None
+        self.tip.clone()
     }
     async fn submit(&self, signed_tx: &[u8], ctx: &SendContext) -> SendOutcome {
         let mut wire = signed_tx.to_vec();
@@ -286,6 +293,68 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     if !(100..=5_000).contains(&poll_ms) {
         bail!("--poll-ms must be 100..=5000");
     }
+    // Senders get the SAME signed bytes in parallel: rpc (sendTransaction),
+    // tpu (QUIC straight to the next leaders), jito (block engine, tip required).
+    let sender_names: Vec<String> = a
+        .get("senders")
+        .map(String::as_str)
+        .unwrap_or("rpc")
+        .split(',')
+        .map(|x| x.trim().to_lowercase())
+        .filter(|x| !x.is_empty())
+        .collect();
+    let mut kinds: Vec<SenderKind> = vec![];
+    for n in &sender_names {
+        let k = match n.as_str() {
+            "rpc" => SenderKind::Rpc,
+            "tpu" => SenderKind::Tpu,
+            "jito" => SenderKind::Jito,
+            "helius" => SenderKind::Helius,
+            other => bail!("unknown sender {other} (use rpc,tpu,jito,helius)"),
+        };
+        if !kinds.contains(&k) {
+            kinds.push(k);
+        }
+    }
+    let use_jito = kinds.contains(&SenderKind::Jito);
+    let use_helius = kinds.contains(&SenderKind::Helius);
+    if use_jito && use_helius {
+        bail!("pick one tipped sender per run: jito and helius use different tip accounts");
+    }
+    let tip: u64 = parse(
+        a,
+        "tip-lamports",
+        if use_helius {
+            trader_sender_rpc::HELIUS_SWQOS_MIN_TIP
+        } else if use_jito {
+            1_000
+        } else {
+            0
+        },
+    )?;
+    if use_helius && tip < trader_sender_rpc::HELIUS_SWQOS_MIN_TIP {
+        bail!(
+            "helius (SWQoS-only) needs --tip-lamports >= {}",
+            trader_sender_rpc::HELIUS_SWQOS_MIN_TIP
+        );
+    }
+    let helius_url = a
+        .get("helius-url")
+        .cloned()
+        .unwrap_or_else(|| HELIUS_FRANKFURT.to_string());
+    if tip > MAX_TIP_LAMPORTS {
+        bail!("--tip-lamports must be <= {MAX_TIP_LAMPORTS}");
+    }
+    if use_jito && tip < trader_sender_jito::JITO_MIN_TIP_LAMPORTS {
+        bail!(
+            "jito needs --tip-lamports >= {}",
+            trader_sender_jito::JITO_MIN_TIP_LAMPORTS
+        );
+    }
+    let jito_url = a
+        .get("jito-url")
+        .cloned()
+        .unwrap_or_else(|| JITO_FRANKFURT.to_string());
     let slippage =
         Bps::new(parse(a, "slippage-bps", 500u32)?).map_err(|e| anyhow!("--slippage-bps: {e}"))?;
 
@@ -315,7 +384,8 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         uva_rent
     };
     let fee_per_tx = BASE_FEE_LAMPORTS_PER_SIGNATURE
-        + (cu_price as u128 * EST_CU_LIMIT as u128 / 1_000_000) as u64;
+        + (cu_price as u128 * EST_CU_LIMIT as u128 / 1_000_000) as u64
+        + tip;
     // Pump trade fees are well under 3% per side; 3% is a conservative ceiling.
     let est_loss_per_round_trip = 2 * fee_per_tx + buy * 6 / 100;
     let est_max_loss = iterations as u64 * est_loss_per_round_trip;
@@ -336,6 +406,8 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         "iterations": iterations,
         "websocket": !a.contains_key("no-ws"),
         "cu_price_micro_lamports": cu_price,
+        "senders": sender_names,
+        "tip_lamports_per_tx": tip,
         "est_fee_per_tx_lamports": fee_per_tx,
         "rent_locked_if_new_lamports": rent_new,
         "rent_note": "token account + Pump user_volume_accumulator rent stays in those accounts (recoverable by closing them; not automated yet)",
@@ -418,17 +490,102 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     blockhash.spawn(rpc.clone(), Duration::from_secs(2));
     let sims = Arc::new(Mutex::new(vec![]));
     let mut router = Router::new();
-    let sender: Arc<dyn TransactionSender> = if send {
-        Arc::new(RpcSender::standard(rpc.clone(), false))
+    let jito_tip_accounts = if use_jito {
+        let j = trader_sender_jito::JitoSender::new(
+            jito_url.clone(),
+            false,
+            None,
+            Duration::from_secs(5),
+        );
+        let accts = j
+            .fetch_tip_accounts()
+            .await
+            .map_err(|e| anyhow!("jito getTipAccounts: {e}"))?;
+        if accts.is_empty() {
+            bail!("jito returned no tip accounts");
+        }
+        Some(accts)
     } else {
-        Arc::new(SimulateOnly {
-            rpc: rpc.clone(),
-            out: sims.clone(),
-        })
+        None
     };
-    router.add(ManagedSender::new(sender, Duration::from_secs(10), None));
+    if send {
+        for k in &kinds {
+            match k {
+                SenderKind::Rpc => router.add(ManagedSender::new(
+                    Arc::new(RpcSender::standard(rpc.clone(), false)),
+                    Duration::from_secs(10),
+                    None,
+                )),
+                SenderKind::Tpu => {
+                    let t = trader_sender_tpu::TpuSender::start(rpc.clone(), stream.clone(), 2)
+                        .await
+                        .map_err(|e| anyhow!("tpu sender: {e}"))?;
+                    router.add(ManagedSender::new(t, Duration::from_secs(3), None));
+                }
+                SenderKind::Jito => {
+                    let accts = jito_tip_accounts.clone().expect("jito set up above");
+                    // Jito's default limit is 1 request/s per IP per region.
+                    router.add(ManagedSender::new(
+                        Arc::new(
+                            trader_sender_jito::JitoSender::new(
+                                jito_url.clone(),
+                                false,
+                                None,
+                                Duration::from_secs(5),
+                            )
+                            .with_tip_accounts(accts),
+                        ),
+                        Duration::from_secs(5),
+                        Some(trader_router::TokenBucket::new(1, Duration::from_secs(1))),
+                    ));
+                }
+                SenderKind::Helius => {
+                    let mut hc = RpcConfig::new(helius_url.clone());
+                    hc.timeout = Duration::from_secs(5);
+                    router.add(ManagedSender::new(
+                        Arc::new(RpcSender::helius_sender(RpcClient::new(hc)?, true)),
+                        Duration::from_secs(5),
+                        Some(trader_router::TokenBucket::new(1, Duration::from_secs(1))),
+                    ));
+                }
+                _ => unreachable!(),
+            }
+        }
+    } else {
+        // Dry run: one simulate-only sender carrying the same tip policy, so the
+        // simulated transaction is byte-for-byte the shape that would be sent.
+        let tip = match &jito_tip_accounts {
+            Some(accts) => TipPolicy::Required {
+                min_lamports: trader_sender_jito::JITO_MIN_TIP_LAMPORTS,
+                accounts: accts.clone(),
+            },
+            None if use_helius => TipPolicy::Required {
+                min_lamports: trader_sender_rpc::HELIUS_SWQOS_MIN_TIP,
+                accounts: trader_sender_rpc::HELIUS_TIP_ACCOUNTS
+                    .iter()
+                    .map(|k| Pubkey::from_str(k).expect("valid tip account"))
+                    .collect(),
+            },
+            None => TipPolicy::None,
+        };
+        router.add(ManagedSender::new(
+            Arc::new(SimulateOnly {
+                rpc: rpc.clone(),
+                out: sims.clone(),
+                tip,
+            }),
+            Duration::from_secs(10),
+            None,
+        ));
+    }
+    // Intent / policy sender lists: dry run only has the simulate-only (rpc) sender.
+    let intent_senders: Vec<SenderKind> = if send {
+        kinds.clone()
+    } else {
+        vec![SenderKind::Rpc]
+    };
     let (tx, _rx) = broadcast::channel(1024);
-    let observer = Arc::new(Observer::new(
+    let mut observer = Observer::new(
         store.clone(),
         rpc.clone(),
         locks.clone(),
@@ -438,7 +595,12 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
             rebroadcast_interval: Duration::from_secs(2),
             max_rebroadcasts: 10,
         },
-    ));
+    );
+    if let Some(s) = &stream {
+        // signatureSubscribe wakes the observer the moment a send is processed.
+        observer = observer.with_stream(s.clone());
+    }
+    let observer = Arc::new(observer);
     observer.clone().spawn();
     // Canary wallet policy (explicit, not defaults): per-wallet mainnet switch
     // on for this disposable wallet only; reserve = system-account rent floor
@@ -450,10 +612,10 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         max_trades_per_day: 2 * MAX_ITERATIONS as u32 + 4,
         min_sol_reserve: Lamports(WALLET_RENT_FLOOR + 100_000),
         max_priority_fee: Lamports(50_000),
-        max_tip: Lamports(0),
+        max_tip: Lamports(tip),
         daily_loss_limit: Lamports(10_000_000),
         mainnet_enabled: true,
-        allowed_senders: vec![SenderKind::Rpc],
+        allowed_senders: intent_senders.clone(),
         ..Default::default()
     };
     let engine = Engine::new(
@@ -491,9 +653,9 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         fees: FeePreference {
             compute_unit_price_micro_lamports: cu_price,
             max_priority_fee: Lamports(50_000),
-            tip: Lamports(0),
+            tip: Lamports(tip),
         },
-        senders: vec![SenderKind::Rpc],
+        senders: intent_senders.clone(),
         idempotency_key: key,
         requires_approval: false,
         created_at: chrono::Utc::now(),
@@ -573,6 +735,7 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
                 "token_delta": (tok_after as i128 - tok_before as i128).to_string(),
                 "independently_verified_balances": verified,
                 "intent_to_signed_us": trace.as_ref().and_then(|t| t.between_us(Stage::IntentAccepted, Stage::Signed)),
+                "signed_to_sender_ack_us": trace.as_ref().and_then(|t| t.between_us(Stage::Signed, Stage::SenderAck)),
                 "signed_to_processed_us": trace.as_ref().and_then(|t| t.between_us(Stage::Signed, Stage::FirstObservedProcessed)),
                 "signed_to_finalized_us": trace.as_ref().and_then(|t| t.between_us(Stage::Signed, Stage::Finalized)),
             });

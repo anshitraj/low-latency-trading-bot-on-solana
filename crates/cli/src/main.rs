@@ -5,6 +5,7 @@
 
 mod canary;
 mod localnet;
+mod probe;
 mod smoke;
 
 use std::collections::HashMap;
@@ -45,7 +46,10 @@ const HELP: &str = r#"trader-cli <command> [--flags]
       MAINNET. Without --send: DRY RUN (full engine path, signature zeroed, simulateTransaction only;
       nothing broadcast). With --send: real buy -> sell-100% round trips; needs RPC_URL (mainnet),
       MAINNET_TRADING_ENABLED=I_UNDERSTAND_REAL_FUNDS_AT_RISK and typing a confirmation phrase.
-      Hard caps: 0.001 SOL per buy, 10 iterations.
+      Hard caps: 0.001 SOL per buy, 10 iterations. --senders rpc,tpu,jito|helius (same signed bytes to each);
+      jito needs --tip-lamports >= 1000 (Frankfurt block engine, --jito-url); helius >= 5000 (Frankfurt SWQoS-only, --helius-url).
+  send-probe [--rpc <mainnet-url>] [--jito-regions frankfurt,amsterdam] [--helius-regions fra,ams] [--leaders 8]
+      READ-ONLY: round trips to RPC, Jito, Helius Sender and QUIC handshakes to upcoming leaders. Sends nothing.
 
 Benchmarks live in the `trader-benchmarks` crate (cargo run -p trader-benchmarks --release -- help).
 "#;
@@ -63,6 +67,7 @@ async fn main() -> anyhow::Result<()> {
         "smoke-pump" => smoke::smoke_pump(&a).await,
         "keygen" => canary::keygen(&a).await,
         "mainnet-canary" => canary::mainnet_canary(&a).await,
+        "send-probe" => probe::send_probe(&a).await,
         _ => {
             println!("{HELP}");
             Ok(())

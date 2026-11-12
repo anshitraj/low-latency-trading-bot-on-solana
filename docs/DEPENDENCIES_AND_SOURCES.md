@@ -25,7 +25,8 @@
 | sqlx 0.8 (postgres, runtime queries, embedded migrations) | 0.9 exists; 0.8 chosen for a stable known API | Postgres |
 | aes-gcm 0.10, hmac 0.12, sha2 0.10, subtle 2.6, zeroize 1.8 | | crypto |
 | hdrhistogram 7.5 | | benchmarks |
-| yellowstone-jet-tpu-client | 0.8.1 (Apache-2.0) | evaluated for TPU sender; **not integrated** |
+| yellowstone-jet-tpu-client | 0.8.1 (Apache-2.0) | evaluated for TPU sender; **not integrated** (targets Solana 3.x crates) |
+| quinn / rustls / rcgen | 0.11 / 0.23 / 0.13 (MIT/Apache-2.0) | our own minimal TPU QUIC client (`crates/sender-tpu`) |
 
 ## JS (apps/telegram-webapp, pnpm-lock.yaml)
 next 16.4.6, react/react-dom 19.3.1, tailwindcss 4.3.5, typescript 5.9.3 (7.x exists; 5.9 chosen for tooling compatibility), openapi-typescript 7.13.0, @playwright/test 1.65.0.

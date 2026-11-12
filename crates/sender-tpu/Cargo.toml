@@ -1,21 +1,25 @@
 [package]
 name = "trader-sender-tpu"
-description = "Direct TPU/QUIC sender. The Yellowstone Jet integration is behind the `jet` feature (not built by default)."
+description = "Direct TPU/QUIC sender: leader-aware fan-out over QUIC with pre-warmed connections (unstaked)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
 
-[features]
-default = []
-# Enables yellowstone-jet-tpu-client 0.8.1 (Apache-2.0). Not compiled/tested in
-# the default build; see docs/RPC_AND_ROUTING.md.
-jet = []
-
 [dependencies]
 trader-domain = { workspace = true }
 trader-router = { workspace = true }
+trader-market-data = { workspace = true }
+solana-pubkey = { workspace = true }
 async-trait = { workspace = true }
+futures = { workspace = true }
+parking_lot = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-ring", "log"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "logging", "tls12"] }
+rcgen = { version = "0.13", default-features = false, features = ["ring", "crypto"] }
 
 [dev-dependencies]
 tokio = { workspace = true }

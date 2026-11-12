@@ -24,7 +24,7 @@ Status labels: **implemented/tested**, **implemented/untested**, **gated**, **no
 | RPC sender | implemented/tested | `maxRetries=0`, preflight on by default |
 | Jito `sendTransaction` sender | implemented/tested vs mock block engine | **never sent to the real block engine**; off unless `JITO_BLOCK_ENGINE_URL` set |
 | Helius Sender | implemented/tested vs mock | tip-required; off unless configured |
-| Direct TPU/QUIC (Yellowstone Jet) | **not implemented** | stub returns `NotSent`; no staked/SWQoS access exists |
+| Direct TPU/QUIC to upcoming leaders | implemented/tested on **localnet** | own QUIC client (throwaway identity, pre-warmed connections, fan-out to next 2 leaders). **Unstaked**: no stake-weighted QoS, so packets may be dropped under congestion; run it alongside Jito/Helius. Mainnet: handshakes measured, no transaction sent yet |
 | Leader-aware routing | not implemented | router scores by health/latency only; no leader schedule input |
 | Dynamic priority fees | not implemented | user-configured CU price capped by policy; `getRecentPrioritizationFees` client exists but unused |
 | WebSocket/gRPC market data | not implemented | state refreshed on demand via `getMultipleAccounts`; quotes fail closed when stale (>2 s) |
