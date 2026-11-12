@@ -328,6 +328,44 @@ Reading (VM):
 - This compares providers with each other; it cannot show how long after the leader
   produced the slot the first notification arrived (needs shred/Geyser data).
 
+### 2j. Other platforms on-chain (read-only) — `scripts/bot_landing_study.py`
+`bot-landing-study-20261112T134009Z.json`. Each platform's latest transactions found
+through its public fee wallets (DefiLlama `dimension-adapters` fees/gmgnai.ts, bullx.ts,
+axiom.ts, photon.ts); 120 sampled per platform, plus our 10 decodable canary trades.
+A 25-per-platform spot check confirmed the samples are real swaps (Pump, PumpAMM,
+Raydium CPMM, Meteora).
+
+| | GMGN | BullX | Axiom | Photon | **ours** |
+|---|---:|---:|---:|---:|---:|
+| on-chain failed (of listed sigs) | 1.9% (34/1,799) | 4.5% (9/200) | 6.1% (234/3,812) | 2.0% (4/200) | 0/12 |
+| activity (listed sigs span) | 1,799 in ~25 min | 200 in ~15 h | 3,812 (many wallets) | 200 in ~21 min | — |
+| **priority fee p50 (p90), lamports** | **100,000** (148,049) | **1,088,800** (5,444,000) | 16,407 (80,006) | **100,000** (1,000,000) | **3,000** (3,001) |
+| Jito tip seen (share of txs) | 0.8% | 0% | 1.7% | 6% (p50 1,000,000) | 100% (1,000) |
+| tx versions | legacy 77%, v0 18%, v1 6% | v0 100% | **v1 98%** | v0 85%, v1 15% | v0 100% |
+| blockhash age p50 (p90), slots | 51 (67) | 4 (10) | 138 (140) | **2** (6) | 9 (12) |
+
+What this can and cannot say:
+- **It cannot give their click→landed time.** The chain has no record of when the
+  user clicked. Blockhash age (landing slot − slot of `recentBlockhash`) is only an upper
+  bound on build→land, and for GMGN and Axiom it is clearly a **policy**, not speed:
+  Axiom lands every trade with a 135–140-slot-old hash (≈ 10 slots before expiry, so a
+  stuck trade dies within ~2 s), GMGN with a 44–54-slot-old one. Photon (2) and BullX
+  (3–4) sign with fresh hashes, so their build→land is at most ~0.4–0.8 s. Ours (9)
+  reflects the canary's 2 s blockhash refresh, not landing (we measured 1–2 slots from
+  send to landing, 2g).
+- **Priority fee is the clear gap.** Our 3,000 lamports is ~33× below GMGN's and
+  Photon's typical 100,000 and ~360× below BullX's. In a contested block the leader
+  orders by fee per CU, so this matters more than any millisecond we can still save.
+  Test `--cu-price auto` and higher fixed values in Benchmark v3 (each 100,000 lamports
+  ≈ US$0.008 at ~US$83/SOL).
+- Few of their trades tip Jito directly; they may pay other landing services (Nozomi,
+  0slot, bloXroute, Helius Sender …) whose tip accounts this script does not detect.
+- "Failed" here means landed and reverted (slippage etc.); dropped transactions never
+  reach the chain, so the true landing rate is not visible from the chain.
+- BullX: 200 trades in ~15 h — almost inactive (consistent with reports it shut down
+  in 2026; not verified).
+- Our sample is 10 trades; theirs are a ~20-minute window each. Rerun before relying on it.
+
 ### 2f. Send hop and direct TPU
 Read-only probe from the GCP VM (`trader-cli send-probe`; no transaction sent):
 

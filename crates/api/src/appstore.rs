@@ -70,8 +70,10 @@ impl UserSettings {
             .collect(),
             sell_presets_bps: vec![2_500, 5_000, 7_500, 10_000],
             slippage: Bps::new(500).unwrap(),
-            compute_unit_price_micro_lamports: 10_000,
-            max_priority_fee: Lamports(100_000),
+            // ~100,000 lamports at a 100k-CU limit: the GMGN/Photon median
+            // priority fee on 2026-11-12 (BENCHMARKS 2j), ~US$0.008 per trade.
+            compute_unit_price_micro_lamports: 1_000_000,
+            max_priority_fee: Lamports(150_000),
             tip: Lamports(0),
             confirm_trades: true,
             senders: mode_senders,

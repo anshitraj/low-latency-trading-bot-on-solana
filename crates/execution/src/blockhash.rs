@@ -85,8 +85,8 @@ impl BlockhashService {
         Ok(e)
     }
 
-    /// Spawn the refresher. `interval` ~400-1000 ms is plenty: a blockhash is
-    /// valid for 150 blocks (~60-90 s).
+    /// Spawn the refresher. A blockhash is valid for 150 blocks (~31 s at the
+    /// ~210 ms mainnet slots measured 2026-11-12); ~400 ms keeps it within ~2 slots.
     pub fn spawn(&self, rpc: RpcClient, interval: Duration) -> tokio::task::JoinHandle<()> {
         let this = self.clone();
         tokio::spawn(async move {

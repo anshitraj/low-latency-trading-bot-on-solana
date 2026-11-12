@@ -160,3 +160,19 @@ Run 2 (owner-run): 6/6 landed and finalized on-chain; signed→landed (WebSocket
 184–298 ms; server-side order→senders ≈ 2.1–2.4 ms. Helius free plan returned 429s under
 our polling load; an observer bug (FINALIZED order dropped before its fill was decoded)
 stalled the canary on the last sell. Fixed with a regression test; observer RPC calls cut.
+
+## 2026-11-12 — session 1, part 8 (benchmark v3 tooling, providers, fees)
+- Multi-provider pool + per-provider landing observers + staged trade status (commit 7ea18cf);
+  providers from env keys and read-only `rpc-probe` (a71512b). VM probe: Helius WS first on
+  72% of slots; signed→landed is mostly inclusion, not notification delay (BENCHMARKS 2i).
+- On-chain study of GMGN/BullX/Axiom/Photon (`scripts/bot_landing_study.py`, BENCHMARKS 2j):
+  their click→landed time is not visible on chain; our priority fee (3,000 lamports) was
+  ~33× below GMGN/Photon's median 100,000.
+- Changed (owner asked to raise fees): Pump CU limit 150k → 100k (measured max 75k);
+  canary default `--priority-lamports 100000` (cap 250,000/tx; `--cu-price N|auto` still
+  available); product defaults 1,000,000 µ-lamports/CU, max priority 150,000; blockhash
+  refresh 400 ms (canary was 2 s, API 500 ms); VM: public endpoint added as a second
+  landing observer (rps=2).
+- Verified: workspace tests pass; VM mainnet dry run simulates cleanly at 100,000 lamports
+  priority (53,357 CU), order→signed 0.222 ms (`mainnet-canary-dryrun-20261112T140241Z.json`
+  on the VM). Not yet measured: real sends with the new fees (owner action).

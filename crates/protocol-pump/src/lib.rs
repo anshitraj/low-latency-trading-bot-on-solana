@@ -46,8 +46,13 @@ pub const DISC_BUY_EXACT_QUOTE_IN_V3: [u8; 8] = [225, 247, 80, 30, 213, 179, 132
 pub const DISC_SELL_V3: [u8; 8] = [28, 146, 222, 119, 38, 196, 105, 213];
 /// Position of the `user` signer in v3 trade accounts (IDL order).
 pub const V3_USER_INDEX: usize = 8;
-/// Compute units: measured on localnet (see docs/BENCHMARKS.md) plus margin.
-pub const DEFAULT_COMPUTE_UNITS: u32 = 150_000;
+/// Compute-unit limit. Measured (BENCHMARKS.md): buys 52k-75k CU (highest when
+/// the token account and volume accumulator are created; tip transfer
+/// included), sells 44k-50k. 100k leaves 33% headroom over the worst case.
+/// Leaders rank by priority fee per *requested* CU, so a tight limit buys more
+/// priority per lamport than the old 150k (exceeding it fails the trade
+/// on-chain, fee paid, so keep the margin).
+pub const DEFAULT_COMPUTE_UNITS: u32 = 100_000;
 /// Data length of the pump `UserVolumeAccumulator` account (observed on localnet).
 pub const USER_VOLUME_ACCUMULATOR_LEN: u64 = 137;
 /// A stream counts as live if a slot notification arrived within this window.

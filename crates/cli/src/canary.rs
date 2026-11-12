@@ -57,7 +57,12 @@ pub const DEFAULT_BUY_LAMPORTS: u64 = 120_000;
 /// Round trips per run (raised for latency samples; each is ~US$0.002).
 pub const MAX_ITERATIONS: usize = 25;
 /// Priority fee ceiling (micro-lamports per CU).
-pub const MAX_CU_PRICE: u64 = 200_000;
+pub const MAX_CU_PRICE: u64 = 2_500_000;
+/// Default priority fee per transaction (lamports): the median paid by GMGN and
+/// Photon trades on 2026-11-12 (BENCHMARKS 2j), ~US$0.008.
+pub const DEFAULT_PRIORITY_LAMPORTS: u64 = 100_000;
+/// Priority fee ceiling per transaction (0.00025 SOL, ~US$0.02).
+pub const MAX_PRIORITY_LAMPORTS: u64 = 250_000;
 /// Tip ceiling per transaction (0.00005 SOL).
 pub const MAX_TIP_LAMPORTS: u64 = 50_000;
 pub const JITO_FRANKFURT: &str = "https://frankfurt.mainnet.block-engine.jito.wtf";
@@ -65,7 +70,7 @@ pub const JITO_FRANKFURT: &str = "https://frankfurt.mainnet.block-engine.jito.wt
 pub const HELIUS_FRANKFURT: &str = "http://fra-sender.helius-rpc.com/fast?swqos_only=true";
 const MAINNET_ACK: &str = "I_UNDERSTAND_REAL_FUNDS_AT_RISK";
 /// Estimate only (the engine sets the real limit from the adapter).
-const EST_CU_LIMIT: u64 = 150_000;
+const EST_CU_LIMIT: u64 = trader_protocol_pump::DEFAULT_COMPUTE_UNITS as u64;
 /// System-account rent-exempt minimum (0 data bytes); the fee payer must stay
 /// above it. Read from the cluster at startup (650,240 on mainnet 2026-11-12).
 fn wallet_rent_floor() -> u64 {
@@ -362,13 +367,24 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     if iterations == 0 || iterations > MAX_ITERATIONS {
         bail!("--iterations must be 1..={MAX_ITERATIONS}");
     }
-    // `--cu-price auto`: p75 of getRecentPrioritizationFees for the Pump program
-    // and this coin's curve, per order, capped at MAX_CU_PRICE.
+    // Priority fee. Default: `--priority-lamports` (total per transaction,
+    // default 100,000 = GMGN/Photon median on 2026-11-12, BENCHMARKS 2j) turned
+    // into a per-CU price for the adapter's CU limit. `--cu-price N` sets the
+    // per-CU price directly; `--cu-price auto` = p75 of getRecentPrioritizationFees
+    // for the Pump program and this coin's curve, per order. All capped by
+    // MAX_PRIORITY_LAMPORTS per transaction.
     let cu_auto = a.get("cu-price").map(String::as_str) == Some("auto");
+    let cu_limit = trader_protocol_pump::DEFAULT_COMPUTE_UNITS as u64;
+    let priority_lamports: u64 = parse(a, "priority-lamports", DEFAULT_PRIORITY_LAMPORTS)?;
+    if priority_lamports > MAX_PRIORITY_LAMPORTS {
+        bail!("--priority-lamports must be <= {MAX_PRIORITY_LAMPORTS}");
+    }
     let cu_price: u64 = if cu_auto {
         MAX_CU_PRICE
+    } else if a.contains_key("cu-price") {
+        parse(a, "cu-price", 0)?
     } else {
-        parse(a, "cu-price", 20_000)?
+        (priority_lamports * 1_000_000).div_ceil(cu_limit)
     };
     if cu_price > MAX_CU_PRICE {
         bail!("--cu-price must be <= {MAX_CU_PRICE} micro-lamports/CU");
@@ -617,7 +633,8 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     }
     let blockhash = BlockhashService::new();
     blockhash.refresh_once(&rpc).await?;
-    blockhash.spawn(rpc.clone(), Duration::from_secs(2));
+    // ~2 slots: a fresh hash costs ~2.5 getLatestBlockhash/s, spread over the pool.
+    blockhash.spawn(rpc.clone(), Duration::from_millis(400));
     let sims = Arc::new(Mutex::new(vec![]));
     let mut router = Router::new();
     let jito_urls: Vec<String> = if jito_regions.is_empty() {
@@ -755,7 +772,7 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         max_daily_turnover: Lamports(50_000_000),
         max_trades_per_day: 2 * MAX_ITERATIONS as u32 + 4,
         min_sol_reserve: Lamports(wallet_rent_floor() + 100_000),
-        max_priority_fee: Lamports(50_000),
+        max_priority_fee: Lamports(MAX_PRIORITY_LAMPORTS),
         max_tip: Lamports(tip),
         daily_loss_limit: Lamports(10_000_000),
         mainnet_enabled: true,
@@ -803,7 +820,7 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         slippage,
         fees: FeePreference {
             compute_unit_price_micro_lamports: cu_price,
-            max_priority_fee: Lamports(50_000),
+            max_priority_fee: Lamports(MAX_PRIORITY_LAMPORTS),
             tip: Lamports(tip),
         },
         senders: intent_senders.clone(),

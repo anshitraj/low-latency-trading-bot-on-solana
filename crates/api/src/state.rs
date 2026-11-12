@@ -252,7 +252,7 @@ pub async fn build(cfg: Config) -> anyhow::Result<Built> {
             Err(e) => tracing::warn!(error = %e, "rent rate not read; using default"),
         }
     }
-    blockhash.spawn(rpc.clone(), Duration::from_millis(500));
+    blockhash.spawn(rpc.clone(), Duration::from_millis(400));
     let observer = Observer::new(
         orders.clone(),
         rpc.clone(),
