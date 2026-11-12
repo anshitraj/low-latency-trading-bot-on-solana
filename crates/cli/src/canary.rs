@@ -280,6 +280,11 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     if cu_price > MAX_CU_PRICE {
         bail!("--cu-price must be <= {MAX_CU_PRICE} micro-lamports/CU");
     }
+    // 400 ms (one slot) keeps signature polling under public-RPC rate limits.
+    let poll_ms: u64 = parse(a, "poll-ms", 400)?;
+    if !(100..=5_000).contains(&poll_ms) {
+        bail!("--poll-ms must be 100..=5000");
+    }
     let slippage =
         Bps::new(parse(a, "slippage-bps", 500u32)?).map_err(|e| anyhow!("--slippage-bps: {e}"))?;
 
@@ -313,7 +318,7 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     // Pump trade fees are well under 3% per side; 3% is a conservative ceiling.
     let est_loss_per_round_trip = 2 * fee_per_tx + buy * 6 / 100;
     let est_max_loss = iterations as u64 * est_loss_per_round_trip;
-    let need = WALLET_RENT_FLOOR + rent_new + buy + 2 * fee_per_tx + est_max_loss;
+    let need = WALLET_RENT_FLOOR + 100_000 + rent_new + buy + 2 * fee_per_tx + est_max_loss;
     if net == Network::Localnet && sol < need {
         crate::localnet::airdrop(&rpc, &wallet, 2_000_000_000).await?;
         sol = rpc.get_balance(&wallet, Commitment::Confirmed).await?.0;
@@ -385,16 +390,25 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         locks.clone(),
         tx.clone(),
         ObserverConfig {
-            poll_interval: Duration::from_millis(250),
+            poll_interval: Duration::from_millis(poll_ms),
             rebroadcast_interval: Duration::from_secs(2),
             max_rebroadcasts: 10,
         },
     ));
     observer.clone().spawn();
+    // Canary wallet policy (explicit, not defaults): per-wallet mainnet switch
+    // on for this disposable wallet only; reserve = system-account rent floor
+    // plus margin (the 0.01 SOL default reserve would exceed a ~US$1 wallet);
+    // no tips; daily loss capped at 0.01 SOL.
     let policy = WalletPolicy {
         max_order: Lamports(MAX_BUY_LAMPORTS),
         max_daily_turnover: Lamports(50_000_000),
         max_trades_per_day: 2 * MAX_ITERATIONS as u32 + 4,
+        min_sol_reserve: Lamports(WALLET_RENT_FLOOR + 100_000),
+        max_priority_fee: Lamports(50_000),
+        max_tip: Lamports(0),
+        daily_loss_limit: Lamports(10_000_000),
+        mainnet_enabled: true,
         allowed_senders: vec![SenderKind::Rpc],
         ..Default::default()
     };

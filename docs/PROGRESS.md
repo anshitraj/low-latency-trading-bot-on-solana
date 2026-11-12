@@ -109,3 +109,10 @@ first buy −4,046,480 lamports (120,000 swap + 3,918,480 rent + 8,000 fee); lat
 round trips −18,965 lamports each.
 
 Not done: mainnet run (owner action), close-token-account / sweep commands.
+
+Mainnet dry run (same day, owner-funded canary wallet, public RPC, coin `6caZsnv4PgEhKUKEV1aPQHq94PQi5HyufAt1oaU7pump` on its bonding curve):
+- Read-only first: our decoders read live mainnet Global/FeeConfig/BondingCurve; offline quote→build→sign p50 136 µs; a migrated coin was refused.
+- First dry run was REJECTED by the per-wallet `mainnet_enabled` policy gate (fail-closed, as designed; `…084505Z.json`). The canary also inherited the 0.01 SOL default reserve, which a ~US$1 wallet cannot meet after rent. Canary policy is now explicit (per-wallet mainnet on, reserve = rent floor + 100,000 lamports, tips 0, daily loss ≤ 0.01 SOL).
+- Then: simulation err=null, 69,726 / 69,728 CU, quote 120,000 lamports → 1,488,072,049 raw tokens (min 1,413,668,446). intent→signed 173 ms over the public RPC from this desktop (fresh state + balance reads), vs ~2 ms on localnet: remote RPC round trips dominate.
+- Verified afterwards: wallet balance unchanged (13,000,000 lamports), signature not on chain.
+- Observed: public RPC returns 429 after a burst of calls; mainnet now carries transaction version 1 (we send v0). Canary status polling default raised to 400 ms (`--poll-ms`).

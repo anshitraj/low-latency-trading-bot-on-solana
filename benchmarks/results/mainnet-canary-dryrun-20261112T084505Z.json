@@ -1,0 +1,49 @@
+{
+  "failure": null,
+  "generated_at": "2026-11-12T08:45:05.691283800+00:00",
+  "kind": "mainnet_pump_canary",
+  "mode": "dry_run",
+  "network": "mainnet",
+  "plan": {
+    "buy_lamports_per_iteration": 120000,
+    "cu_price_micro_lamports": 20000,
+    "est_fee_per_tx_lamports": 8000,
+    "est_max_loss_lamports_excl_rent": 23200,
+    "iterations": 1,
+    "min_wallet_balance_needed_lamports": 4968560,
+    "mint": "6caZsnv4PgEhKUKEV1aPQHq94PQi5HyufAt1oaU7pump",
+    "mode": "DRY RUN (simulate only, nothing broadcast)",
+    "network": "mainnet",
+    "rent_locked_if_new_lamports": 3918480,
+    "rent_note": "token account + Pump user_volume_accumulator rent stays in those accounts (recoverable by closing them; not automated yet)",
+    "rpc_host": "api.mainnet-beta.solana.com",
+    "token_program": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "wallet": "8gatPQf3d9F5H4NEoMhq7kqj4i7AkezgETYjUE2vMHRM",
+    "wallet_sol_lamports": 13000000
+  },
+  "rows": [
+    {
+      "compute_units_consumed": null,
+      "explorer": null,
+      "fee_lamports": null,
+      "independently_verified_balances": false,
+      "intent_to_signed_us": null,
+      "iteration": 0,
+      "landed_slot": null,
+      "order_id": "67c650ff-792e-441e-bcbf-ad2226806a08",
+      "quote_expected_out": null,
+      "quote_min_out": null,
+      "reject_reason": "policy: mainnet trading is not enabled for this wallet",
+      "send_slot": 468462895,
+      "side": "buy",
+      "signature": null,
+      "signed_to_finalized_us": null,
+      "signed_to_processed_us": null,
+      "slots_to_land": null,
+      "sol_delta": "0",
+      "state": "REJECTED",
+      "token_delta": "0"
+    }
+  ],
+  "simulations": []
+}
