@@ -103,6 +103,8 @@ struct Ledger {
     faults: VecDeque<Fault>,
     sends: u64,
     landed_sigs: Vec<String>,
+    /// Next N getTransaction calls answer HTTP 429 (rate limit injection).
+    get_tx_failures: u32,
 }
 
 #[derive(Clone)]
@@ -155,6 +157,11 @@ impl MockChain {
     pub fn balance(&self, owner: &Pubkey) -> u64 {
         self.inner.lock().lamports.get(owner).copied().unwrap_or(0)
     }
+    /// Make the next `n` getTransaction calls fail with HTTP 429.
+    pub fn fail_next_get_transaction(&self, n: u32) {
+        self.inner.lock().get_tx_failures = n;
+    }
+
     pub fn set_token(&self, owner: &Pubkey, mint: &Pubkey, amount: u64, decimals: u8) {
         let mut g = self.inner.lock();
         g.tokens.insert((*owner, *mint), amount);
@@ -620,7 +627,14 @@ async fn handle(State(c): State<MockChain>, Json(body): Json<Value>) -> (StatusC
             ok(json!({"context":{"slot":g.slot},"value":vals}))
         }
         "getTransaction" => {
-            let g = c.inner.lock();
+            let mut g = c.inner.lock();
+            if g.get_tx_failures > 0 {
+                g.get_tx_failures -= 1;
+                return (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(json!({"error": "rate limited"})),
+                );
+            }
             let s = params[0].as_str().unwrap_or("");
             match g.txs.get(s) {
                 Some(t) if !t.hidden && g.slot.saturating_sub(t.slot) >= c.cfg.confirm_after => {

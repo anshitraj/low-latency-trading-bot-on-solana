@@ -231,6 +231,28 @@ Independently verified afterwards with the public RPC (`getSignatureStatuses`,
   (1,513,840) and Pump `user_volume_accumulator` (1,346,200); 62,899 lamports consumed
   (6 × 8,000 fee, 6 × 1,000 Jito tip, Pump fees). Position closed (0 tokens left).
 
+**Run 2** (same setup, after the WebSocket-notification timestamp fix;
+`mainnet-canary-send-20261112T1107Z-run2.json`, transcribed from the terminal because the
+run did not write its report, see below). 6/6 landed and finalized on-chain (`err = null`):
+
+| trade | slots after pre-send read | order→signed | signed→senders | **signed→landed (WS processed)** | signed→bot saw final |
+|---|---:|---:|---:|---:|---:|
+| buy 1 | 1 | 0.234 ms | 6.7 ms | **238 ms** | 792 ms |
+| sell 1 | 2 | 0.194 ms | 2.1 ms | **220 ms** | 562 ms |
+| buy 2 | 1 | 0.215 ms | 2.0 ms | **185 ms** | 670 ms |
+| sell 2 | 1 | 0.204 ms | 2.2 ms | **184 ms** | 659 ms |
+| buy 3 | 2 | 0.198 ms | 1.9 ms | **298 ms** | 541 ms |
+| sell 3 | — | — | — | landed slot 468502564, finalized | (stalled, bug) |
+
+Server-side (order received → bytes at Jito + leaders) ≈ 2.1–2.4 ms (6.9 ms first).
+Landing ≈ one ~210 ms slot after sending (184–298 ms incl. notification delay).
+Bug found: Helius (free plan) answered 429 to `getTransaction`; the observer dropped the
+already-FINALIZED sell before its fill was decoded and the canary waited until its 120 s
+timeout, exiting without a report. Fixed: fills are retried with backoff (up to 10 min),
+the canary writes its report on timeouts, and observer RPC load is cut (block height at
+most every 2 s; 1 s fallback poll, 150 ms polls only for 1.5 s after a landing
+notification). Regression test: `fill_is_retried_when_get_transaction_is_rate_limited`.
+
 **Mainnet facts measured the same day (they replace older assumptions in this doc):**
 - **Alpenglow is live** (activated epoch 1064, 2026-10-21, per solana.com/upgrades/alpenglow;
   target ~150 ms finality, previously ~12.8 s). Public RPC: `finalized` slot within 0–4 slots

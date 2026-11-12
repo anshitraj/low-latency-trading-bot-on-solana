@@ -340,7 +340,13 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         bail!("--cu-price must be <= {MAX_CU_PRICE} micro-lamports/CU");
     }
     // 400 ms (one slot) keeps signature polling under public-RPC rate limits.
-    let poll_ms: u64 = parse(a, "poll-ms", 400)?;
+    // Fallback poll; with the WebSocket on, a landing notification triggers
+    // fast polling anyway, so 1 s keeps RPC load low (free plans rate-limit).
+    let poll_ms: u64 = parse(
+        a,
+        "poll-ms",
+        if a.contains_key("no-ws") { 400 } else { 1_000 },
+    )?;
     if !(100..=5_000).contains(&poll_ms) {
         bail!("--poll-ms must be 100..=5000");
     }
@@ -760,7 +766,14 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
                     break 'outer;
                 }
             };
-            let o = wait_terminal(&store, o.id, Duration::from_secs(120)).await?;
+            let o = match wait_terminal(&store, o.id, Duration::from_secs(120)).await {
+                Ok(o) => o,
+                Err(e) => {
+                    // Still write the report (and the open-position hint) below.
+                    failed = Some(format!("{}: {e}", side.as_str()));
+                    break 'outer;
+                }
+            };
             tokio::time::sleep(Duration::from_millis(800)).await;
             let sol_after = sol_balance(&rpc, &wallet).await?;
             let tok_after = retry("token balance", || {

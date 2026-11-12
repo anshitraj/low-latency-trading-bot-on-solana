@@ -155,3 +155,8 @@ slots, so docs assuming 400 ms / 12.8 s were corrected; (2) rent is 5,080 lampor
 hard-coded 6,960 over-estimated rent by ~37% (safe side) and is now read from the cluster;
 (3) the observer first saw each trade already finalized, so it now stamps the WebSocket
 notification time; (4) the TPU tracker measures slot time instead of assuming 400 ms.
+
+Run 2 (owner-run): 6/6 landed and finalized on-chain; signed→landed (WebSocket processed)
+184–298 ms; server-side order→senders ≈ 2.1–2.4 ms. Helius free plan returned 429s under
+our polling load; an observer bug (FINALIZED order dropped before its fill was decoded)
+stalled the canary on the last sell. Fixed with a regression test; observer RPC calls cut.

@@ -47,7 +47,22 @@ struct Tracked {
     rebroadcasts: u32,
     missing_after_observed: u32,
     fill_saved: bool,
+    /// Fill decode retry backoff (getTransaction can be rate-limited or not yet indexed).
+    fill_failures: u32,
+    fill_next_try: Instant,
+    /// When the order reached a landed terminal state (for the fill retry deadline).
+    landed_at: Option<Instant>,
 }
+
+/// Keep retrying the fill decode of a landed order this long before giving up
+/// (the order stays FINALIZED / FAILED_ONCHAIN; the fill can be reconciled later).
+const FILL_RETRY_FOR: Duration = Duration::from_secs(600);
+/// Finalized block height (expiry checks) is refreshed at most this often.
+const BLOCK_HEIGHT_EVERY: Duration = Duration::from_secs(2);
+/// After a WebSocket landing notification, poll fast for this long so the
+/// confirmed/finalized transitions are seen promptly.
+const FAST_POLL_FOR: Duration = Duration::from_millis(1_500);
+const FAST_POLL_EVERY: Duration = Duration::from_millis(150);
 
 #[derive(Clone, Debug)]
 pub struct ObserverConfig {
@@ -89,6 +104,9 @@ impl ObserverHandle {
             rebroadcasts: 0,
             missing_after_observed: 0,
             fill_saved: false,
+            fill_failures: 0,
+            fill_next_try: Instant::now(),
+            landed_at: None,
         });
     }
     pub fn tracked(&self) -> usize {
@@ -105,6 +123,8 @@ pub struct Observer {
     cfg: ObserverConfig,
     pub traces: TraceSink,
     wake: Arc<tokio::sync::Notify>,
+    /// (finalized block height, fetched at)
+    block_height: parking_lot::Mutex<Option<(u64, Instant)>>,
 }
 
 impl Observer {
@@ -127,6 +147,7 @@ impl Observer {
             cfg,
             traces: Default::default(),
             wake: Default::default(),
+            block_height: Default::default(),
         }
     }
 
@@ -140,12 +161,21 @@ impl Observer {
 
     pub fn spawn(self: Arc<Self>) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
-            let mut tick = tokio::time::interval(self.cfg.poll_interval);
-            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            // Normal cadence = poll_interval; after a WebSocket landing
+            // notification, poll every 150 ms for 1.5 s, then back off again.
+            let mut fast_until: Option<Instant> = None;
             loop {
+                let fast = fast_until.map(|t| Instant::now() < t).unwrap_or(false);
+                let wait = if fast {
+                    FAST_POLL_EVERY.min(self.cfg.poll_interval)
+                } else {
+                    self.cfg.poll_interval
+                };
                 tokio::select! {
-                    _ = tick.tick() => {}
-                    _ = self.wake.notified() => {}
+                    _ = tokio::time::sleep(wait) => {}
+                    _ = self.wake.notified() => {
+                        fast_until = Some(Instant::now() + FAST_POLL_FOR);
+                    }
                 }
                 if let Err(e) = self.poll_once().await {
                     tracing::warn!(error = %e, "observer poll failed");
@@ -208,7 +238,17 @@ impl Observer {
         if sigs.is_empty() {
             return Ok(());
         }
-        let finalized_height = self.rpc.get_block_height(Commitment::Finalized).await.ok();
+        let cached = *self.block_height.lock();
+        let finalized_height = match cached {
+            Some((h, at)) if at.elapsed() < BLOCK_HEIGHT_EVERY => Some(h),
+            _ => match self.rpc.get_block_height(Commitment::Finalized).await {
+                Ok(h) => {
+                    *self.block_height.lock() = Some((h, Instant::now()));
+                    Some(h)
+                }
+                Err(_) => cached.map(|(h, _)| h),
+            },
+        };
         for chunk in sigs.chunks(256) {
             let list: Vec<String> = chunk.iter().map(|(s, _)| s.clone()).collect();
             let search = chunk.iter().any(|(_, r)| *r);
@@ -257,6 +297,28 @@ impl Observer {
         st: Option<SignatureStatus>,
         finalized_height: Option<u64>,
     ) -> Result<bool, StoreError> {
+        // Landed and terminal, only the fill decode is pending: retry it with
+        // backoff instead of dropping the order (a rate-limited getTransaction
+        // must not leave a FINALIZED order without its fill).
+        if tr.t.state.is_terminal() && tr.t.state.has_landed() && !tr.fill_saved {
+            let landed_at = *tr.landed_at.get_or_insert_with(Instant::now);
+            if Instant::now() >= tr.fill_next_try {
+                let failed = tr.t.state == OrderState::FailedOnchain;
+                if let Some(fill) = self.save_fill(tr, failed).await {
+                    let msg = format!("fill recorded ({})", tr.t.state.as_str());
+                    self.notify(&tr.t, tr.t.state, msg, Some(fill));
+                }
+            }
+            if tr.fill_saved {
+                self.locks.release(&tr.t.wallet, tr.t.order_id);
+                return Ok(false);
+            }
+            if landed_at.elapsed() > FILL_RETRY_FOR {
+                tracing::error!(order_id = %tr.t.order_id, "fill not decoded after retries; giving up (order state is final)");
+                return Ok(false);
+            }
+            return Ok(true);
+        }
         match st {
             Some(s) => {
                 tr.missing_after_observed = 0;
@@ -334,6 +396,11 @@ impl Observer {
                     // Funds are now reflected in balances; drop the reservation early.
                     self.locks.release(&tr.t.wallet, tr.t.order_id);
                 }
+                if tr.t.state.is_terminal() && tr.t.state.has_landed() && !tr.fill_saved {
+                    // Keep tracking until the fill is decoded (see top of handle_one).
+                    tr.landed_at.get_or_insert_with(Instant::now);
+                    return Ok(true);
+                }
                 Ok(!tr.t.state.is_terminal())
             }
             None => {
@@ -405,15 +472,25 @@ impl Observer {
     }
 
     async fn save_fill(&self, tr: &mut Tracked, failed: bool) -> Option<FillRecord> {
+        if Instant::now() < tr.fill_next_try {
+            return None;
+        }
         let tx = match self
             .rpc
             .get_transaction(&tr.t.signature, Commitment::Confirmed)
             .await
         {
             Ok(Some(tx)) => tx,
-            Ok(None) => return None, // not yet available from this node; retry next poll
+            Ok(None) => {
+                // Not yet available from this node; retry with backoff.
+                tr.fill_failures += 1;
+                tr.fill_next_try = Instant::now() + fill_backoff(tr.fill_failures);
+                return None;
+            }
             Err(e) => {
-                tracing::warn!(error = %e, "getTransaction failed");
+                tr.fill_failures += 1;
+                tr.fill_next_try = Instant::now() + fill_backoff(tr.fill_failures);
+                tracing::warn!(error = %e, retry_in_ms = fill_backoff(tr.fill_failures).as_millis() as u64, "getTransaction failed");
                 return None;
             }
         };
@@ -506,4 +583,10 @@ pub fn created_token_account_rent(tx: &TransactionDetails, wallet: &Pubkey, mint
     }
     let _ = rent_exempt_minimum(0);
     0
+}
+
+/// 250 ms doubling, capped at 5 s.
+fn fill_backoff(failures: u32) -> Duration {
+    Duration::from_millis(250u64.saturating_mul(1u64 << failures.min(5).saturating_sub(1)))
+        .min(Duration::from_secs(5))
 }

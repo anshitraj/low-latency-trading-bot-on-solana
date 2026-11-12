@@ -1,0 +1,99 @@
+{
+  "kind": "mainnet_pump_canary",
+  "mode": "send",
+  "source": "transcribed from the owner's terminal output (screenshot) + public-RPC on-chain verification; the run did not write its report (observer stopped tracking a FINALIZED order whose getTransaction was rate-limited; fixed)",
+  "generated_at": "2026-11-12T11:07:00Z",
+  "plan": {
+    "senders": [
+      "tpu",
+      "jito"
+    ],
+    "tip_lamports_per_tx": 1000,
+    "rpc_host": "mainnet.helius-rpc.com",
+    "websocket": true,
+    "mint": "6caZsnv4PgEhKUKEV1aPQHq94PQi5HyufAt1oaU7pump"
+  },
+  "rows": [
+    {
+      "side": "buy",
+      "round": 1,
+      "signature": "nViix1GpsDuG6esSswGNJCS7mooyL9meNyYJhXuRa5T5pmfkT7oVA6btCF9iuUToBkF9J3AnMmoPSZQRWmoXQsn",
+      "send_slot": 468502520,
+      "landed_slot": 468502521,
+      "slots_to_land": 1,
+      "intent_to_signed_us": 234,
+      "signed_to_sender_ack_us": 6677,
+      "signed_to_processed_ws_us": 238171,
+      "signed_to_finalized_us": 792431,
+      "state": "FINALIZED",
+      "independently_verified_balances": true
+    },
+    {
+      "side": "sell",
+      "round": 1,
+      "signature": "TAsZ3iTy5nhirBakhLqr5geKUMYEzEwTGig415KheqFUKReXe3d7Txbvdmi7Jj3tK5i9iRHM7yyznPd8xP5xN6T",
+      "send_slot": 468502528,
+      "landed_slot": 468502530,
+      "slots_to_land": 2,
+      "intent_to_signed_us": 194,
+      "signed_to_sender_ack_us": 2101,
+      "signed_to_processed_ws_us": 220336,
+      "signed_to_finalized_us": 562332,
+      "state": "FINALIZED",
+      "independently_verified_balances": true
+    },
+    {
+      "side": "buy",
+      "round": 2,
+      "signature": "5riAp72drtr8We24sJQtyEzBKwwTNee8YNvagAwgFJztEWo1C5F9D4v5d9993XCAGHiGWoH14aoNQqHkVd9RyJD",
+      "send_slot": 468502534,
+      "landed_slot": 468502535,
+      "slots_to_land": 1,
+      "intent_to_signed_us": 215,
+      "signed_to_sender_ack_us": 2035,
+      "signed_to_processed_ws_us": 184860,
+      "signed_to_finalized_us": 669944,
+      "state": "FINALIZED",
+      "independently_verified_balances": true
+    },
+    {
+      "side": "sell",
+      "round": 2,
+      "signature": "8wrABLEyGeTZG4V62KQ9W6vdAx8FM5VZmeQdoCZ53dN6jHQwTkGm7aJAq17ZyK92hooSiurfEkx2UCTxsq6EJQP",
+      "send_slot": 468502542,
+      "landed_slot": 468502543,
+      "slots_to_land": 1,
+      "intent_to_signed_us": 204,
+      "signed_to_sender_ack_us": 2189,
+      "signed_to_processed_ws_us": 184271,
+      "signed_to_finalized_us": 659135,
+      "state": "FINALIZED",
+      "independently_verified_balances": true
+    },
+    {
+      "side": "buy",
+      "round": 3,
+      "signature": "oP69o23Uu2tMkNhdHDBhs2iwQWMeAVYTzLASCNQYVNrVCQqfM8ujWZyJdLzfPowxuEyCxVr9B2DF22Hi85EUnNf",
+      "send_slot": 468502552,
+      "landed_slot": 468502554,
+      "slots_to_land": 2,
+      "intent_to_signed_us": 198,
+      "signed_to_sender_ack_us": 1853,
+      "signed_to_processed_ws_us": 297908,
+      "signed_to_finalized_us": 540843,
+      "state": "FINALIZED",
+      "independently_verified_balances": true
+    },
+    {
+      "side": "sell",
+      "round": 3,
+      "signature_prefix": "3xdMsg5KyShwkm4QyTMS",
+      "landed_slot": 468502564,
+      "state_onchain": "finalized",
+      "err": null,
+      "note": "landed and finalized on-chain; canary waited for its fill until timeout (bug)"
+    }
+  ],
+  "wallet_lamports_after": 10014162,
+  "consumed_lamports": 62899
+}

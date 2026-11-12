@@ -385,3 +385,34 @@ async fn identical_distinct_orders_get_distinct_signatures() {
     assert_ne!(sa.signature, sb.signature);
     assert_eq!(h.chain.landed_ok().len(), 2);
 }
+
+/// Mainnet 2026-11-12 regression: with Alpenglow-like instant finality the
+/// order is FINALIZED at first observation; if getTransaction is rate-limited
+/// (429) the observer must keep retrying the fill instead of dropping the order.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn fill_is_retried_when_get_transaction_is_rate_limited() {
+    let h = Harness::new(Opts {
+        chain: trader_testkit::ChainConfig {
+            confirm_after: 1,
+            finalize_after: 1,
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .await;
+    h.chain.fail_next_get_transaction(4);
+    let o = h
+        .engine
+        .submit(h.buy(50_000_000, "fill-retry"), h.wallet, None)
+        .await
+        .unwrap();
+    let o = h.wait_terminal(o.id, Duration::from_secs(20)).await;
+    assert_eq!(o.state, OrderState::Finalized, "{:?}", o.reject_reason);
+    let fill = o.fill.expect("fill decoded after rate-limited retries");
+    assert!(fill.success);
+    assert_eq!(
+        fill.token_delta_raw as u64,
+        h.chain.token(&h.wallet, &h.mint),
+        "fill matches on-chain token balance"
+    );
+}
