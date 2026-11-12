@@ -26,14 +26,14 @@ durable idempotent state machine), Pump bonding-curve trading via the official
 ```bash
 make setup          # cargo fetch + pnpm install + generate API types
 make dev            # API + Mini App on http://127.0.0.1:8080 (MOCK chain)
-make test           # 107 Rust tests + 16 Playwright tests
+make test           # 108 Rust tests + 16 Playwright tests
 ```
 Real Pump program locally (Linux/macOS; Windows: `scripts/localnet-wsl.sh`):
 ```bash
 scripts/localnet.sh                     # clones Pump config PDAs from devnet once, starts validator
 make smoke-localnet                     # creates a coin and trades it 10×, verifies balances on-chain
 ```
-Configuration: [.env.example](.env.example). Postgres: `docker compose up -d postgres` + `DATABASE_URL`.
+Configuration: [.env.example](.env.example). Postgres without Docker: `make db-wsl` (WSL2, port 5433) then `make test-pg`; Supabase also works (see [docs/DATABASE.md](docs/DATABASE.md)).
 
 ## Repository
 ```

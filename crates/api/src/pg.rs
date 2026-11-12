@@ -58,10 +58,34 @@ const ORDER_SELECT: &str = "SELECT o.id, o.user_id, o.wallet_id, o.wallet_pubkey
     FROM orders o JOIN trade_intents i ON i.id = o.id LEFT JOIN transactions t ON t.order_id = o.id";
 
 impl PgStore {
+    /// Pool tuning (env, all optional):
+    /// - `DATABASE_MAX_CONNECTIONS` (default 16), `DATABASE_MIN_CONNECTIONS` (default 4):
+    ///   keep warm connections so the hot-path SIGNED write never pays a TCP/TLS/SCRAM
+    ///   handshake (observed multi-second stalls opening new connections through the
+    ///   WSL2 localhost relay; same risk with any remote DB such as Supabase).
+    /// - `DATABASE_ACQUIRE_TIMEOUT_SECS` (default 10).
+    /// - Per-acquire liveness ping disabled (saves one round trip per query); broken
+    ///   connections surface as query errors and are replaced by the pool.
+    ///
+    /// For Supabase use the *session* pooler or direct connection (port 5432) with
+    /// `sslmode=require`; with the *transaction* pooler (6543) add
+    /// `statement-cache-capacity=0` to the URL. See docs/DATABASE.md.
     pub async fn connect(url: &str, network: Network) -> anyhow::Result<Self> {
+        let num = |k: &str, d: u64| {
+            std::env::var(k)
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(d)
+        };
         let pool = PgPoolOptions::new()
-            .max_connections(16)
-            .acquire_timeout(std::time::Duration::from_secs(5))
+            .max_connections(num("DATABASE_MAX_CONNECTIONS", 16) as u32)
+            .min_connections(num("DATABASE_MIN_CONNECTIONS", 4) as u32)
+            .acquire_timeout(std::time::Duration::from_secs(num(
+                "DATABASE_ACQUIRE_TIMEOUT_SECS",
+                10,
+            )))
+            .idle_timeout(None)
+            .test_before_acquire(false)
             .connect(url)
             .await?;
         sqlx::migrate!("../../migrations").run(&pool).await?;
@@ -883,4 +907,19 @@ fn wallet_from(r: &PgRow) -> Result<Wallet, AppStoreError> {
         label: r.try_get("label").map_err(ae)?,
         created_at: r.try_get("created_at").map_err(ae)?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use sqlx::postgres::PgConnectOptions;
+    use std::str::FromStr;
+
+    /// Supabase connection strings we document must parse (no network).
+    #[test]
+    fn supabase_style_urls_parse() {
+        // Shared pooler, session mode (IPv4, port 5432) — recommended from GCP.
+        PgConnectOptions::from_str("postgres://postgres.abcdefghijklmnop:pw@aws-0-eu-central-1.pooler.supabase.com:5432/postgres?sslmode=require").unwrap();
+        // Shared pooler, transaction mode (port 6543) — requires disabling the statement cache.
+        PgConnectOptions::from_str("postgres://postgres.abcdefghijklmnop:pw@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=require&statement-cache-capacity=0").unwrap();
+    }
 }

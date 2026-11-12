@@ -1,5 +1,5 @@
 # Common tasks. Windows users: run from Git Bash.
-.PHONY: setup dev test test-rust test-web lint fmt bench localnet smoke-localnet db webapp audit secrets clean
+.PHONY: setup dev test test-rust test-web test-pg lint fmt bench localnet smoke-localnet db db-wsl webapp audit secrets clean
 
 setup:            ## install toolchains deps (no network services started)
 	cargo fetch
@@ -39,8 +39,14 @@ smoke-localnet:   ## requires `make localnet` running; creates a coin and trades
 	MINT=$$(cargo run -q -p trader-cli -- create-coin | sed -E 's/.*"mint":"([^"]+)".*/\1/'); \
 	cargo run --release -p trader-cli -- smoke-pump --mint $$MINT --iterations 10 --report benchmarks/results/localnet-pump-smoke.json
 
-db:
+db:               ## Postgres via Docker (optional)
 	docker compose up -d postgres
+
+db-wsl:           ## Postgres in WSL2 Ubuntu, no Docker (Windows) -> 127.0.0.1:5433
+	scripts/postgres-wsl.sh up
+
+test-pg:          ## PgStore invariants against Postgres
+	TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://trader:trader@127.0.0.1:5433/trader} cargo test -p trader-api --test pg
 
 audit:
 	cargo audit

@@ -7,8 +7,8 @@ Status labels: **implemented/tested**, **implemented/untested**, **gated**, **no
 | feature | status | notes |
 |---|---|---|
 | Exact money/fee/rent math, slippage thresholds | implemented/tested | integer only; JSON amounts are strings |
-| Order state machine + journal | implemented/tested | 13 states; DB trigger mirrors the table (trigger NOT RUN against Postgres yet) |
-| Idempotent order creation | implemented/tested | (user, key) unique in MemStore; Postgres constraint NOT RUN |
+| Order state machine + journal | implemented/tested | 13 states; DB trigger mirrors the table (verified on Postgres) |
+| Idempotent order creation | implemented/tested | MemStore and Postgres (20 concurrent creates -> 1 row) |
 | Sign-once, same-bytes fan-out, rebroadcast, block-height expiry | implemented/tested | mock chain + localnet |
 | Restart reconciliation | implemented/tested (mock) | recovered orders are observed, never rebroadcast |
 | Pump bonding-curve buy/sell (v3) | implemented/tested on localnet | real `pump.so`; **no devnet/mainnet fill yet** |
@@ -32,7 +32,8 @@ Status labels: **implemented/tested**, **implemented/untested**, **gated**, **no
 | Copy trading, TP/SL, limit/trailing orders | not implemented | tables exist; API returns 501 |
 | Referrals | not implemented | API returns 501 |
 | Withdrawals to external addresses / key export | not implemented (deliberately disabled) | |
-| PostgreSQL store | implemented/**untested** | compiles; 3 integration tests exist but were NOT RUN (no Postgres on host) |
+| PostgreSQL store | implemented/tested | 3 integration tests + full Playwright suite on Postgres 18.6; Supabase URLs parse, but no real Supabase project was used |
+| Postgres hot-path latency | measured, **target missed** | intent->signed p50 5.3 ms / p99 11.6 ms (1 wallet), p50 109 ms at 100 wallets (16-connection pool saturates); ~5 sequential DB round trips before signing; see BENCHMARKS.md 2b |
 | Redis | not used | nothing requires it yet |
 | GCP KMS signing (EC_SIGN_ED25519) | not implemented | KEK comes from Secret Manager/env; KMS key provisioned in Terraform for future wrapping |
 | Terraform / GCP scripts | implemented/untested | `terraform` not installed here; no project provided; never applied |
@@ -57,4 +58,5 @@ See `docs/BENCHMARKS.md` "NOT MEASURED": no mainnet landing data, no sender comp
 
 ## Environment notes
 - Agave 4.2 `solana-test-validator` cannot create a ledger on native Windows ("Access is denied" unpacking genesis); use WSL2/Linux (`scripts/localnet-wsl.sh`).
-- Docker Desktop's VM did not start during this session, so the compose stack and Postgres tests were not exercised.
+- Docker is not required: `scripts/postgres-wsl.sh` runs Postgres in WSL2. The compose file and Dockerfile were never exercised.
+- WSL idle-terminates a distro ~60 s after the last `wsl.exe` client exits; the Postgres script keeps a hidden keepalive running until `scripts/postgres-wsl.sh down`. The keepalive does not survive a reboot, sleep or `wsl --shutdown` (observed overnight: tests then time out after 10 s); rerun `scripts/postgres-wsl.sh up` (idempotent).

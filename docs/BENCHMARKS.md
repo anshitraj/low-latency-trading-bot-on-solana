@@ -54,9 +54,31 @@ Postgres and KMS.** File: `benchmarks/results/engine-20261111T165614Z.json`.
 | 50 | 4000 | 707 µs | 1.24 ms | 1.41 ms | 2.16 ms | 6.4 ms |
 | 100 | 4000 | 698 µs | 1.20 ms | 1.41 ms | 2.08 ms | 6.5 ms |
 
-Target "p50 < 5 ms, p99 < 15 ms warm-cache intent→signed": **met in this
-configuration** (in-memory store, cached state). With Postgres the SIGNED write
-is a synchronous durable insert — **NOT MEASURED** (no Postgres available locally).
+Target "p50 < 5 ms, p99 < 15 ms warm-cache intent→signed": **met with the
+in-memory store only** (see 2b for Postgres).
+
+### 2b. Engine warm path on PostgreSQL — `trader-bench engine --database-url …`
+Same as above, but every order write is a real PostgreSQL 18.6 write (WSL2 on
+the same host, reached through WSL's localhost relay; fresh database; pool 16
+with 4 warm connections). File: `benchmarks/results/engine-pg-20261111T181806Z.json`.
+8000/8000 orders SUBMITTED.
+
+| concurrency (wallets) | orders | intent→signed p50 | p90 | p95 | p99 | max | throughput |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 2000 | 5.28 ms | 7.32 ms | 8.37 ms | 11.6 ms | 69 ms | 83/s |
+| 10 | 2000 | 11.7 ms | 13.2 ms | 14.2 ms | 17.4 ms | 126 ms | 384/s |
+| 50 | 2000 | 60.8 ms | 66.3 ms | 68.3 ms | 78.3 ms | 97 ms | 460/s |
+| 100 | 2000 | 109 ms | 137 ms | 145 ms | 155 ms | 161 ms | 452/s |
+
+**Target missed with a real database.** p50 is borderline with one wallet and
+grows with concurrency: ~5 sequential DB round trips happen before signing
+(daily usage, CREATED→QUOTED, save quote, QUOTED→SIGNING, durable SIGNED insert)
+and the 16-connection pool saturates. Not yet implemented: merge pre-sign writes
+into one transaction, keep daily usage in memory, size the pool to concurrency,
+run Postgres on the same Linux host as the engine (no WSL relay, no network hop).
+An earlier run (`engine-pg-20261111T181602Z.json`) is superseded: the benchmark's
+blockhash was never refreshed, so a slow run tripped the 30 s freshness gate
+(the engine correctly rejected those orders) and it shared a database with test rows.
 
 ### 3. Real Pump program on a local validator — `trader-cli smoke-pump --iterations 10`
 Official `pump.so` (pump-rust-client 0.5.0 artifacts) + admin PDAs cloned from
@@ -118,7 +140,6 @@ landed once.
 | Mainnet landing, sender A/B (RPC vs Jito vs Helius vs TPU) | Mainnet trading not authorized; TPU sender not implemented |
 | GCP region RTT (Frankfurt vs Singapore) | No GCP deployment authorized; script ready: `deploy/gcp/scripts/region-ab.sh` |
 | Telegram ingress→confirmation | Requires a real bot token + public HTTPS endpoint |
-| Postgres SIGNED-write latency | No Postgres available on this host during the session |
 | KMS signing overhead | KMS signer not implemented |
 | Devnet landing | Not run (devnet faucet limits); localnet with the real program used instead |
 

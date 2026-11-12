@@ -25,6 +25,8 @@ export default defineConfig({
     url: `http://127.0.0.1:${PORT}/v1/health`,
     timeout: 600_000,
     reuseExistingServer: false,
+    stdout: "pipe",
+    stderr: "pipe",
     env: {
       TRADER_MODE: "mock",
       BIND_ADDR: `127.0.0.1:${PORT}`,
@@ -36,6 +38,8 @@ export default defineConfig({
       OBSERVER_POLL_MS: "30",
       ADMIN_TOKEN: "e2e-admin",
       RUST_LOG: "warn",
+      // Optional: run the same suite against PostgreSQL (e.g. scripts/postgres-wsl.sh).
+      DATABASE_URL: process.env.E2E_DATABASE_URL ?? "",
     },
   },
 });

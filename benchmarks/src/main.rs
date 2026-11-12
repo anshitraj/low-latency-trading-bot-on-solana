@@ -272,7 +272,18 @@ async fn engine(a: &HashMap<String, String>) {
         let (mint, snap) = load_fixture(&fixture);
         let adapter = Arc::new(PumpAdapter::offline());
         adapter.insert_snapshot(mint, snap);
-        let store = Arc::new(MemStore::new());
+        let pg = match a.get("database-url") {
+            Some(url) => Some(Arc::new(
+                trader_api::pg::PgStore::connect(url, Network::Localnet)
+                    .await
+                    .expect("postgres"),
+            )),
+            None => None,
+        };
+        let store: Arc<dyn OrderStore> = match &pg {
+            Some(p) => p.clone(),
+            None => Arc::new(MemStore::new()),
+        };
         let bh = BlockhashService::new();
         bh.set(BlockhashEntry {
             hash: Hash::new_from_array([3; 32]),
@@ -280,6 +291,21 @@ async fn engine(a: &HashMap<String, String>) {
             context_slot: 1,
             fetched_at: Instant::now(),
         });
+        // Keep the cached blockhash fresh like the real BlockhashService loop would.
+        let bh_refresh = {
+            let bh = bh.clone();
+            tokio::spawn(async move {
+                loop {
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                    bh.set(BlockhashEntry {
+                        hash: Hash::new_from_array([3; 32]),
+                        last_valid_block_height: u64::MAX / 2,
+                        context_slot: 1,
+                        fetched_at: Instant::now(),
+                    });
+                }
+            })
+        };
         let mut router = Router::new();
         router.add(ManagedSender::new(
             Arc::new(MockSender::new(SenderKind::Mock, MockBehavior::Accept)),
@@ -315,6 +341,36 @@ async fn engine(a: &HashMap<String, String>) {
             }
         }
         let wallet_ids: Vec<Uuid> = (0..c.max(1)).map(|_| Uuid::new_v4()).collect();
+        // Postgres needs real user/wallet rows (foreign keys).
+        let mut user_id = Uuid::nil();
+        if let Some(p) = &pg {
+            use trader_api::appstore::{AppStore, Wallet};
+            let u = p
+                .upsert_telegram_user(
+                    (Uuid::new_v4().as_u128() % 1_000_000_000_000) as i64,
+                    Some("bench".into()),
+                    true,
+                )
+                .await
+                .unwrap();
+            user_id = u.id;
+            for (i, wid) in wallet_ids.iter().enumerate() {
+                p.create_wallet(
+                    &Wallet {
+                        id: *wid,
+                        user_id,
+                        network: Network::Localnet,
+                        pubkey: wallets[i].to_string(),
+                        signer_kind: trader_wallets::SignerKind::ManagedLocal,
+                        label: "bench".into(),
+                        created_at: chrono::Utc::now(),
+                    },
+                    None,
+                )
+                .await
+                .unwrap();
+            }
+        }
         let ms = MultiSigner(
             wallet_ids
                 .iter()
@@ -339,9 +395,10 @@ async fn engine(a: &HashMap<String, String>) {
             handle,
             tx,
         );
+        let start_tag = Uuid::new_v4().simple().to_string();
         let mk = |i: usize, w: usize| TradeIntent {
             id: Uuid::new_v4(),
-            user_id: Uuid::nil(),
+            user_id,
             wallet_id: wallet_ids[w],
             network: Network::Localnet,
             side: Side::Buy,
@@ -356,7 +413,7 @@ async fn engine(a: &HashMap<String, String>) {
                 tip: Lamports(0),
             },
             senders: vec![SenderKind::Mock],
-            idempotency_key: format!("bench-{c}-{i}"),
+            idempotency_key: format!("bench-{c}-{i}-{}", start_tag),
             requires_approval: false,
             created_at: chrono::Utc::now(),
         };
@@ -385,13 +442,14 @@ async fn engine(a: &HashMap<String, String>) {
             t.await.unwrap();
         }
         let wall = start.elapsed();
+        bh_refresh.abort();
         let unresolved = store.list_unresolved().await.unwrap();
         let submitted = unresolved
             .iter()
-            .filter(|o| o.state == OrderState::Submitted)
+            .filter(|o| o.state == OrderState::Submitted && o.user_id == user_id)
             .count();
         if submitted == 0 {
-            let any = store.list_orders(Uuid::nil(), 1).await.unwrap();
+            let any = store.list_orders(user_id, 1).await.unwrap();
             println!(
                 "WARNING: no order submitted; sample: {:?} {:?}",
                 any.first().map(|o| o.state),
@@ -402,8 +460,20 @@ async fn engine(a: &HashMap<String, String>) {
         println!("{r}");
         results.push(r);
     }
-    let v = json!({"kind": "engine_warm_path", "env": env_info(), "note": "Real Engine with MemStore, cached Pump state (fixture), cached balances, ManagedLocal signer, MOCK sender. Excludes RPC, Postgres, KMS.", "levels": results});
-    save("engine", &v);
+    let store_kind = if a.contains_key("database-url") {
+        "PostgreSQL (all order writes incl. durable SIGNED are synchronous)"
+    } else {
+        "MemStore (in-memory)"
+    };
+    let v = json!({"kind": "engine_warm_path", "store": store_kind, "env": env_info(), "note": "Real Engine, cached Pump state (fixture), cached balances, ManagedLocal signer, MOCK sender. Excludes RPC and KMS.", "levels": results});
+    save(
+        if a.contains_key("database-url") {
+            "engine-pg"
+        } else {
+            "engine"
+        },
+        &v,
+    );
 }
 
 /// End-to-end on the MOCK chain at fixed intent rates (submit -> FINALIZED).

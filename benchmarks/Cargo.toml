@@ -35,3 +35,4 @@ async-trait = { workspace = true }
 anyhow = { workspace = true }
 hdrhistogram = { workspace = true }
 futures = { workspace = true }
+trader-api = { workspace = true }

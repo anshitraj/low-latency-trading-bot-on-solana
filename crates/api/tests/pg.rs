@@ -37,7 +37,7 @@ async fn seed(s: &PgStore) -> (Uuid, Uuid, Pubkey) {
         .upsert_telegram_user(rand_id(), Some("pg".into()), true)
         .await
         .unwrap();
-    let pk = Pubkey::new_unique();
+    let pk = rand_pk();
     let w = Wallet {
         id: Uuid::new_v4(),
         user_id: u.id,
@@ -51,6 +51,15 @@ async fn seed(s: &PgStore) -> (Uuid, Uuid, Pubkey) {
     (u.id, w.id, pk)
 }
 
+/// Random key (Pubkey::new_unique is a deterministic per-process counter and
+/// collides with rows left by earlier runs against a persistent database).
+fn rand_pk() -> Pubkey {
+    let mut b = [0u8; 32];
+    b[..16].copy_from_slice(Uuid::new_v4().as_bytes());
+    b[16..].copy_from_slice(Uuid::new_v4().as_bytes());
+    Pubkey::new_from_array(b)
+}
+
 fn rand_id() -> i64 {
     (Uuid::new_v4().as_u128() % 1_000_000_000_000) as i64
 }
@@ -62,7 +71,7 @@ fn intent(user: Uuid, wallet: Uuid, key: &str) -> TradeIntent {
         wallet_id: wallet,
         network: Network::Mock,
         side: Side::Buy,
-        mint: Pubkey::new_unique(),
+        mint: rand_pk(),
         amount: AmountSpec::ExactSolIn {
             lamports: Lamports(1_000),
         },
@@ -225,7 +234,7 @@ async fn position_fill_is_idempotent_per_order() {
     let (u, w, pk) = seed(&s).await;
     let i = intent(u, w, "pos");
     s.create_order(&i, pk).await.unwrap();
-    let mint = Pubkey::new_unique();
+    let mint = rand_pk();
     let f = Fill {
         qty_raw: 1_000,
         lamports: 5_000,

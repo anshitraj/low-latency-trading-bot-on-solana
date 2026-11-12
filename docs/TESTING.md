@@ -7,7 +7,8 @@
 | format | `cargo fmt --all -- --check` | — |
 | lint | `cargo clippy --workspace --all-targets -- -D warnings` | — |
 | Rust unit + integration + fault injection | `cargo test --workspace` | — (mock chain in-process) |
-| Postgres store invariants | `TEST_DATABASE_URL=postgres://trader:trader@127.0.0.1:5432/trader cargo test -p trader-api --test pg` | Postgres (`docker compose up -d postgres`) |
+| Postgres store invariants | `scripts/postgres-wsl.sh up` then `TEST_DATABASE_URL=postgres://trader:trader@127.0.0.1:5433/trader cargo test -p trader-api --test pg` (or `make test-pg`) | any Postgres (WSL script, VM, Supabase, CI service) |
+| Mini App E2E on Postgres | `scripts/postgres-wsl.sh reset-e2e` then `E2E_DATABASE_URL=postgres://trader:trader@127.0.0.1:5433/trader_e2e pnpm exec playwright test` | Postgres |
 | Mini App typecheck/build | `cd apps/telegram-webapp && pnpm typecheck && pnpm build` | Node 24, pnpm 10 |
 | Mini App E2E | `cd apps/telegram-webapp && pnpm exec playwright test` | Chromium (`pnpm exec playwright install chromium`) |
 | dependency audit | `cargo audit` (config: `.cargo/audit.toml`) | network |
@@ -20,12 +21,13 @@
 |---|---|
 | `cargo fmt --check` | pass |
 | `cargo clippy -D warnings` (all targets) | pass |
-| `cargo test --workspace` | **107 passed, 0 failed** (+3 PgStore tests that **SKIP** without `TEST_DATABASE_URL` — counted as NOT RUN) |
+| `cargo test --workspace` | **108 passed, 0 failed** (the 3 PgStore tests skip without `TEST_DATABASE_URL`; run separately, below) |
+| PgStore tests on PostgreSQL 18.6 (WSL2) | **3/3 passed**; then **89/89 consecutive suite runs** over 100 s, 0 failures |
 | Playwright (desktop Chrome + Pixel 7) | **16 passed, 0 failed** |
 | `cargo audit` | pass with 4 documented ignores (see KNOWN_LIMITATIONS) |
 | secret scan | clean |
 | localnet Pump smoke (real `pump.so`) | 20/20 trades FINALIZED and independently verified |
-| PgStore tests against Postgres | **NOT RUN** (Docker Desktop VM not running; no local Postgres) |
+| Playwright with Postgres as the store | **16/16 passed** in 2 consecutive runs after the WSL keepalive fix (before it, runs longer than ~60 s failed when WSL stopped the distro) |
 | `terraform validate/plan` | **NOT RUN** (terraform not installed; no GCP project provided) |
 | devnet / mainnet trades | **NOT RUN** (devnet: faucet limits; mainnet: not authorized) |
 

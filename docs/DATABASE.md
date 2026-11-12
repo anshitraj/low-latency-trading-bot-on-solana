@@ -1,8 +1,21 @@
 # Database
 
-PostgreSQL 16, migrations in `migrations/` (embedded via `sqlx::migrate!`, run at startup).
-Store implementation: `crates/api/src/pg.rs` (**compiles; integration tests NOT RUN this session**).
-Without `DATABASE_URL` the service uses in-memory stores (mock/dev only; refused on mainnet).
+PostgreSQL (tested on 18.6; any recent version expected to work), migrations in
+`migrations/` (embedded via `sqlx::migrate!`, run at startup). Store:
+`crates/api/src/pg.rs` — **integration-tested against real Postgres**
+(`crates/api/tests/pg.rs`, 3 tests, plus the full Playwright suite with Postgres
+as the backing store). Without `DATABASE_URL` the service uses in-memory stores
+(mock/dev only; refused on mainnet).
+
+## Where to run Postgres (no Docker required)
+| option | use for | how | notes |
+|---|---|---|---|
+| WSL2 Ubuntu (Windows dev) | local dev + tests | `scripts/postgres-wsl.sh up` -> `postgres://trader:trader@127.0.0.1:5433/trader` | port 5433 avoids a native Windows Postgres on 5432; a hidden keepalive stops WSL from idle-terminating the distro (~60 s after the last `wsl.exe` exits), which otherwise kills Postgres mid-run (`os error 10053`); `down` releases it |
+| Postgres on the GCP VM | private beta (fastest) | `deploy/gcp/vm/docker-compose.prod.yml`, or `apt install postgresql` on the VM | same host as the engine: no network hop on the synchronous SIGNED write |
+| Supabase | managed alternative / staging | `DATABASE_URL` = **shared pooler, session mode** string (port 5432, IPv4) + `?sslmode=require` | direct connections are IPv6-only (IPv4 is a paid add-on) and GCP's default VPC is IPv4-only; for the **transaction** pooler (6543) append `&statement-cache-capacity=0`; run migrations through session mode; every pre-sign write pays the network round trip; verify current free-plan limits (storage, pausing of inactive projects). Not tried with a real Supabase project. |
+
+Pool settings (env): `DATABASE_MAX_CONNECTIONS` (16), `DATABASE_MIN_CONNECTIONS` (4, kept warm),
+`DATABASE_ACQUIRE_TIMEOUT_SECS` (10); per-acquire liveness ping disabled to save a round trip.
 
 ## Entities
 ```

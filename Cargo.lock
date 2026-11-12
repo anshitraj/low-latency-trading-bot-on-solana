@@ -4847,6 +4847,7 @@ dependencies = [
  "solana-pubkey",
  "solana-signer",
  "tokio",
+ "trader-api",
  "trader-domain",
  "trader-execution",
  "trader-market-data",

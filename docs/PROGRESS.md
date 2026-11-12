@@ -34,10 +34,29 @@ trader-bench hotpath|engine|load|faults                      # see docs/BENCHMAR
 ```
 
 ### Blockers / needs owner
-- Docker Desktop VM did not start → Postgres tests NOT RUN. Start Docker Desktop (or provide a Postgres URL) and run `TEST_DATABASE_URL=… cargo test -p trader-api --test pg`.
 - Telegram bot token + public HTTPS domain to test the real bot.
 - GCP project id, billing account, and approval for `terraform apply`.
 - Written approval (and ≤$20 budget) before any mainnet micro-trade.
 
 ### Next (per 30-day plan)
 PgStore verification; devnet run; PumpSwap adapter; KMS-wrapped KEK; dynamic priority fees; WebSocket state/balance cache; wallet-tracking alerts; then authorized mainnet micro-trades and sender A/B.
+
+## 2026-11-11/12 — session 1, part 2 (Postgres without Docker)
+Owner asked not to use Docker Desktop. Decision: PostgreSQL inside the existing
+WSL2 Ubuntu for dev/tests (`scripts/postgres-wsl.sh`), Postgres on the GCP VM for
+the beta (fastest), Supabase documented as a managed alternative.
+
+Findings:
+- A native Windows PostgreSQL service already listens on 5432 → the WSL instance uses 5433 (the Windows service was not touched).
+- Playwright on Postgres failed intermittently: WSL idle-terminates the distro ~60 s after the last `wsl.exe` exits (`os error 10053`, then pool timeouts). Fix: hidden keepalive in `postgres-wsl.sh up`. Verified: 89/89 PgStore suite runs over 100 s with no wsl calls; Playwright 16/16 twice.
+- PgStore test reruns collided on `wallets(network, pubkey)` because `Pubkey::new_unique()` is a per-process counter; tests now use random keys (the constraint behaved correctly).
+- Pool hardened: 4 warm connections, no per-acquire ping, 10 s acquire timeout, env-tunable.
+- Measured the Postgres hot path (engine benchmark): intent→signed p50 5.3 ms with 1 wallet, 109 ms with 100 wallets → target missed; optimizations listed in BENCHMARKS.md 2b.
+
+Commands run:
+```
+scripts/postgres-wsl.sh up
+TEST_DATABASE_URL=postgres://trader:trader@127.0.0.1:5433/trader cargo test -p trader-api --test pg   # 3 passed; 89/89 in a 100 s loop
+scripts/postgres-wsl.sh reset-e2e && E2E_DATABASE_URL=postgres://trader:trader@127.0.0.1:5433/trader_e2e pnpm exec playwright test   # 16 passed (x2)
+trader-bench engine --iterations 2000 --concurrency 1,10,50,100 --database-url postgres://trader:trader@127.0.0.1:5433/trader_bench    # BENCHMARKS.md 2b
+```
