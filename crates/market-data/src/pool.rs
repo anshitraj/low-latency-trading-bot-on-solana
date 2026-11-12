@@ -156,14 +156,65 @@ pub fn parse_endpoint_lines(text: &str) -> Vec<EndpointSpec> {
     out
 }
 
+/// Provider lines built from per-provider env vars (keys only; the URL shapes
+/// are the providers' documented mainnet endpoints). A value that does not
+/// look like what is expected (e.g. a URL var holding a bare key) is skipped.
+pub fn env_endpoint_lines(get: impl Fn(&str) -> Option<String>) -> String {
+    let key = |name: &str| {
+        get(name).map(|v| v.trim().to_string()).filter(|v| {
+            !v.is_empty()
+                && v.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        })
+    };
+    let url = |name: &str| {
+        get(name)
+            .map(|v| v.trim().to_string())
+            .filter(|v| v.starts_with("https://") || v.starts_with("http://"))
+    };
+    let mut out = String::new();
+    if let Some(k) = key("HELIUS_API_KEY") {
+        out.push_str(&format!("https://mainnet.helius-rpc.com/?api-key={k}\n"));
+    }
+    if let Some(k) = key("ALCHEMY_API_KEY") {
+        out.push_str(&format!("https://solana-mainnet.g.alchemy.com/v2/{k}\n"));
+    }
+    if let Some(k) = key("ANKR_API_KEY") {
+        out.push_str(&format!(
+            "https://rpc.ankr.com/solana/{k} wss://rpc.ankr.com/solana/ws/{k}\n"
+        ));
+    }
+    if let Some(k) = key("DRPC_API_KEY") {
+        out.push_str(&format!(
+            "https://lb.drpc.org/ogrpc?network=solana&dkey={k} wss://lb.drpc.org/ogws?network=solana&dkey={k}\n"
+        ));
+    }
+    for name in ["QUICKNODE_RPC_URL", "CHAINSTACK_RPC_URL"] {
+        if let Some(u) = url(name) {
+            let ws = get(&name.replace("_RPC_URL", "_WS_URL"))
+                .map(|v| v.trim().to_string())
+                .filter(|v| v.starts_with("wss://") || v.starts_with("ws://"));
+            out.push_str(&u);
+            if let Some(w) = ws {
+                out.push(' ');
+                out.push_str(&w);
+            }
+            out.push('\n');
+        }
+    }
+    out
+}
+
 /// `primary` (usually RPC_URL) first, then the lines of `RPC_URLS_FILE`
-/// (default `~/.trader/rpc_urls`) if it exists. Duplicates removed.
+/// (default `~/.trader/rpc_urls`) if it exists, then providers from env vars
+/// ([`env_endpoint_lines`]). Duplicates removed.
 pub fn load_endpoint_specs(primary: Option<&str>) -> Vec<EndpointSpec> {
     let mut text = String::new();
     if let Some(p) = primary {
         text.push_str(p);
         text.push('\n');
     }
+    let env_lines = env_endpoint_lines(|n| std::env::var(n).ok());
     let file = std::env::var("RPC_URLS_FILE")
         .ok()
         .filter(|s| !s.is_empty())
@@ -177,8 +228,10 @@ pub fn load_endpoint_specs(primary: Option<&str>) -> Vec<EndpointSpec> {
     if let Some(f) = file {
         if let Ok(t) = std::fs::read_to_string(&f) {
             text.push_str(&t);
+            text.push('\n');
         }
     }
+    text.push_str(&env_lines);
     parse_endpoint_lines(&text)
 }
 
@@ -194,6 +247,30 @@ mod tests {
         assert_eq!(v[0].ws_url(), "wss://a.example/?k=1");
         assert_eq!(v[1].ws.as_deref(), Some("wss://b-ws.example/x"));
         assert_eq!(v[1].rps, Some(20.0));
+    }
+
+    #[test]
+    fn env_providers_built_from_keys_and_bad_values_skipped() {
+        let env: std::collections::HashMap<&str, &str> = [
+            ("ALCHEMY_API_KEY", "abc123"),
+            ("DRPC_API_KEY", "dk_1"),
+            ("ANKR_API_KEY", "has space"),
+            ("CHAINSTACK_RPC_URL", "abcdefgh.notaurl"),
+            (
+                "QUICKNODE_RPC_URL",
+                "https://x.solana-mainnet.quiknode.pro/t/",
+            ),
+        ]
+        .into_iter()
+        .collect();
+        let v = parse_endpoint_lines(&env_endpoint_lines(|n| env.get(n).map(|s| s.to_string())));
+        assert_eq!(v.len(), 3);
+        assert_eq!(v[0].http, "https://solana-mainnet.g.alchemy.com/v2/abc123");
+        assert_eq!(
+            v[1].ws.as_deref(),
+            Some("wss://lb.drpc.org/ogws?network=solana&dkey=dk_1")
+        );
+        assert_eq!(v[2].ws_url(), "wss://x.solana-mainnet.quiknode.pro/t/");
     }
 
     #[test]

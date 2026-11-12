@@ -1,0 +1,100 @@
+{
+  "generated_at": "2026-11-12T12:59:44.587344+00:00",
+  "host": "ANSHITRAJ-PC",
+  "http": [
+    {
+      "errors": {},
+      "first_call_ms": 360.2204,
+      "get_slot": {
+        "max_ms": 285.15819999999997,
+        "min_ms": 259.29069999999996,
+        "n": 20,
+        "p50_ms": 270.2244,
+        "p95_ms": 279.89730000000003
+      },
+      "processed_slot": 468533802,
+      "provider": "p0:mainnet.helius-rpc.com"
+    },
+    {
+      "errors": {},
+      "first_call_ms": 277.05940000000004,
+      "get_slot": {
+        "max_ms": 92.0294,
+        "min_ms": 73.70989999999999,
+        "n": 20,
+        "p50_ms": 77.67190000000001,
+        "p95_ms": 90.9641
+      },
+      "processed_slot": 468533822,
+      "provider": "p1:solana-mainnet.g.alchemy.com"
+    },
+    {
+      "error": "http status 403: {\"error\":\"message: API key is not allowed to access blockchain, json-rpc code: -320",
+      "provider": "p2:rpc.ankr.com"
+    },
+    {
+      "error": "http status 400: {\"id\":1,\"jsonrpc\":\"2.0\",\"error\":{\"message\":\"chain is not available on free plan, pl",
+      "provider": "p3:lb.drpc.org"
+    },
+    {
+      "errors": {},
+      "first_call_ms": 640.2165,
+      "get_slot": {
+        "max_ms": 246.3927,
+        "min_ms": 203.6357,
+        "n": 20,
+        "p50_ms": 212.6704,
+        "p95_ms": 223.55030000000002
+      },
+      "processed_slot": 468533863,
+      "provider": "p4:api.mainnet-beta.solana.com"
+    }
+  ],
+  "kind": "rpc_probe",
+  "note": "read-only: no transaction sent. ws lag = slotNotification arrival behind the first provider to announce the same slot.",
+  "slots_compared": 141,
+  "slots_updates_supported": {
+    "p0:mainnet.helius-rpc.com": true,
+    "p1:solana-mainnet.g.alchemy.com": false,
+    "p4:api.mainnet-beta.solana.com": true
+  },
+  "ws_slot_race": [
+    {
+      "connected": true,
+      "first_to_announce": 0,
+      "lag_behind_first_ms": {
+        "max_ms": 432.0383,
+        "min_ms": 45.2204,
+        "n": 141,
+        "p50_ms": 182.7788,
+        "p95_ms": 323.147
+      },
+      "missed_slots": 0,
+      "provider": "p0:mainnet.helius-rpc.com",
+      "reconnects": 0
+    },
+    {
+      "connected": false,
+      "first_to_announce": 0,
+      "lag_behind_first_ms": null,
+      "missed_slots": 141,
+      "provider": "p1:solana-mainnet.g.alchemy.com",
+      "reconnects": 0
+    },
+    {
+      "connected": true,
+      "first_to_announce": 141,
+      "lag_behind_first_ms": {
+        "max_ms": 0.0,
+        "min_ms": 0.0,
+        "n": 141,
+        "p50_ms": 0.0,
+        "p95_ms": 0.0
+      },
+      "missed_slots": 0,
+      "provider": "p4:api.mainnet-beta.solana.com",
+      "reconnects": 0
+    }
+  ],
+  "ws_window_s": 30
+}

@@ -1,0 +1,92 @@
+{
+  "generated_at": "2026-11-12T13:06:32.478492506+00:00",
+  "host": "",
+  "http": [
+    {
+      "errors": {},
+      "first_call_ms": 28.276132999999998,
+      "get_slot": {
+        "max_ms": 30.554998,
+        "min_ms": 12.976578,
+        "n": 30,
+        "p50_ms": 16.803421999999998,
+        "p95_ms": 24.586668999999997
+      },
+      "processed_slot": 468535572,
+      "provider": "p0:mainnet.helius-rpc.com"
+    },
+    {
+      "errors": {},
+      "first_call_ms": 47.669906,
+      "get_slot": {
+        "max_ms": 33.214199,
+        "min_ms": 5.20022,
+        "n": 30,
+        "p50_ms": 6.936137,
+        "p95_ms": 23.36796
+      },
+      "processed_slot": 468535590,
+      "provider": "p1:solana-mainnet.g.alchemy.com"
+    },
+    {
+      "errors": {},
+      "first_call_ms": 1942.041854,
+      "get_slot": {
+        "max_ms": 93.485934,
+        "min_ms": 7.623578,
+        "n": 30,
+        "p50_ms": 18.134776,
+        "p95_ms": 68.980306
+      },
+      "processed_slot": 468535621,
+      "provider": "p2:api.mainnet-beta.solana.com"
+    }
+  ],
+  "kind": "rpc_probe",
+  "note": "read-only: no transaction sent. ws lag = slotNotification arrival behind the first provider to announce the same slot.",
+  "slots_compared": 282,
+  "slots_updates_supported": {
+    "p0:mainnet.helius-rpc.com": true,
+    "p1:solana-mainnet.g.alchemy.com": false,
+    "p2:api.mainnet-beta.solana.com": true
+  },
+  "ws_slot_race": [
+    {
+      "connected": true,
+      "first_to_announce": 202,
+      "lag_behind_first_ms": {
+        "max_ms": 201.241123,
+        "min_ms": 0.0,
+        "n": 282,
+        "p50_ms": 0.0,
+        "p95_ms": 100.900769
+      },
+      "missed_slots": 0,
+      "provider": "p0:mainnet.helius-rpc.com",
+      "reconnects": 0
+    },
+    {
+      "connected": false,
+      "first_to_announce": 0,
+      "lag_behind_first_ms": null,
+      "missed_slots": 282,
+      "provider": "p1:solana-mainnet.g.alchemy.com",
+      "reconnects": 0
+    },
+    {
+      "connected": true,
+      "first_to_announce": 80,
+      "lag_behind_first_ms": {
+        "max_ms": 732.7571670000001,
+        "min_ms": 0.0,
+        "n": 282,
+        "p50_ms": 63.591038000000005,
+        "p95_ms": 473.386887
+      },
+      "missed_slots": 0,
+      "provider": "p2:api.mainnet-beta.solana.com",
+      "reconnects": 0
+    }
+  ],
+  "ws_window_s": 60
+}

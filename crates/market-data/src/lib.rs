@@ -8,7 +8,7 @@ pub mod token;
 pub mod ws;
 
 pub use cache::{Freshness, SlotCache, Stamped};
-pub use pool::{load_endpoint_specs, parse_endpoint_lines, EndpointSpec};
+pub use pool::{env_endpoint_lines, load_endpoint_specs, parse_endpoint_lines, EndpointSpec};
 pub use rpc::{
     AccountData, EndpointReport, RpcClient, RpcConfig, RpcError, SignatureStatus,
     TokenBalanceChange, TransactionDetails,

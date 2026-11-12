@@ -6,6 +6,7 @@
 mod canary;
 mod localnet;
 mod probe;
+mod rpc_probe;
 mod smoke;
 
 use std::collections::HashMap;
@@ -46,10 +47,13 @@ const HELP: &str = r#"trader-cli <command> [--flags]
       MAINNET. Without --send: DRY RUN (full engine path, signature zeroed, simulateTransaction only;
       nothing broadcast). With --send: real buy -> sell-100% round trips; needs RPC_URL (mainnet),
       MAINNET_TRADING_ENABLED=I_UNDERSTAND_REAL_FUNDS_AT_RISK and typing a confirmation phrase.
-      Hard caps: 0.001 SOL per buy, 10 iterations. --senders rpc,tpu,jito|helius (same signed bytes to each);
+      Hard caps: 0.001 SOL per buy, 25 iterations. --senders rpc,tpu,jito|helius (same signed bytes to each);
       jito needs --tip-lamports >= 1000 (Frankfurt block engine, --jito-url); helius >= 5000 (Frankfurt SWQoS-only, --helius-url).
   send-probe [--rpc <mainnet-url>] [--jito-regions frankfurt,amsterdam] [--helius-regions fra,ams] [--leaders 8]
       READ-ONLY: round trips to RPC, Jito, Helius Sender and QUIC handshakes to upcoming leaders. Sends nothing.
+  rpc-probe [--rpc <url>] [--public] [--calls 20] [--seconds 30] [--report out.json]
+      READ-ONLY: every configured provider (RPC_URL, ~/.trader/rpc_urls, ALCHEMY/ANKR/DRPC/HELIUS_API_KEY,
+      QUICKNODE/CHAINSTACK_RPC_URL): getSlot round trips + which WebSocket announces each slot first.
 
 Benchmarks live in the `trader-benchmarks` crate (cargo run -p trader-benchmarks --release -- help).
 "#;
@@ -68,6 +72,7 @@ async fn main() -> anyhow::Result<()> {
         "keygen" => canary::keygen(&a).await,
         "mainnet-canary" => canary::mainnet_canary(&a).await,
         "send-probe" => probe::send_probe(&a).await,
+        "rpc-probe" => rpc_probe::rpc_probe(&a).await,
         _ => {
             println!("{HELP}");
             Ok(())

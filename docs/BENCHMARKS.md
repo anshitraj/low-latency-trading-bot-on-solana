@@ -291,6 +291,43 @@ What the report records per trade (and the `summary` as n/p50/p95/p99/min/max):
 Not measurable with this setup: the exact execution time inside the slot; a
 transaction-filtered Geyser stream (no free provider available to us).
 
+### 2i. Provider probe from the owner's DESKTOP (India), read-only — `trader-cli rpc-probe --public`
+`rpc-probe-20261112T125944Z.json`. Desktop, not the VM: absolute round trips are not
+VM numbers; the WebSocket race (who announces a slot first) is the interesting part.
+
+| provider | getSlot p50 (p95) | WebSocket slot lag behind first, p50 (p95) | slotsUpdates |
+|---|---:|---:|---|
+| Helius (free) | 270 ms (280) | **183 ms (323)**, first on 0/141 slots | yes |
+| Alchemy (free) | **78 ms (91)** | — no `slotSubscribe`/`signatureSubscribe` on its Solana WS | no |
+| public api.mainnet-beta | 213 ms (224) | **0 ms**, first on 141/141 slots | yes |
+| Ankr | 403 "API key is not allowed to access blockchain" (Solana not enabled for the key) | | |
+| dRPC | 400 "chain is not available on free plan" | | |
+| Chainstack | not probed: the env value is a platform API key, not a node URL | | |
+
+From the desktop, Helius's WebSocket announced every slot ~180 ms after the public
+endpoint. **The VM run below shows this was the desktop's network path, not Helius.**
+
+**Same probe on the VM (Frankfurt)** — `rpc-probe-vm-20261112T130510Z.json`, 30 calls,
+60 s race, 282 slots compared:
+
+| provider | getSlot p50 (p95), first call | WebSocket lag behind first, p50 (p95, max) | first to announce |
+|---|---:|---:|---:|
+| Helius (free) | 16.8 ms (24.6), 28 ms | **0 ms (101, 201)** | **202 / 282** |
+| Alchemy (free) | **6.9 ms (23.4)**, 48 ms | — (no slot/signature WS) | — |
+| public api.mainnet-beta | 18.1 ms (69.0), 1,942 ms | 64 ms (473, 733) | 80 / 282 |
+
+Reading (VM):
+- Helius is the best landing observer we have: first on 72% of slots; on the rest it
+  trails the public endpoint by at most ~100 ms (p95) / 201 ms (max). So the ~185–300 ms
+  signed→landed in run 2 is mostly **inclusion** (≈ one ~210 ms slot after send), with
+  up to ~100 ms of observation delay on some trades, not the reverse.
+- A second WebSocket observer (public endpoint) would catch the 28% of slots where it
+  beats Helius; expected gain is tens of ms on those trades, not a step change.
+- Alchemy is the fastest HTTP read from the VM (6.9 vs 16.8 ms p50). Warm orders read
+  from the stream (~0.2 ms), so this only helps cold reads / fallbacks.
+- This compares providers with each other; it cannot show how long after the leader
+  produced the slot the first notification arrived (needs shred/Geyser data).
+
 ### 2f. Send hop and direct TPU
 Read-only probe from the GCP VM (`trader-cli send-probe`; no transaction sent):
 

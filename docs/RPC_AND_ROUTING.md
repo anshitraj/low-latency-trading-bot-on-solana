@@ -87,6 +87,14 @@ https://lb.drpc.org/ogrpc?network=solana&dkey=KEY  wss://lb.drpc.org/ogws?networ
   subscribe to each trade's signature and slots, so the observer stamps the earliest
   processed notification and the canary reports each provider separately.
 - Logs and reports print only the host, never the path or query (where keys live).
+- Env vars also add providers (after RPC_URL and the file): `HELIUS_API_KEY`,
+  `ALCHEMY_API_KEY`, `ANKR_API_KEY`, `DRPC_API_KEY` (bare keys) and
+  `QUICKNODE_RPC_URL`, `CHAINSTACK_RPC_URL` (full node URLs; optional `*_WS_URL`).
+  A value of the wrong shape is skipped.
+- Free-plan facts (2026-11-12, `rpc-probe`): Alchemy's Solana WebSocket has no
+  `slotSubscribe`/`signatureSubscribe` (HTTP reads only); dRPC free plan refuses
+  Solana; an Ankr key must have Solana enabled; Helius and the public endpoint
+  support `slotsUpdatesSubscribe`.
 
 ## Connection handling
 `reqwest` clients per endpoint with keep-alive pools (90 s idle, TCP_NODELAY, keepalive 30 s). No per-trade connection bootstrap. Blockhash refreshed every 500 ms (`confirmed`), block height every ~2 s.
