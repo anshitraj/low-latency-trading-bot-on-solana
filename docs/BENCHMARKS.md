@@ -366,6 +366,51 @@ What this can and cannot say:
   in 2026; not verified).
 - Our sample is 10 trades; theirs are a ~20-minute window each. Rerun before relying on it.
 
+### 2p. tpu+helius combined vs each alone (owner-run, 2026-11-13)
+Same settings as 2o (`--priority-lamports 10000`, watch-list observer),
+`--routes "tpu,helius;tpu;helius" --iterations 12` (`mainnet-canary-send-20261113T130000Z.json`):
+24/24 FINALIZED, verified, shred slot = landing slot on all; ~US$0.04.
+
+| route (8 sends each) | shred-seen median | min | ≤ 60 ms | ≤ 100 ms | near-leader median (n) | far leaders in sample |
+|---|---:|---:|---:|---:|---:|---:|
+| tpu + helius | 152.6 ms | 56.6 | 1 | 3 | **62.1 ms** (3) | 4 of 8 |
+| tpu only | **93.0 ms** | **35.4** | 4 | 4 | 93.0 ms (6) | 1 of 8 |
+| helius only | 96.7 ms | 46.2 | 2 | 5 | 96.7 ms (6) | 1 of 8 |
+
+All 24: shred-seen median **99.3 ms** (best run so far), **7 ≤ 60 ms, 12 ≤ 100 ms, 1 ≤ 40 ms
+(35.4 ms)**; Helius processed median 185.9 ms; no feed missed a trade.
+
+Reading: at n = 8 the route differences are smaller than the effect of which leader the
+trade meets (the combined route drew 4 far leaders). Near leaders: combined 62 ms, tpu 93,
+helius 97 — combined is not slower and adds the staked path for ~US$0.0004/trade.
+Recommended default fast route: **tpu + helius** (Jito alone is slow at low tips, 2o).
+
+### 2o. Route A/B with the watch-list observer (owner-run, 2026-11-13)
+Observer upgrade: the bot sends each signature to the node (`--shred-watch`, UDP) right
+before sending; the observer scans every received/recovered data shred for it and reports
+the first shred carrying it, without waiting for the entry batch (23 watch hits / 24).
+Run: `--routes "tpu;jito;helius" --priority-lamports 10000 --iterations 12 --send`
+(`mainnet-canary-send-20261113T125515Z.json`): one route per round trip, 8 sends each;
+24/24 FINALIZED, verified, shred slot = landing slot on all. Spent 443,589 lamports
+(~US$0.04). Low priority fee on purpose (cheap test); absolute numbers are not comparable
+with 2n (100,000-lamport fee).
+
+| route (8 sends each) | shred-seen median | min | ≤ 40 ms | ≤ 100 ms | Helius median | slots to land |
+|---|---:|---:|---:|---:|---:|---:|
+| **tpu only** (direct QUIC, unstaked) | **126.6 ms** | 43.7 | 0 | 4 | 203.8 | 1 |
+| **helius only** (Sender SWQoS-only, staked, 5,000 tip) | 139.0 ms | **24.6** | **1** | 2 | 187.6 | 1 |
+| jito only (1,000 tip) | 575.1 ms | 314.2 | 0 | 0 | 680.6 | **3** |
+
+Near leaders only (<20 ms RTT): tpu median **69.8 ms** (min 43.7, 4 of 5 ≤ 100 ms),
+helius 123.3 (min **24.6**), jito 678.6.
+
+- **First trade seen within 40 ms of signing: 24.6 ms** (helius, near leader, buy).
+- **Jito alone is slow at a low tip/fee**: median 3 slots; in earlier runs (`tpu,jito`) the
+  TPU path did the work. Default fast path should be **tpu + helius**, not jito alone.
+- Observer vs Helius: shred-seen earlier by a median 86.9 ms; no feed missed any trade.
+- Sample is small (8 per route); rerun `tpu,helius` combined vs each alone before
+  changing product defaults.
+
 ### 2n. Exact-signature shred observer on our node (2026-11-13)
 `tools/shred-observer`: read-only AF_PACKET copy of the node's incoming shreds; shred
 size + shred-version checks; Merkle erasure recovery with Agave's own `merkle::recover`

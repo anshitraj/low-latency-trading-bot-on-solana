@@ -96,6 +96,17 @@ https://lb.drpc.org/ogrpc?network=solana&dkey=KEY  wss://lb.drpc.org/ogws?networ
   Solana; an Ankr key must have Solana enabled; Helius and the public endpoint
   support `slotsUpdatesSubscribe`.
 
+## Product default send route (2026-11-13)
+New users' settings default to every configured sender **except Jito**: on mainnet that is
+**direct TPU (current + next 2 leaders) + Helius Sender Frankfurt SWQoS-only (staked) +
+RPC**, all receiving the same signed bytes. Measured (BENCHMARKS 2o/2p): TPU and Helius are
+the fastest single paths (near-leader medians 62–97 ms send → seen in shreds); Jito alone
+waited ~3 slots at a 1,000-lamport tip. With Helius in the route the engine embeds its
+5,000-lamport minimum tip (≈ US$0.0004), capped by the wallet policy's `max_tip`
+(100,000) and shown in the quote/confirmation. Users with saved settings keep their own
+sender list. Env: `TPU_SENDER`, `TPU_LEADERS`, `HELIUS_SENDER`, `HELIUS_SENDER_URL`,
+`HELIUS_SWQOS_ONLY`. A TPU start failure only logs a warning.
+
 ## Connection handling
 `reqwest` clients per endpoint with keep-alive pools (90 s idle, TCP_NODELAY, keepalive 30 s). No per-trade connection bootstrap. Blockhash refreshed every 500 ms (`confirmed`), block height every ~2 s.
 

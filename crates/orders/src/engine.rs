@@ -133,7 +133,14 @@ pub struct Engine {
     queue: Mutex<Option<mpsc::Sender<Order>>>,
     /// (wallet, blockhash) -> (next CU offset, first use).
     recent_msgs: Mutex<HashMap<(Pubkey, solana_hash_compat::Hash), (u32, Instant)>>,
+    /// Called with the signature right before the signed bytes go to the
+    /// senders (e.g. to register it with a shred watcher). Must be cheap and
+    /// non-blocking: it runs on the send path.
+    presend: RwLock<Option<PresendHook>>,
 }
+
+/// See [`Engine::set_presend_hook`].
+pub type PresendHook = Arc<dyn Fn(&str) + Send + Sync>;
 
 impl Engine {
     #[allow(clippy::too_many_arguments)]
@@ -177,7 +184,13 @@ impl Engine {
             traces: Mutex::new(HashMap::new()),
             queue: Mutex::new(None),
             recent_msgs: Mutex::new(HashMap::new()),
+            presend: RwLock::new(None),
         })
+    }
+
+    /// Install a hook that receives each signature right before sending.
+    pub fn set_presend_hook(&self, hook: PresendHook) {
+        *self.presend.write() = Some(hook);
     }
 
     pub fn guard(&self) -> &TxGuard {
@@ -823,6 +836,9 @@ impl Engine {
             attempt: 0,
             rebroadcast: false,
         };
+        if let Some(h) = self.presend.read().as_ref() {
+            h(&rec.signature);
+        }
         self.mark(id, Stage::SendStart);
         // Track as soon as ONE route may have forwarded it: a slow route (cold
         // QUIC handshake, stalled endpoint) must not delay observing a

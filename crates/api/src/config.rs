@@ -7,6 +7,32 @@ use trader_domain::Network;
 /// Mainnet order submission requires this exact value in MAINNET_TRADING_ENABLED.
 pub const MAINNET_ACK: &str = "I_UNDERSTAND_REAL_FUNDS_AT_RISK";
 
+/// Helius Sender, Frankfurt (same region as our server). The SWQoS-only tier
+/// forwards over Helius's staked connections for a 5,000-lamport tip
+/// (~US$0.0004 per trade); measured as the best single fast path together with
+/// direct TPU (BENCHMARKS 2o/2p).
+pub fn default_helius_sender_url(swqos_only: bool) -> String {
+    if swqos_only {
+        "http://fra-sender.helius-rpc.com/fast?swqos_only=true".into()
+    } else {
+        "http://fra-sender.helius-rpc.com/fast".into()
+    }
+}
+
+/// HELIUS_SENDER_URL if set; otherwise the Frankfurt Sender on mainnet unless
+/// HELIUS_SENDER=false. Never on other clusters (it only forwards to mainnet).
+pub fn resolve_helius_sender_url(
+    mode: Network,
+    explicit: Option<String>,
+    disabled: bool,
+    swqos_only: bool,
+) -> Option<String> {
+    if disabled {
+        return None;
+    }
+    explicit.or_else(|| (mode == Network::Mainnet).then(|| default_helius_sender_url(swqos_only)))
+}
+
 #[derive(Clone)]
 pub struct Config {
     pub mode: Network,
@@ -35,6 +61,10 @@ pub struct Config {
     pub jito_rps: u32,
     pub helius_sender_url: Option<String>,
     pub helius_swqos_only: bool,
+    /// Direct QUIC sends to the current + next leaders (default on outside mock).
+    pub tpu_sender: bool,
+    /// Distinct leaders the TPU sender writes to (1..=8, default 3).
+    pub tpu_leaders: usize,
     pub skip_preflight: bool,
     pub observer_poll_ms: u64,
     /// MOCK chain slot time (ms). Default 400 like mainnet; tests use ~20.
@@ -62,6 +92,7 @@ impl std::fmt::Debug for Config {
             .field("mainnet_trading_enabled", &self.mainnet_trading_enabled)
             .field("jito", &self.jito_url.is_some())
             .field("helius_sender", &self.helius_sender_url.is_some())
+            .field("tpu_sender", &self.tpu_sender)
             .finish()
     }
 }
@@ -117,8 +148,18 @@ impl Config {
             jito_url: env("JITO_BLOCK_ENGINE_URL"),
             jito_bundle_only: env("JITO_BUNDLE_ONLY").as_deref() == Some("true"),
             jito_rps: env("JITO_RPS").and_then(|s| s.parse().ok()).unwrap_or(1),
-            helius_sender_url: env("HELIUS_SENDER_URL"),
+            helius_sender_url: resolve_helius_sender_url(
+                mode,
+                env("HELIUS_SENDER_URL"),
+                env("HELIUS_SENDER").as_deref() == Some("false"),
+                env("HELIUS_SWQOS_ONLY").as_deref() != Some("false"),
+            ),
             helius_swqos_only: env("HELIUS_SWQOS_ONLY").as_deref() != Some("false"),
+            tpu_sender: mode != Network::Mock && env("TPU_SENDER").as_deref() != Some("false"),
+            tpu_leaders: env("TPU_LEADERS")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(3usize)
+                .clamp(1, 8),
             skip_preflight: env("SKIP_PREFLIGHT").as_deref() == Some("true"),
             observer_poll_ms: env("OBSERVER_POLL_MS")
                 .and_then(|s| s.parse().ok())
@@ -196,6 +237,8 @@ impl Config {
             jito_rps: 1,
             helius_sender_url: None,
             helius_swqos_only: true,
+            tpu_sender: false,
+            tpu_leaders: 3,
             skip_preflight: false,
             observer_poll_ms: 20,
             mock_slot_ms: 20,
@@ -233,5 +276,22 @@ mod tests {
             !format!("{t:?}").contains("sss"),
             "debug never prints secrets"
         );
+    }
+
+    #[test]
+    fn helius_sender_default_only_on_mainnet() {
+        let fra = default_helius_sender_url(true);
+        assert_eq!(
+            resolve_helius_sender_url(Network::Mainnet, None, false, true),
+            Some(fra)
+        );
+        assert!(resolve_helius_sender_url(Network::Mainnet, None, true, true).is_none());
+        assert!(resolve_helius_sender_url(Network::Devnet, None, false, true).is_none());
+        assert!(resolve_helius_sender_url(Network::Mock, None, false, true).is_none());
+        assert_eq!(
+            resolve_helius_sender_url(Network::Devnet, Some("http://x".into()), false, true),
+            Some("http://x".into())
+        );
+        assert!(!default_helius_sender_url(false).contains("swqos_only"));
     }
 }

@@ -1,0 +1,2827 @@
+{
+  "failure": null,
+  "generated_at": "2026-11-13T12:55:15.310295274+00:00",
+  "kind": "mainnet_pump_canary",
+  "mode": "send",
+  "network": "mainnet",
+  "plan": {
+    "buy_lamports_per_iteration": 120000,
+    "cu_price_micro_lamports": 100000,
+    "est_fee_per_tx_lamports": 20000,
+    "est_max_loss_lamports_excl_rent": 566400,
+    "iterations": 12,
+    "jito_regions": [],
+    "min_wallet_balance_needed_lamports": 1476640,
+    "mint": "6caZsnv4PgEhKUKEV1aPQHq94PQi5HyufAt1oaU7pump",
+    "mode": "SEND (real transactions)",
+    "network": "mainnet",
+    "providers": [
+      "mainnet.helius-rpc.com",
+      "solana-mainnet.g.alchemy.com",
+      "api.mainnet-beta.solana.com",
+      "10.30.0.3"
+    ],
+    "received_notifications_from": "10.30.0.3",
+    "rent_lamports_per_byte": 5080,
+    "rent_locked_if_new_lamports": 0,
+    "rent_note": "token account + Pump user_volume_accumulator rent stays in those accounts (recoverable by closing them; not automated yet)",
+    "route_assignment": "round trip i uses route i % routes",
+    "routes": [
+      {
+        "jito_hosts": [],
+        "route": "tpu",
+        "tip_lamports": 0
+      },
+      {
+        "jito_hosts": [
+          "frankfurt.mainnet.block-engine.jito.wtf"
+        ],
+        "route": "jito",
+        "tip_lamports": 1000
+      },
+      {
+        "jito_hosts": [],
+        "route": "helius",
+        "tip_lamports": 5000
+      }
+    ],
+    "rpc_host": "mainnet.helius-rpc.com+3",
+    "senders": [
+      "tpu",
+      "jito",
+      "helius"
+    ],
+    "shred_feed": "0.0.0.0:9900",
+    "shred_watch": "10.30.0.3:9901",
+    "tip_lamports_per_tx": 5000,
+    "tip_mode": "fixed",
+    "token_program": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "tpu_leaders": 3,
+    "wallet": "8gatPQf3d9F5H4NEoMhq7kqj4i7AkezgETYjUE2vMHRM",
+    "wallet_sol_lamports": 33566811,
+    "websocket": true
+  },
+  "rows": [
+    {
+      "block_index": 126,
+      "block_position_pct": 46.15384615384615,
+      "block_tx_count": 273,
+      "compute_units_consumed": 53215,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/xAzDiqNLJksMcjBASN1ReyGLg7j4uBTa791ygSQFGZ7LJDpqYEuRdjRxvM6oxN2c8uhVCFL5QpEz4dFeSn6X9Tj",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 224,
+      "iteration": 0,
+      "landed_slot": 468933743,
+      "leader": "87CcUxpyR72ZyfaZirj86mqkbk5uuU2EfnwTegVMLJL5",
+      "leader_region": "far(>=60ms)",
+      "leader_rtt_ms": 168.85435800000002,
+      "leader_tpu": "64.130.45.196:12399",
+      "order_id": "2cb4199a-f723-4bf3-8360-d51aeb5d10e2",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 542.9527280000001,
+            "createdBank": 340.57336799999996,
+            "firstShredReceived": 217.258496,
+            "frozen": 552.38094,
+            "optimisticConfirmation": 742.1880480000001,
+            "root": 781.70809
+          },
+          "landed_slot_first_seen_ms_after_signed": 217.257036,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 427.22922600000004,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 823.839976,
+            "createdBank": 823.8389179999999,
+            "firstShredReceived": 225.130107,
+            "frozen": 823.842838,
+            "optimisticConfirmation": 823.854792,
+            "root": 1018.7202740000001
+          },
+          "landed_slot_first_seen_ms_after_signed": 225.130107,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": 823.845232,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 578.668504,
+            "createdBank": 388.684892,
+            "firstShredReceived": 220.709543,
+            "frozen": 590.818072,
+            "optimisticConfirmation": 707.010405,
+            "root": 937.067687
+          },
+          "landed_slot_first_seen_ms_after_signed": 220.709543,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 590.822256,
+          "signature_received_ms_after_signed": 477.99616299999997,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "4233143929",
+      "quote_min_out": "4021486732",
+      "reject_reason": null,
+      "route": "tpu",
+      "send_slot": 468933741,
+      "send_slot_leader": "87CcUxpyR72ZyfaZirj86mqkbk5uuU2EfnwTegVMLJL5",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "tpu-quic:leaders3",
+          "latency_us": 169353,
+          "outcome": "accepted",
+          "sender": "tpu"
+        }
+      ],
+      "shred_seen_ms_after_signed": 329.791763,
+      "shred_slot": 468933743,
+      "side": "buy",
+      "signature": "xAzDiqNLJksMcjBASN1ReyGLg7j4uBTa791ygSQFGZ7LJDpqYEuRdjRxvM6oxN2c8uhVCFL5QpEz4dFeSn6X9Tj",
+      "signed_to_finalized_us": 754772,
+      "signed_to_processed_us": 427229,
+      "signed_to_sender_ack_us": 169412,
+      "slots_to_land": 2,
+      "sol_delta": "-135000",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 0,
+      "token_delta": "4233143929"
+    },
+    {
+      "block_index": 37,
+      "block_position_pct": 16.742081447963802,
+      "block_tx_count": 221,
+      "compute_units_consumed": 44869,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/5rKHNJjNacsTvjip7pVsdYiHWHn6cxH84AEgFCjgBVEQFJhfKCh394U4KFppAMnknNn9TprYoD9LjxNwCgMvVqyg",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 187,
+      "iteration": 0,
+      "landed_slot": 468933750,
+      "leader": "HEL1USMZKAL2odpNBj2oCjffnFGaYwmbGmyewGv1e2TU",
+      "leader_region": "near(<20ms)",
+      "leader_rtt_ms": 1.696063,
+      "leader_tpu": "64.130.57.134:8002",
+      "order_id": "0d885fb4-bb39-4326-9d2d-962b96344fb7",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 274.90740000000005,
+            "createdBank": 112.391227,
+            "firstShredReceived": 3.3319780000000003,
+            "frozen": 285.120636,
+            "optimisticConfirmation": 570.9177020000001,
+            "root": 577.953983
+          },
+          "landed_slot_first_seen_ms_after_signed": 3.3305610000000003,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 125.901908,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 697.920668,
+            "createdBank": 697.918095,
+            "firstShredReceived": 386.777534,
+            "frozen": 707.113968,
+            "optimisticConfirmation": 734.38985,
+            "root": 977.136852
+          },
+          "landed_slot_first_seen_ms_after_signed": 386.777534,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": 707.118451,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 241.66532800000002,
+            "createdBank": 85.859739,
+            "firstShredReceived": -0.004221,
+            "frozen": 279.516169,
+            "optimisticConfirmation": 510.416282,
+            "root": 812.7311430000001
+          },
+          "landed_slot_first_seen_ms_after_signed": -0.004221,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 279.520985,
+          "signature_received_ms_after_signed": 241.669405,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "117034",
+      "quote_min_out": "111182",
+      "reject_reason": null,
+      "route": "tpu",
+      "send_slot": 468933749,
+      "send_slot_leader": "HEL1USMZKAL2odpNBj2oCjffnFGaYwmbGmyewGv1e2TU",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "tpu-quic:leaders3",
+          "latency_us": 17,
+          "outcome": "accepted",
+          "sender": "tpu"
+        }
+      ],
+      "shred_seen_ms_after_signed": 69.77755300000001,
+      "shred_slot": 468933750,
+      "side": "sell",
+      "signature": "5rKHNJjNacsTvjip7pVsdYiHWHn6cxH84AEgFCjgBVEQFJhfKCh394U4KFppAMnknNn9TprYoD9LjxNwCgMvVqyg",
+      "signed_to_finalized_us": 624708,
+      "signed_to_processed_us": 125902,
+      "signed_to_sender_ack_us": 51,
+      "slots_to_land": 1,
+      "sol_delta": "102034",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 0,
+      "token_delta": "-4233143929"
+    },
+    {
+      "block_index": 157,
+      "block_position_pct": 76.2135922330097,
+      "block_tx_count": 206,
+      "compute_units_consumed": 53368,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/65ENa8v5h4KDReNYmDyE1Rw7sHj27VWGk7pFg9qrq5ypKefzC279FnsgJDzecq7nWTVypAMZH2i7dtPDPibfAWav",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 248,
+      "iteration": 1,
+      "landed_slot": 468933758,
+      "leader": "Hz5aLvpKScNWoe9YZWxBLrQA3qzHJivBGtfciMekk8m5",
+      "leader_region": "mid(20-60ms)",
+      "leader_rtt_ms": 24.617183,
+      "leader_tpu": "64.130.46.242:12337",
+      "order_id": "1243a2af-747f-48b6-818f-6e504a7533aa",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 484.89703000000003,
+            "createdBank": 307.71103,
+            "firstShredReceived": 190.453647,
+            "frozen": 502.88265600000005,
+            "optimisticConfirmation": 658.268198,
+            "root": 658.2700150000001
+          },
+          "landed_slot_first_seen_ms_after_signed": 190.45071099999998,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 491.20648,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 1881.882757,
+            "createdBank": 1864.903608,
+            "firstShredReceived": 1613.565495,
+            "frozen": 1884.9309569999998
+          },
+          "landed_slot_first_seen_ms_after_signed": 1613.565495,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": 2126.8337,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 534.5438310000001,
+            "createdBank": 293.442496,
+            "firstShredReceived": 192.271627,
+            "frozen": 550.0702309999999,
+            "optimisticConfirmation": 642.3845339999999,
+            "root": 953.663552
+          },
+          "landed_slot_first_seen_ms_after_signed": 192.271627,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 550.516651,
+          "signature_received_ms_after_signed": 464.657265,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "4233143929",
+      "quote_min_out": "4021486732",
+      "reject_reason": null,
+      "route": "jito",
+      "send_slot": 468933756,
+      "send_slot_leader": "Hz5aLvpKScNWoe9YZWxBLrQA3qzHJivBGtfciMekk8m5",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "jito:frankfurt.mainnet.block-engine.jito.wtf",
+          "latency_us": 7920,
+          "outcome": "accepted",
+          "sender": "jito"
+        }
+      ],
+      "shred_seen_ms_after_signed": 366.55050300000005,
+      "shred_slot": 468933758,
+      "side": "buy",
+      "signature": "65ENa8v5h4KDReNYmDyE1Rw7sHj27VWGk7pFg9qrq5ypKefzC279FnsgJDzecq7nWTVypAMZH2i7dtPDPibfAWav",
+      "signed_to_finalized_us": 717553,
+      "signed_to_processed_us": 491207,
+      "signed_to_sender_ack_us": 7974,
+      "slots_to_land": 2,
+      "sol_delta": "-136000",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 1000,
+      "token_delta": "4233143929"
+    },
+    {
+      "block_index": 3,
+      "block_position_pct": 1.171875,
+      "block_tx_count": 256,
+      "compute_units_consumed": 45019,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/5TiiyYNKyrx6uGLys4QCNoV2dUpLwBhhXToZyx6Lj7S5GMSAcLGicqzFEjFkJsPAsUhnTDHCAozk54CcF2fMhnKb",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 197,
+      "iteration": 1,
+      "landed_slot": 468933772,
+      "leader": "5pPRHniefFjkiaArbGX3Y8NUysJmQ9tMZg3FrFGwHzSm",
+      "leader_region": "near(<20ms)",
+      "leader_rtt_ms": 7.297421,
+      "leader_tpu": "188.42.129.244:11228",
+      "order_id": "3a56249c-c118-4f67-9291-999355adc823",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 1410.473141,
+            "createdBank": 1062.729888,
+            "firstShredReceived": 903.750971,
+            "frozen": 1410.476903,
+            "optimisticConfirmation": 1660.977634,
+            "root": 1670.885334
+          },
+          "landed_slot_first_seen_ms_after_signed": 903.748736,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 1065.647775,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 1507.747852,
+            "createdBank": 1507.745811,
+            "firstShredReceived": 1507.74701,
+            "frozen": 1511.980812,
+            "optimisticConfirmation": 1520.273785,
+            "root": 1941.651685
+          },
+          "landed_slot_first_seen_ms_after_signed": 1507.744046,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": 1511.985551,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 1304.017732,
+            "createdBank": 970.212415,
+            "firstShredReceived": 905.555801,
+            "frozen": 1318.268438,
+            "optimisticConfirmation": 1534.008323,
+            "root": 1788.888011
+          },
+          "landed_slot_first_seen_ms_after_signed": 905.555801,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 1318.535459,
+          "signature_received_ms_after_signed": 1051.6117279999999,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "117035",
+      "quote_min_out": "111183",
+      "reject_reason": null,
+      "route": "jito",
+      "send_slot": 468933767,
+      "send_slot_leader": "FzQqaDStQQHs52YKeCnDovwSqvyZBCgs2kJcmvoFZwaS",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "jito:frankfurt.mainnet.block-engine.jito.wtf",
+          "latency_us": 1407,
+          "outcome": "accepted",
+          "sender": "jito"
+        }
+      ],
+      "shred_seen_ms_after_signed": 959.911503,
+      "shred_slot": 468933772,
+      "side": "sell",
+      "signature": "5TiiyYNKyrx6uGLys4QCNoV2dUpLwBhhXToZyx6Lj7S5GMSAcLGicqzFEjFkJsPAsUhnTDHCAozk54CcF2fMhnKb",
+      "signed_to_finalized_us": 1523550,
+      "signed_to_processed_us": 1065648,
+      "signed_to_sender_ack_us": 1444,
+      "slots_to_land": 5,
+      "sol_delta": "101035",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 1000,
+      "token_delta": "-4233143929"
+    },
+    {
+      "block_index": 352,
+      "block_position_pct": 73.33333333333333,
+      "block_tx_count": 480,
+      "compute_units_consumed": 53355,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/VHu7jFdmksz1Uda76oKbCbu1irB6rsxbjAAvMu7Ki19gTCtv9LdNs4Z9eojYRXAhmThsxKi6p812qRYKvB8aQjm",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 242,
+      "iteration": 2,
+      "landed_slot": 468933778,
+      "leader": "DrifTrN923QaouP89UxkQzFGbumKPCnfkNYQRwmZxatz",
+      "leader_region": "near(<20ms)",
+      "leader_rtt_ms": 3.289213,
+      "leader_tpu": "198.13.140.105:12469",
+      "order_id": "faa31461-b591-4b82-91af-b5a7d523e70b",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 211.095746,
+            "createdBank": 23.125259,
+            "firstShredReceived": -139.21303300000002,
+            "frozen": 230.178123,
+            "optimisticConfirmation": 403.87156000000004,
+            "root": 419.131282
+          },
+          "landed_slot_first_seen_ms_after_signed": -139.214866,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 178.092429,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 677.392064,
+            "createdBank": 677.389375,
+            "firstShredReceived": 398.206932,
+            "frozen": 1248.2116350000001,
+            "optimisticConfirmation": 1400.871232,
+            "root": 1400.876604
+          },
+          "landed_slot_first_seen_ms_after_signed": 398.206932,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": 1273.707447,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 266.781539,
+            "createdBank": 91.781822,
+            "firstShredReceived": -142.782659,
+            "frozen": 302.453033,
+            "optimisticConfirmation": 493.44854599999996,
+            "root": 600.003757
+          },
+          "landed_slot_first_seen_ms_after_signed": -142.782659,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 302.458667,
+          "signature_received_ms_after_signed": 133.722575,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "4233143928",
+      "quote_min_out": "4021486731",
+      "reject_reason": null,
+      "route": "helius",
+      "send_slot": 468933777,
+      "send_slot_leader": "DrifTrN923QaouP89UxkQzFGbumKPCnfkNYQRwmZxatz",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "helius-sender:fra-sender.helius-rpc.com",
+          "latency_us": 5595,
+          "outcome": "accepted",
+          "sender": "helius"
+        }
+      ],
+      "shred_seen_ms_after_signed": 123.266297,
+      "shred_slot": 468933778,
+      "side": "buy",
+      "signature": "VHu7jFdmksz1Uda76oKbCbu1irB6rsxbjAAvMu7Ki19gTCtv9LdNs4Z9eojYRXAhmThsxKi6p812qRYKvB8aQjm",
+      "signed_to_finalized_us": 619762,
+      "signed_to_processed_us": 178093,
+      "signed_to_sender_ack_us": 5631,
+      "slots_to_land": 1,
+      "sol_delta": "-140000",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 5000,
+      "token_delta": "4233143928"
+    },
+    {
+      "block_index": 130,
+      "block_position_pct": 25.341130604288498,
+      "block_tx_count": 513,
+      "compute_units_consumed": 45019,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/4XRH1G82MgV4d3dRaeviu8qhuGt26NGGup3oL9YvhSSriL7rCyVLeF14A2eA21n37RVnQU3jkH6taFHfiLWN9cKN",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 191,
+      "iteration": 2,
+      "landed_slot": 468933786,
+      "leader": "Hz5aLvpKScNWoe9YZWxBLrQA3qzHJivBGtfciMekk8m5",
+      "leader_region": "mid(20-60ms)",
+      "leader_rtt_ms": 24.617183,
+      "leader_tpu": "64.130.46.242:12337",
+      "order_id": "ec94325a-7285-4c20-a196-4eb86c8f2ef9",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 291.57389900000004,
+            "createdBank": 98.482513,
+            "firstShredReceived": -34.742404,
+            "frozen": 325.453798,
+            "optimisticConfirmation": 453.854357,
+            "root": 460.261945
+          },
+          "landed_slot_first_seen_ms_after_signed": -34.744228,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 144.545116,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 302.14840799999996,
+            "createdBank": 117.330233,
+            "firstShredReceived": -33.855686000000006,
+            "frozen": 322.84914100000003,
+            "optimisticConfirmation": 490.073632,
+            "root": 858.730304
+          },
+          "landed_slot_first_seen_ms_after_signed": -33.855686000000006,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 322.853248,
+          "signature_received_ms_after_signed": 152.483287,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "117034",
+      "quote_min_out": "111182",
+      "reject_reason": null,
+      "route": "helius",
+      "send_slot": 468933785,
+      "send_slot_leader": "Hz5aLvpKScNWoe9YZWxBLrQA3qzHJivBGtfciMekk8m5",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "helius-sender:fra-sender.helius-rpc.com",
+          "latency_us": 1215,
+          "outcome": "accepted",
+          "sender": "helius"
+        }
+      ],
+      "shred_seen_ms_after_signed": 147.119869,
+      "shred_slot": 468933786,
+      "side": "sell",
+      "signature": "4XRH1G82MgV4d3dRaeviu8qhuGt26NGGup3oL9YvhSSriL7rCyVLeF14A2eA21n37RVnQU3jkH6taFHfiLWN9cKN",
+      "signed_to_finalized_us": 654551,
+      "signed_to_processed_us": 144545,
+      "signed_to_sender_ack_us": 1251,
+      "slots_to_land": 1,
+      "sol_delta": "97034",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 5000,
+      "token_delta": "-4233143928"
+    },
+    {
+      "block_index": 82,
+      "block_position_pct": 26.451612903225808,
+      "block_tx_count": 310,
+      "compute_units_consumed": 53205,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/29gz6eoeooxYUpHYF5c47hL9vkoS39VfVpx8Zm6LKjGRjcb1iPPBLox1wmRGbCAHMHMbXtNXmbZ1b5BdC8eMzXi6",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 197,
+      "iteration": 3,
+      "landed_slot": 468933793,
+      "leader": "4Kbcyn7JVPAWLRLPsNGTPmcNMvCkLTw51ZLRhqsUC6jP",
+      "leader_region": "far(>=60ms)",
+      "leader_rtt_ms": 161.310689,
+      "leader_tpu": "173.231.12.146:8003",
+      "order_id": "fc9482d9-972e-4691-9b9c-da3a6e948a8f",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 432.269342,
+            "createdBank": 139.729173,
+            "firstShredReceived": 91.110331,
+            "frozen": 438.578093,
+            "optimisticConfirmation": 602.9143449999999,
+            "root": 612.6061980000001
+          },
+          "landed_slot_first_seen_ms_after_signed": 91.108622,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 198.216328,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 422.37370699999997,
+            "createdBank": 216.13802800000002,
+            "firstShredReceived": 90.91226900000001,
+            "frozen": 438.28983500000004,
+            "optimisticConfirmation": 630.126484,
+            "root": 830.150901
+          },
+          "landed_slot_first_seen_ms_after_signed": 90.91226900000001,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 438.590098,
+          "signature_received_ms_after_signed": 192.08196999999998,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "4233143928",
+      "quote_min_out": "4021486731",
+      "reject_reason": null,
+      "route": "tpu",
+      "send_slot": 468933792,
+      "send_slot_leader": "4Kbcyn7JVPAWLRLPsNGTPmcNMvCkLTw51ZLRhqsUC6jP",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "tpu-quic:leaders3",
+          "latency_us": 20,
+          "outcome": "accepted",
+          "sender": "tpu"
+        }
+      ],
+      "shred_seen_ms_after_signed": 157.57035299999998,
+      "shred_slot": 468933793,
+      "side": "buy",
+      "signature": "29gz6eoeooxYUpHYF5c47hL9vkoS39VfVpx8Zm6LKjGRjcb1iPPBLox1wmRGbCAHMHMbXtNXmbZ1b5BdC8eMzXi6",
+      "signed_to_finalized_us": 610487,
+      "signed_to_processed_us": 198217,
+      "signed_to_sender_ack_us": 69,
+      "slots_to_land": 1,
+      "sol_delta": "-135000",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 0,
+      "token_delta": "4233143928"
+    },
+    {
+      "block_index": 49,
+      "block_position_pct": 15.605095541401274,
+      "block_tx_count": 314,
+      "compute_units_consumed": 44869,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/2q83YXJPMgCfVw9jVNuVWJzHP9P3xKWBuZyFLY1oUQWL8fuTTnr9vTsEdkes9q4HzmbwJNxEveXHCE6ee9HJXTmc",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 188,
+      "iteration": 3,
+      "landed_slot": 468933800,
+      "leader": "HEL1USMZKAL2odpNBj2oCjffnFGaYwmbGmyewGv1e2TU",
+      "leader_region": "near(<20ms)",
+      "leader_rtt_ms": 1.696063,
+      "leader_tpu": "64.130.57.134:8002",
+      "order_id": "5b9817f4-c931-45de-b25b-90a928392de6",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 349.834646,
+            "createdBank": 206.423572,
+            "firstShredReceived": 32.761410999999995,
+            "frozen": 350.178336,
+            "optimisticConfirmation": 480.268566,
+            "root": 495.14747
+          },
+          "landed_slot_first_seen_ms_after_signed": 32.758952,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 209.331581,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 264.950782,
+            "createdBank": 86.003072,
+            "firstShredReceived": 28.256337,
+            "frozen": 272.92776499999997,
+            "optimisticConfirmation": 518.234063,
+            "root": 682.731095
+          },
+          "landed_slot_first_seen_ms_after_signed": 28.256337,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 273.037058,
+          "signature_received_ms_after_signed": 209.431169,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "117034",
+      "quote_min_out": "111182",
+      "reject_reason": null,
+      "route": "tpu",
+      "send_slot": 468933799,
+      "send_slot_leader": "87CcUxpyR72ZyfaZirj86mqkbk5uuU2EfnwTegVMLJL5",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "tpu-quic:leaders3",
+          "latency_us": 24,
+          "outcome": "accepted",
+          "sender": "tpu"
+        }
+      ],
+      "shred_seen_ms_after_signed": 69.488848,
+      "shred_slot": 468933800,
+      "side": "sell",
+      "signature": "2q83YXJPMgCfVw9jVNuVWJzHP9P3xKWBuZyFLY1oUQWL8fuTTnr9vTsEdkes9q4HzmbwJNxEveXHCE6ee9HJXTmc",
+      "signed_to_finalized_us": 597751,
+      "signed_to_processed_us": 209331,
+      "signed_to_sender_ack_us": 193,
+      "slots_to_land": 1,
+      "sol_delta": "102034",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 0,
+      "token_delta": "-4233143928"
+    },
+    {
+      "block_index": 67,
+      "block_position_pct": 15.022421524663677,
+      "block_tx_count": 446,
+      "compute_units_consumed": 53355,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/5ZadR5vqwcjE4LPvZNiv59QhPsiVUVEBZGCSSeiWdN25snMQrQPbUYSumiQdWXmzztE7NDyepXsgPq8yfgdHgs3q",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 196,
+      "iteration": 4,
+      "landed_slot": 468933810,
+      "leader": "C8Bey3LKVJHVqN6xPTeW8WJfUgFQAeGNBpT4Rp99JP1k",
+      "leader_region": "near(<20ms)",
+      "leader_rtt_ms": 2.362103,
+      "leader_tpu": "162.19.222.40:8022",
+      "order_id": "fefe3be7-74f4-452c-8b45-9aca53acb732",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 869.460248,
+            "createdBank": 699.159701,
+            "firstShredReceived": 579.627012,
+            "frozen": 888.371462,
+            "optimisticConfirmation": 1114.7298400000002,
+            "root": 1153.08392
+          },
+          "landed_slot_first_seen_ms_after_signed": 579.625862,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 790.3947019999999,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 874.607298,
+            "createdBank": 777.191196,
+            "firstShredReceived": 578.7878029999999,
+            "frozen": 885.210285,
+            "optimisticConfirmation": 1178.488309,
+            "root": 1472.946155
+          },
+          "landed_slot_first_seen_ms_after_signed": 578.7878029999999,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 885.3276119999999,
+          "signature_received_ms_after_signed": 754.06907,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "4233143928",
+      "quote_min_out": "4021486731",
+      "reject_reason": null,
+      "route": "jito",
+      "send_slot": 468933806,
+      "send_slot_leader": "RoYLttggWwa2st3KAGEjnPhsq4NPD5QwaNVyyR8pTz4",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "jito:frankfurt.mainnet.block-engine.jito.wtf",
+          "latency_us": 1420,
+          "outcome": "accepted",
+          "sender": "jito"
+        }
+      ],
+      "shred_seen_ms_after_signed": 678.554121,
+      "shred_slot": 468933810,
+      "side": "buy",
+      "signature": "5ZadR5vqwcjE4LPvZNiv59QhPsiVUVEBZGCSSeiWdN25snMQrQPbUYSumiQdWXmzztE7NDyepXsgPq8yfgdHgs3q",
+      "signed_to_finalized_us": 1209431,
+      "signed_to_processed_us": 790395,
+      "signed_to_sender_ack_us": 1470,
+      "slots_to_land": 4,
+      "sol_delta": "-136000",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 1000,
+      "token_delta": "4233143928"
+    },
+    {
+      "block_index": 408,
+      "block_position_pct": 97.37470167064438,
+      "block_tx_count": 419,
+      "compute_units_consumed": 45019,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/BoRFQkeueW2V6dzxXtTncdL7KNNLq9K2MjyQWPYcc9AKDNFv72ssuNEfvW7HqgFBLBbUZezLmYAm9MTibj7md7c",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 183,
+      "iteration": 4,
+      "landed_slot": 468933818,
+      "leader": "HSDTxfgrqY8ZK88Q5Fx2DdX7zxMDqXgxJKgErTBSLoQJ",
+      "leader_region": "far(>=60ms)",
+      "leader_rtt_ms": 231.765867,
+      "leader_tpu": "63.254.163.37:5010",
+      "order_id": "27103a48-316f-496f-9813-6aa0fe36e521",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 972.391522,
+            "createdBank": 655.0524049999999,
+            "firstShredReceived": 509.97383799999994,
+            "frozen": 972.395226,
+            "optimisticConfirmation": 1366.94775,
+            "root": 1383.738428
+          },
+          "landed_slot_first_seen_ms_after_signed": 509.97242,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 856.00157,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 836.994009,
+            "createdBank": 771.249986,
+            "firstShredReceived": 511.087812,
+            "frozen": 837.45897,
+            "root": 1261.6925509999999
+          },
+          "landed_slot_first_seen_ms_after_signed": 511.087812,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 837.5743060000001,
+          "signature_received_ms_after_signed": 770.819735,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "117034",
+      "quote_min_out": "111182",
+      "reject_reason": null,
+      "route": "jito",
+      "send_slot": 468933815,
+      "send_slot_leader": "JD549HsbJHeEKKUrKgg4Fj2iyv2RGjsV7NTZjZUrHybB",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "jito:frankfurt.mainnet.block-engine.jito.wtf",
+          "latency_us": 1508,
+          "outcome": "accepted",
+          "sender": "jito"
+        }
+      ],
+      "shred_seen_ms_after_signed": 706.533101,
+      "shred_slot": 468933818,
+      "side": "sell",
+      "signature": "BoRFQkeueW2V6dzxXtTncdL7KNNLq9K2MjyQWPYcc9AKDNFv72ssuNEfvW7HqgFBLBbUZezLmYAm9MTibj7md7c",
+      "signed_to_finalized_us": 1340469,
+      "signed_to_processed_us": 837574,
+      "signed_to_sender_ack_us": 1564,
+      "slots_to_land": 3,
+      "sol_delta": "101034",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 1000,
+      "token_delta": "-4233143928"
+    },
+    {
+      "block_index": 145,
+      "block_position_pct": 42.52199413489736,
+      "block_tx_count": 341,
+      "compute_units_consumed": 53368,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/5ejnSey8YhHQL3wZCRbXXVyYeTPv278Pc5Grb1naB9XC5pmjJPLytW5MKV2MFRdghqh5ZQmaByVNZe5vTgV1T8y8",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 191,
+      "iteration": 5,
+      "landed_slot": 468933829,
+      "leader": "EkvdKhULbMFqjKBKotAzGi3kwMvMpYNDKJXXQQmi6C1f",
+      "leader_region": "near(<20ms)",
+      "leader_rtt_ms": 13.564602,
+      "leader_tpu": "63.254.166.232:12324",
+      "order_id": "71668c58-d043-4dd9-963e-852452720ee7",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 271.67168499999997,
+            "createdBank": 151.130519,
+            "firstShredReceived": -31.621678,
+            "frozen": 291.15199800000005,
+            "optimisticConfirmation": 542.056146,
+            "root": 554.377149
+          },
+          "landed_slot_first_seen_ms_after_signed": -31.623253,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 268.226558,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 328.21676,
+            "createdBank": 83.997242,
+            "firstShredReceived": -27.702907,
+            "frozen": 342.166378,
+            "optimisticConfirmation": 556.156247,
+            "root": 666.681725
+          },
+          "landed_slot_first_seen_ms_after_signed": -27.702907,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 342.170533,
+          "signature_received_ms_after_signed": 81.519323,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "4233143928",
+      "quote_min_out": "4021486731",
+      "reject_reason": null,
+      "route": "helius",
+      "send_slot": 468933828,
+      "send_slot_leader": "EkvdKhULbMFqjKBKotAzGi3kwMvMpYNDKJXXQQmi6C1f",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "helius-sender:fra-sender.helius-rpc.com",
+          "latency_us": 1454,
+          "outcome": "accepted",
+          "sender": "helius"
+        }
+      ],
+      "shred_seen_ms_after_signed": 52.738228,
+      "shred_slot": 468933829,
+      "side": "buy",
+      "signature": "5ejnSey8YhHQL3wZCRbXXVyYeTPv278Pc5Grb1naB9XC5pmjJPLytW5MKV2MFRdghqh5ZQmaByVNZe5vTgV1T8y8",
+      "signed_to_finalized_us": 516535,
+      "signed_to_processed_us": 268227,
+      "signed_to_sender_ack_us": 1636,
+      "slots_to_land": 1,
+      "sol_delta": "-140000",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 5000,
+      "token_delta": "4233143928"
+    },
+    {
+      "block_index": 24,
+      "block_position_pct": 7.2948328267477205,
+      "block_tx_count": 329,
+      "compute_units_consumed": 45019,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/MoyKCLg4hoL8T3TWfAbk8p3oTLUiVFQafkXBxeuaw8m7sWbv9qyijRPRJdCh48nrmYW96eLvkxvQpff1DRaCk6N",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 195,
+      "iteration": 5,
+      "landed_slot": 468933839,
+      "leader": "JD549HsbJHeEKKUrKgg4Fj2iyv2RGjsV7NTZjZUrHybB",
+      "leader_region": "far(>=60ms)",
+      "leader_rtt_ms": 174.75887600000001,
+      "leader_tpu": "86.54.153.246:9007",
+      "order_id": "9dcce579-2dfe-44ff-9fe5-1f00b9bab5f8",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 1313.233642,
+            "createdBank": 1087.692768,
+            "firstShredReceived": 960.766029,
+            "frozen": 1324.431544,
+            "optimisticConfirmation": 1636.478193,
+            "root": 1646.3402039999999
+          },
+          "landed_slot_first_seen_ms_after_signed": 960.763826,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 1088.524883,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 1370.998183,
+            "createdBank": 1119.6718429999999,
+            "firstShredReceived": 964.384345,
+            "frozen": 1390.380811,
+            "optimisticConfirmation": 1757.613129,
+            "root": 2098.612408
+          },
+          "landed_slot_first_seen_ms_after_signed": 964.384345,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 1390.676692,
+          "signature_received_ms_after_signed": 1028.779806,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "117035",
+      "quote_min_out": "111183",
+      "reject_reason": null,
+      "route": "helius",
+      "send_slot": 468933834,
+      "send_slot_leader": "9AW87WqARQonyJYhx1G25fKfvjURFYVmHs79z1NUXDPD",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "helius-sender:fra-sender.helius-rpc.com",
+          "latency_us": 1204,
+          "outcome": "accepted",
+          "sender": "helius"
+        }
+      ],
+      "shred_seen_ms_after_signed": 994.367264,
+      "shred_slot": 468933839,
+      "side": "sell",
+      "signature": "MoyKCLg4hoL8T3TWfAbk8p3oTLUiVFQafkXBxeuaw8m7sWbv9qyijRPRJdCh48nrmYW96eLvkxvQpff1DRaCk6N",
+      "signed_to_finalized_us": 1716426,
+      "signed_to_processed_us": 1088524,
+      "signed_to_sender_ack_us": 1239,
+      "slots_to_land": 5,
+      "sol_delta": "97035",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 5000,
+      "token_delta": "-4233143928"
+    },
+    {
+      "block_index": 257,
+      "block_position_pct": 89.23611111111111,
+      "block_tx_count": 288,
+      "compute_units_consumed": 53205,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/yVv3mWX7wrDmU4Kp2CLbke57TSEomgYrUYptXMfgnwPEJWedhHoVP3ExqXpzcq4k8bJCqFoG1RhSJsuAc5SDGtr",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 217,
+      "iteration": 6,
+      "landed_slot": 468933846,
+      "leader": "9pBHfuE19q7PRbupJf8CZAMwv6RHjasdyMN9U9du7Nx2",
+      "leader_region": "near(<20ms)",
+      "leader_rtt_ms": 1.510434,
+      "leader_tpu": "198.13.140.227:5010",
+      "order_id": "658b9e48-9b08-47f4-8a45-b367f4f94c3a",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 183.542542,
+            "createdBank": 6.182588999999999,
+            "firstShredReceived": -144.39782300000002,
+            "frozen": 184.18894,
+            "optimisticConfirmation": 309.424107,
+            "root": 334.889814
+          },
+          "landed_slot_first_seen_ms_after_signed": -144.399116,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 119.086826,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 194.72494600000002,
+            "createdBank": -4.192432,
+            "firstShredReceived": -152.156942,
+            "frozen": 195.39579600000002,
+            "optimisticConfirmation": 372.401023,
+            "root": 638.055576
+          },
+          "landed_slot_first_seen_ms_after_signed": -152.156942,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 195.51468699999998,
+          "signature_received_ms_after_signed": 139.08987,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "4233143927",
+      "quote_min_out": "4021486730",
+      "reject_reason": null,
+      "route": "tpu",
+      "send_slot": 468933845,
+      "send_slot_leader": "9pBHfuE19q7PRbupJf8CZAMwv6RHjasdyMN9U9du7Nx2",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "tpu-quic:leaders3",
+          "latency_us": 23,
+          "outcome": "accepted",
+          "sender": "tpu"
+        }
+      ],
+      "shred_seen_ms_after_signed": 43.735641,
+      "shred_slot": 468933846,
+      "side": "buy",
+      "signature": "yVv3mWX7wrDmU4Kp2CLbke57TSEomgYrUYptXMfgnwPEJWedhHoVP3ExqXpzcq4k8bJCqFoG1RhSJsuAc5SDGtr",
+      "signed_to_finalized_us": 367974,
+      "signed_to_processed_us": 119086,
+      "signed_to_sender_ack_us": 81,
+      "slots_to_land": 1,
+      "sol_delta": "-135000",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 0,
+      "token_delta": "4233143927"
+    },
+    {
+      "block_index": 71,
+      "block_position_pct": 21.19402985074627,
+      "block_tx_count": 335,
+      "compute_units_consumed": 44869,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/4rmKgipErUHNbNCdegVaf16w991rraF7NMTCE4j1BxxeZXFNkX9zwD645iZBhWrkKNyYBSp4zxeMVRGkeKSYEbM",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 182,
+      "iteration": 6,
+      "landed_slot": 468933853,
+      "leader": "SFundNVpuWk89g211WKUZGkuu4BsKSp7PbnmRsPZLos",
+      "leader_region": "near(<20ms)",
+      "leader_rtt_ms": 2.4810890000000003,
+      "leader_tpu": "198.13.140.105:12541",
+      "order_id": "28eb069e-6fce-4f3a-b4f5-f254e66f8b66",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 383.933023,
+            "createdBank": 119.072319,
+            "firstShredReceived": 12.620703,
+            "frozen": 393.070922,
+            "optimisticConfirmation": 532.2805440000001,
+            "root": 546.777827
+          },
+          "landed_slot_first_seen_ms_after_signed": 12.619616,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 131.070279,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 327.10213,
+            "createdBank": 116.397301,
+            "firstShredReceived": 9.817765000000001,
+            "frozen": 348.049997,
+            "optimisticConfirmation": 505.463617,
+            "root": 856.862505
+          },
+          "landed_slot_first_seen_ms_after_signed": 9.817765000000001,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 348.17491900000005,
+          "signature_received_ms_after_signed": 125.236653,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "117034",
+      "quote_min_out": "111182",
+      "reject_reason": null,
+      "route": "tpu",
+      "send_slot": 468933852,
+      "send_slot_leader": "SFundNVpuWk89g211WKUZGkuu4BsKSp7PbnmRsPZLos",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "tpu-quic:leaders3",
+          "latency_us": 23,
+          "outcome": "accepted",
+          "sender": "tpu"
+        }
+      ],
+      "shred_seen_ms_after_signed": 95.64838300000001,
+      "shred_slot": 468933853,
+      "side": "sell",
+      "signature": "4rmKgipErUHNbNCdegVaf16w991rraF7NMTCE4j1BxxeZXFNkX9zwD645iZBhWrkKNyYBSp4zxeMVRGkeKSYEbM",
+      "signed_to_finalized_us": 525248,
+      "signed_to_processed_us": 131070,
+      "signed_to_sender_ack_us": 66,
+      "slots_to_land": 1,
+      "sol_delta": "102034",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 0,
+      "token_delta": "-4233143927"
+    },
+    {
+      "block_index": 47,
+      "block_position_pct": 21.658986175115206,
+      "block_tx_count": 217,
+      "compute_units_consumed": 53355,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/XfpALgxksRG27Ei5tMBfC1D9mDtpAKMFz6QQSsvmGNrADSFoKAs6p9Bmxf53kaSW5V7HKhfHdcGHBRMZ7emS1pQ",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 189,
+      "iteration": 7,
+      "landed_slot": 468933864,
+      "leader": "ChorusmmK7i1AxXeiTtQgQZhQNiXYU84ULeaYF1EH15n",
+      "leader_region": "near(<20ms)",
+      "leader_rtt_ms": 8.344344999999999,
+      "leader_tpu": "185.229.190.123:11228",
+      "order_id": "1502645c-42ae-478b-8ff7-1101cf114961",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 562.472052,
+            "createdBank": 363.670851,
+            "firstShredReceived": 277.11320900000004,
+            "frozen": 571.4238190000001,
+            "optimisticConfirmation": 793.773018,
+            "root": 803.7167509999999
+          },
+          "landed_slot_first_seen_ms_after_signed": 277.112041,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 393.973004,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 518.874789,
+            "createdBank": 334.214382,
+            "firstShredReceived": 276.944333,
+            "frozen": 519.440041,
+            "optimisticConfirmation": 783.532016,
+            "root": 1003.8875840000001
+          },
+          "landed_slot_first_seen_ms_after_signed": 276.944333,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 519.9303269999999,
+          "signature_received_ms_after_signed": 352.468718,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "4233143927",
+      "quote_min_out": "4021486730",
+      "reject_reason": null,
+      "route": "jito",
+      "send_slot": 468933861,
+      "send_slot_leader": "FbYX2uN573G5WsgiPdHU6fS5PNUyjdXfGfpZNkYUuT4k",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "jito:frankfurt.mainnet.block-engine.jito.wtf",
+          "latency_us": 1497,
+          "outcome": "accepted",
+          "sender": "jito"
+        }
+      ],
+      "shred_seen_ms_after_signed": 314.242208,
+      "shred_slot": 468933864,
+      "side": "buy",
+      "signature": "XfpALgxksRG27Ei5tMBfC1D9mDtpAKMFz6QQSsvmGNrADSFoKAs6p9Bmxf53kaSW5V7HKhfHdcGHBRMZ7emS1pQ",
+      "signed_to_finalized_us": 884792,
+      "signed_to_processed_us": 393973,
+      "signed_to_sender_ack_us": 1536,
+      "slots_to_land": 3,
+      "sol_delta": "-136000",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 1000,
+      "token_delta": "4233143927"
+    },
+    {
+      "block_index": 108,
+      "block_position_pct": 17.475728155339805,
+      "block_tx_count": 618,
+      "compute_units_consumed": 45019,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/2Gt6C7ccqWi2VSKgaP6twHeMgeE1rEVv9PJWSqgXJq1xYh66GLE5VesW7WPZZyajgSfS92vn75nAQppTTxfiSUFX",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 196,
+      "iteration": 7,
+      "landed_slot": 468933872,
+      "leader": "6y7V8dL673XFzm9QyC5vvh3itWkp7wztahBd2yDqsyrK",
+      "leader_region": "mid(20-60ms)",
+      "leader_rtt_ms": 30.211768,
+      "leader_tpu": "88.216.192.50:5010",
+      "order_id": "1ec61ae9-88f0-417e-8cfd-384eea9c1f7c",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 624.477573,
+            "createdBank": 567.815924,
+            "firstShredReceived": 312.727005,
+            "frozen": 634.874834,
+            "optimisticConfirmation": 751.702782,
+            "root": 760.328359
+          },
+          "landed_slot_first_seen_ms_after_signed": 312.725056,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 570.8043,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 683.612232,
+            "createdBank": 399.819058,
+            "firstShredReceived": 307.351315,
+            "frozen": 695.3702189999999,
+            "optimisticConfirmation": 806.044968,
+            "root": 971.521733
+          },
+          "landed_slot_first_seen_ms_after_signed": 307.351315,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 695.373747,
+          "signature_received_ms_after_signed": 412.652845,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "117034",
+      "quote_min_out": "111182",
+      "reject_reason": null,
+      "route": "jito",
+      "send_slot": 468933870,
+      "send_slot_leader": "HM19KBHDJy93DYEJv4iFayMmCbJ1QVAk2EDG6XDgmnJS",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "jito:frankfurt.mainnet.block-engine.jito.wtf",
+          "latency_us": 1445,
+          "outcome": "accepted",
+          "sender": "jito"
+        }
+      ],
+      "shred_seen_ms_after_signed": 326.460645,
+      "shred_slot": 468933872,
+      "side": "sell",
+      "signature": "2Gt6C7ccqWi2VSKgaP6twHeMgeE1rEVv9PJWSqgXJq1xYh66GLE5VesW7WPZZyajgSfS92vn75nAQppTTxfiSUFX",
+      "signed_to_finalized_us": 887736,
+      "signed_to_processed_us": 570804,
+      "signed_to_sender_ack_us": 1493,
+      "slots_to_land": 2,
+      "sol_delta": "101034",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 1000,
+      "token_delta": "-4233143927"
+    },
+    {
+      "block_index": 140,
+      "block_position_pct": 31.46067415730337,
+      "block_tx_count": 445,
+      "compute_units_consumed": 53355,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/4nyCggkPHoiC5WLiBQJjs4r3zn1FCp2w5zrcwWe83c8KdvhncU3Dmzf9bn6bTvNpGrUHMWhgb1xBG4N4dzxYKYrj",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 194,
+      "iteration": 8,
+      "landed_slot": 468933879,
+      "leader": "shftkxnsXmqAkmLgz9Mn7bNB5Fr6mKgFc58kFHfVikj",
+      "leader_region": "near(<20ms)",
+      "leader_rtt_ms": 2.484913,
+      "leader_tpu": "198.13.140.105:12543",
+      "order_id": "c29c0b65-94e1-4346-80db-fa23ba1d9a2f",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 262.33728,
+            "createdBank": 51.52223,
+            "firstShredReceived": -86.991586,
+            "frozen": 288.77891500000004,
+            "optimisticConfirmation": 415.323404,
+            "root": 425.27272300000004
+          },
+          "landed_slot_first_seen_ms_after_signed": -86.994059,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 197.095993,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 210.539533,
+            "createdBank": 117.68591,
+            "firstShredReceived": -86.186484,
+            "frozen": 218.67507999999998,
+            "optimisticConfirmation": 412.86517,
+            "root": 684.5656959999999
+          },
+          "landed_slot_first_seen_ms_after_signed": -86.186484,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 218.680552,
+          "signature_received_ms_after_signed": 44.333379,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "4233143927",
+      "quote_min_out": "4021486730",
+      "reject_reason": null,
+      "route": "helius",
+      "send_slot": 468933878,
+      "send_slot_leader": "shftkxnsXmqAkmLgz9Mn7bNB5Fr6mKgFc58kFHfVikj",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "helius-sender:fra-sender.helius-rpc.com",
+          "latency_us": 1224,
+          "outcome": "accepted",
+          "sender": "helius"
+        }
+      ],
+      "shred_seen_ms_after_signed": 24.648429,
+      "shred_slot": 468933879,
+      "side": "buy",
+      "signature": "4nyCggkPHoiC5WLiBQJjs4r3zn1FCp2w5zrcwWe83c8KdvhncU3Dmzf9bn6bTvNpGrUHMWhgb1xBG4N4dzxYKYrj",
+      "signed_to_finalized_us": 548044,
+      "signed_to_processed_us": 197096,
+      "signed_to_sender_ack_us": 1258,
+      "slots_to_land": 1,
+      "sol_delta": "-140000",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 5000,
+      "token_delta": "4233143927"
+    },
+    {
+      "block_index": 220,
+      "block_position_pct": 83.65019011406844,
+      "block_tx_count": 263,
+      "compute_units_consumed": 45019,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/3ikTqnZpnRh9Tcw9wZPukjHxQJdRH7fGqkqBktL8qRs5RhWvUvFNkLPnRTQEBTmvf5KXxdjMybj7xywnfzZCBtsG",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 208,
+      "iteration": 8,
+      "landed_slot": 468933886,
+      "leader": "HEL1USMZKAL2odpNBj2oCjffnFGaYwmbGmyewGv1e2TU",
+      "leader_region": "near(<20ms)",
+      "leader_rtt_ms": 1.696063,
+      "leader_tpu": "64.130.57.134:8002",
+      "order_id": "eed7cd2e-6363-4d2e-b5e2-10180f7e60b0",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 155.26426700000002,
+            "createdBank": -17.533279999999998,
+            "firstShredReceived": -121.475752,
+            "frozen": 162.953707,
+            "optimisticConfirmation": 483.940529,
+            "root": 500.140841
+          },
+          "landed_slot_first_seen_ms_after_signed": -121.477072,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 97.25505500000001,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 244.22780699999998,
+            "createdBank": 82.30217200000001,
+            "firstShredReceived": -127.39852900000001,
+            "frozen": 256.24521300000004,
+            "optimisticConfirmation": 326.47093,
+            "root": 639.761298
+          },
+          "landed_slot_first_seen_ms_after_signed": -127.39852900000001,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 256.562191,
+          "signature_received_ms_after_signed": 209.137508,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "117034",
+      "quote_min_out": "111182",
+      "reject_reason": null,
+      "route": "helius",
+      "send_slot": 468933886,
+      "send_slot_leader": "HEL1USMZKAL2odpNBj2oCjffnFGaYwmbGmyewGv1e2TU",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "helius-sender:fra-sender.helius-rpc.com",
+          "latency_us": 1286,
+          "outcome": "accepted",
+          "sender": "helius"
+        }
+      ],
+      "shred_seen_ms_after_signed": 205.34223300000002,
+      "shred_slot": 468933886,
+      "side": "sell",
+      "signature": "3ikTqnZpnRh9Tcw9wZPukjHxQJdRH7fGqkqBktL8qRs5RhWvUvFNkLPnRTQEBTmvf5KXxdjMybj7xywnfzZCBtsG",
+      "signed_to_finalized_us": 420515,
+      "signed_to_processed_us": 97255,
+      "signed_to_sender_ack_us": 1323,
+      "slots_to_land": 0,
+      "sol_delta": "97034",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 5000,
+      "token_delta": "-4233143927"
+    },
+    {
+      "block_index": 141,
+      "block_position_pct": 44.620253164556964,
+      "block_tx_count": 316,
+      "compute_units_consumed": 53215,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/R6daedvstDDgrt6YYQcZ7PZ1SKxYXoTUBTYfQ86844XzFgXqAXSFEDZ5qaArUwGtgmmQynhDNktHHEAH2eYgKmY",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 224,
+      "iteration": 9,
+      "landed_slot": 468933893,
+      "leader": "5zuNci3TV79w6zLoJZzbZujMvkVZb2FcSPhgv9aT24AK",
+      "leader_region": "far(>=60ms)",
+      "leader_rtt_ms": 155.215666,
+      "leader_tpu": "198.13.131.139:5010",
+      "order_id": "5bd4f2c0-30b5-4feb-b040-00778fe8c727",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 343.05886200000003,
+            "createdBank": 208.87586299999998,
+            "firstShredReceived": 84.07812200000001,
+            "frozen": 355.09105,
+            "optimisticConfirmation": 736.197771,
+            "root": 736.200132
+          },
+          "landed_slot_first_seen_ms_after_signed": 84.076871,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 245.265523,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 379.445982,
+            "createdBank": 340.887897,
+            "firstShredReceived": 83.669209,
+            "frozen": 397.449133,
+            "optimisticConfirmation": 847.3162629999999,
+            "root": 1103.6957089999999
+          },
+          "landed_slot_first_seen_ms_after_signed": 83.669209,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 397.455201,
+          "signature_received_ms_after_signed": 203.957659,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "4233143927",
+      "quote_min_out": "4021486730",
+      "reject_reason": null,
+      "route": "tpu",
+      "send_slot": 468933891,
+      "send_slot_leader": "HpcB5Qg8Y9E73dUkot5e8HkgAJbExsYeUzniY4bCuKac",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "tpu-quic:leaders3",
+          "latency_us": 20,
+          "outcome": "accepted",
+          "sender": "tpu"
+        }
+      ],
+      "shred_seen_ms_after_signed": 201.159052,
+      "shred_slot": 468933893,
+      "side": "buy",
+      "signature": "R6daedvstDDgrt6YYQcZ7PZ1SKxYXoTUBTYfQ86844XzFgXqAXSFEDZ5qaArUwGtgmmQynhDNktHHEAH2eYgKmY",
+      "signed_to_finalized_us": 902737,
+      "signed_to_processed_us": 245265,
+      "signed_to_sender_ack_us": 79,
+      "slots_to_land": 2,
+      "sol_delta": "-135000",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 0,
+      "token_delta": "4233143927"
+    },
+    {
+      "block_index": 214,
+      "block_position_pct": 67.50788643533123,
+      "block_tx_count": 317,
+      "compute_units_consumed": 44869,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/5shC8fiVPjACsPGNxMseUVeXNG7Ke2oMsRWoaDbdWYkYzwBoESF1QSrg1CUta7hh6c7dLKQSGcNdeXrzciNzAM2f",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 214,
+      "iteration": 9,
+      "landed_slot": 468933902,
+      "leader": "C8Bey3LKVJHVqN6xPTeW8WJfUgFQAeGNBpT4Rp99JP1k",
+      "leader_region": "near(<20ms)",
+      "leader_rtt_ms": 2.362103,
+      "leader_tpu": "162.19.222.40:8022",
+      "order_id": "ea004f90-8f7d-43f5-a48e-d85d77653ccd",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 343.788326,
+            "createdBank": 126.76138300000001,
+            "firstShredReceived": 4.130652,
+            "frozen": 353.45190399999996,
+            "optimisticConfirmation": 448.52804499999996,
+            "root": 465.101548
+          },
+          "landed_slot_first_seen_ms_after_signed": 4.1287069999999995,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 210.87019800000002,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 367.538251,
+            "createdBank": 208.533177,
+            "firstShredReceived": 5.969167,
+            "frozen": 407.838798,
+            "optimisticConfirmation": 551.3490290000001,
+            "root": 835.7675770000001
+          },
+          "landed_slot_first_seen_ms_after_signed": 5.969167,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 407.842645,
+          "signature_received_ms_after_signed": 367.836126,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "117035",
+      "quote_min_out": "111183",
+      "reject_reason": null,
+      "route": "tpu",
+      "send_slot": 468933901,
+      "send_slot_leader": "C8Bey3LKVJHVqN6xPTeW8WJfUgFQAeGNBpT4Rp99JP1k",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "tpu-quic:leaders3",
+          "latency_us": 20,
+          "outcome": "accepted",
+          "sender": "tpu"
+        }
+      ],
+      "shred_seen_ms_after_signed": 244.277915,
+      "shred_slot": 468933902,
+      "side": "sell",
+      "signature": "5shC8fiVPjACsPGNxMseUVeXNG7Ke2oMsRWoaDbdWYkYzwBoESF1QSrg1CUta7hh6c7dLKQSGcNdeXrzciNzAM2f",
+      "signed_to_finalized_us": 577945,
+      "signed_to_processed_us": 210870,
+      "signed_to_sender_ack_us": 72,
+      "slots_to_land": 1,
+      "sol_delta": "102035",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 0,
+      "token_delta": "-4233143927"
+    },
+    {
+      "block_index": 8,
+      "block_position_pct": 3.21285140562249,
+      "block_tx_count": 249,
+      "compute_units_consumed": 53365,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/5rLkCeTw6v3dC7WML28CHxFCTmesjLxJ6a6ZRnQai8LD8JJidxvot7rZFDojNjSD757CHdQ3jgNvWAdxmv86Z3yS",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 189,
+      "iteration": 10,
+      "landed_slot": 468933912,
+      "leader": "EXckihF3qmguH5znjhfzLvHsbk2E3nEW2DqNh4MMnDMm",
+      "leader_region": "near(<20ms)",
+      "leader_rtt_ms": 2.227435,
+      "leader_tpu": "198.13.140.111:12288",
+      "order_id": "9852c750-52ac-43e0-8d69-4386aca5caea",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 952.682826,
+            "createdBank": 851.357304,
+            "firstShredReceived": 721.08438,
+            "frozen": 962.026383,
+            "optimisticConfirmation": 1132.611204,
+            "root": 1132.613871
+          },
+          "landed_slot_first_seen_ms_after_signed": 721.082812,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 852.669456,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 913.5492549999999,
+            "createdBank": 807.807213,
+            "firstShredReceived": 715.752218,
+            "frozen": 946.376437,
+            "optimisticConfirmation": 1212.8832380000001,
+            "root": 1459.943571
+          },
+          "landed_slot_first_seen_ms_after_signed": 715.752218,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 946.871167,
+          "signature_received_ms_after_signed": 878.497209,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "4233143926",
+      "quote_min_out": "4021486729",
+      "reject_reason": null,
+      "route": "jito",
+      "send_slot": 468933907,
+      "send_slot_leader": "5Cchr1XGEg7dbBXByV5NY2ad8jfxAM7HA3x8D56rq9Ux",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "jito:frankfurt.mainnet.block-engine.jito.wtf",
+          "latency_us": 1360,
+          "outcome": "accepted",
+          "sender": "jito"
+        }
+      ],
+      "shred_seen_ms_after_signed": 731.679305,
+      "shred_slot": 468933912,
+      "side": "buy",
+      "signature": "5rLkCeTw6v3dC7WML28CHxFCTmesjLxJ6a6ZRnQai8LD8JJidxvot7rZFDojNjSD757CHdQ3jgNvWAdxmv86Z3yS",
+      "signed_to_finalized_us": 1266613,
+      "signed_to_processed_us": 852670,
+      "signed_to_sender_ack_us": 1395,
+      "slots_to_land": 5,
+      "sol_delta": "-136000",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 1000,
+      "token_delta": "4233143926"
+    },
+    {
+      "block_index": 19,
+      "block_position_pct": 8.15450643776824,
+      "block_tx_count": 233,
+      "compute_units_consumed": 45019,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/3y3BYfTw9RZmigiSJJY2ZWBQA6MjXxms4eiTTrt2j8xf2XnfkbNYkbY8SiDBezuv9RqrtG8WMr6YDCE4yc51bMS",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 206,
+      "iteration": 10,
+      "landed_slot": 468933921,
+      "leader": "2DTXh3ruMU2SeWanqr4yeg5GR47V99Jq3wUdStQfda3V",
+      "leader_region": "near(<20ms)",
+      "leader_rtt_ms": 3.2399009999999997,
+      "leader_tpu": "198.13.140.105:12290",
+      "order_id": "01b5e723-8ac4-474a-a28a-42d65d2f6f96",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 782.061093,
+            "createdBank": 530.911102,
+            "firstShredReceived": 429.04228,
+            "frozen": 782.0664750000001,
+            "optimisticConfirmation": 1628.8124879999998,
+            "root": 1640.574528
+          },
+          "landed_slot_first_seen_ms_after_signed": 429.039903,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 531.895609,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 706.531901,
+            "createdBank": 616.038186,
+            "firstShredReceived": 429.765979,
+            "frozen": 709.592773,
+            "root": 1617.644822
+          },
+          "landed_slot_first_seen_ms_after_signed": 429.765979,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 1358.060129,
+          "signature_received_ms_after_signed": 561.164447,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "117034",
+      "quote_min_out": "111182",
+      "reject_reason": null,
+      "route": "jito",
+      "send_slot": 468933918,
+      "send_slot_leader": "EvnRmnMrd69kFdbLMxWkTn1icZ7DCceRhvmb2SJXqDo4",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "jito:frankfurt.mainnet.block-engine.jito.wtf",
+          "latency_us": 1362,
+          "outcome": "accepted",
+          "sender": "jito"
+        }
+      ],
+      "shred_seen_ms_after_signed": 471.63499800000005,
+      "shred_slot": 468933921,
+      "side": "sell",
+      "signature": "3y3BYfTw9RZmigiSJJY2ZWBQA6MjXxms4eiTTrt2j8xf2XnfkbNYkbY8SiDBezuv9RqrtG8WMr6YDCE4yc51bMS",
+      "signed_to_finalized_us": 1670977,
+      "signed_to_processed_us": 531895,
+      "signed_to_sender_ack_us": 1412,
+      "slots_to_land": 3,
+      "sol_delta": "101034",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 1000,
+      "token_delta": "-4233143926"
+    },
+    {
+      "block_index": 267,
+      "block_position_pct": 82.15384615384616,
+      "block_tx_count": 325,
+      "compute_units_consumed": 53365,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/66xPsmKMhNqgNGhjJbdnN3MVPddhX5t7QqkSgRvgJVKgUBBKpVZC9t36GtSnh9PEDaXqnrRVKGiN5xoQh2DZKSNw",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 195,
+      "iteration": 11,
+      "landed_slot": 468933930,
+      "leader": "7y5VhV4fkz6r4zUmH2UiwPjLwXzPL1PcV28or5NWkWRL",
+      "leader_region": "near(<20ms)",
+      "leader_rtt_ms": 2.461977,
+      "leader_tpu": "198.13.140.105:12398",
+      "order_id": "3e13854c-5515-4b1a-8c7c-d1c1e6739407",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 142.016964,
+            "createdBank": -18.846681,
+            "firstShredReceived": -130.32153699999998,
+            "frozen": 167.733079,
+            "optimisticConfirmation": 540.895062,
+            "root": 556.5384359999999
+          },
+          "landed_slot_first_seen_ms_after_signed": -130.323971,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 158.483398,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 171.65034300000002,
+            "createdBank": 77.460067,
+            "firstShredReceived": -134.961313,
+            "frozen": 172.842612,
+            "optimisticConfirmation": 365.655641,
+            "root": 660.1042219999999
+          },
+          "landed_slot_first_seen_ms_after_signed": -134.961313,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 173.097683,
+          "signature_received_ms_after_signed": 136.391045,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "4233143926",
+      "quote_min_out": "4021486729",
+      "reject_reason": null,
+      "route": "helius",
+      "send_slot": 468933930,
+      "send_slot_leader": "7y5VhV4fkz6r4zUmH2UiwPjLwXzPL1PcV28or5NWkWRL",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "helius-sender:fra-sender.helius-rpc.com",
+          "latency_us": 1332,
+          "outcome": "accepted",
+          "sender": "helius"
+        }
+      ],
+      "shred_seen_ms_after_signed": 130.858131,
+      "shred_slot": 468933930,
+      "side": "buy",
+      "signature": "66xPsmKMhNqgNGhjJbdnN3MVPddhX5t7QqkSgRvgJVKgUBBKpVZC9t36GtSnh9PEDaXqnrRVKGiN5xoQh2DZKSNw",
+      "signed_to_finalized_us": 337741,
+      "signed_to_processed_us": 158483,
+      "signed_to_sender_ack_us": 1386,
+      "slots_to_land": 0,
+      "sol_delta": "-140000",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 5000,
+      "token_delta": "4233143926"
+    },
+    {
+      "block_index": 151,
+      "block_position_pct": 51.013513513513516,
+      "block_tx_count": 296,
+      "compute_units_consumed": 45019,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 100000,
+      "explorer": "https://solscan.io/tx/5RDKjUs6nVJ1EtFv8QJNCsKEZy2CGHMx9HHFDjFZyzkTWSFCjYkkvGhhm6YjpZs1uE5u6XarRdL7x3w6zdEMW46R",
+      "fee_lamports": 15000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 197,
+      "iteration": 11,
+      "landed_slot": 468933939,
+      "leader": "9rkJMARqK6VBkcxGfKBAwnA44gPAfGxPbPsfsggFNDSQ",
+      "leader_region": "far(>=60ms)",
+      "leader_rtt_ms": 141.92499999999998,
+      "leader_tpu": "64.130.58.117:5010",
+      "order_id": "817cebf8-b909-47a8-b765-1778d864a67c",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 371.272742,
+            "createdBank": 200.670485,
+            "firstShredReceived": 80.832677,
+            "frozen": 381.60742,
+            "optimisticConfirmation": 653.283336,
+            "root": 673.3275130000001
+          },
+          "landed_slot_first_seen_ms_after_signed": 80.829497,
+          "provider": "p0:mainnet.helius-rpc.com",
+          "signature_processed_ms_after_signed": 272.22477899999996,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p1:solana-mainnet.g.alchemy.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": false
+        },
+        {
+          "landed_slot_events_ms_after_signed": {},
+          "landed_slot_first_seen_ms_after_signed": null,
+          "provider": "p2:api.mainnet-beta.solana.com",
+          "signature_processed_ms_after_signed": null,
+          "signature_received_ms_after_signed": null,
+          "slot_updates_supported": true
+        },
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 450.21693400000004,
+            "createdBank": 327.901171,
+            "firstShredReceived": 82.143964,
+            "frozen": 462.890064,
+            "optimisticConfirmation": 587.034369,
+            "root": 790.950693
+          },
+          "landed_slot_first_seen_ms_after_signed": 82.143964,
+          "provider": "p3:10.30.0.3",
+          "signature_processed_ms_after_signed": 463.250295,
+          "signature_received_ms_after_signed": 253.159562,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "117034",
+      "quote_min_out": "111182",
+      "reject_reason": null,
+      "route": "helius",
+      "send_slot": 468933938,
+      "send_slot_leader": "9rkJMARqK6VBkcxGfKBAwnA44gPAfGxPbPsfsggFNDSQ",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "helius-sender:fra-sender.helius-rpc.com",
+          "latency_us": 1400,
+          "outcome": "accepted",
+          "sender": "helius"
+        }
+      ],
+      "shred_seen_ms_after_signed": 165.95415699999998,
+      "shred_slot": 468933939,
+      "side": "sell",
+      "signature": "5RDKjUs6nVJ1EtFv8QJNCsKEZy2CGHMx9HHFDjFZyzkTWSFCjYkkvGhhm6YjpZs1uE5u6XarRdL7x3w6zdEMW46R",
+      "signed_to_finalized_us": 623268,
+      "signed_to_processed_us": 272225,
+      "signed_to_sender_ack_us": 1608,
+      "slots_to_land": 1,
+      "sol_delta": "97034",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 5000,
+      "token_delta": "-4233143926"
+    }
+  ],
+  "rpc_providers": [
+    {
+      "errors": 0,
+      "host": "mainnet.helius-rpc.com",
+      "ok": 148,
+      "rate_limited": 0
+    },
+    {
+      "errors": 4,
+      "host": "solana-mainnet.g.alchemy.com",
+      "ok": 139,
+      "rate_limited": 0
+    },
+    {
+      "errors": 0,
+      "host": "api.mainnet-beta.solana.com",
+      "ok": 76,
+      "rate_limited": 0
+    },
+    {
+      "errors": 20,
+      "host": "10.30.0.3",
+      "ok": 183,
+      "rate_limited": 0
+    }
+  ],
+  "shred_feed_records": 74230,
+  "simulations": [],
+  "summary": {
+    "block_position_pct": {
+      "max": 97.37470167064438,
+      "min": 1.171875,
+      "n": 24,
+      "p50": 26.451612903225808,
+      "p95": 89.23611111111111,
+      "p99": 97.37470167064438
+    },
+    "by_leader_region": {
+      "far(>=60ms)": {
+        "block_position_pct": {
+          "max": 97.37470167064438,
+          "min": 7.2948328267477205,
+          "n": 6,
+          "p50": 44.620253164556964,
+          "p95": 97.37470167064438,
+          "p99": 97.37470167064438
+        },
+        "not_finalized": 0,
+        "same_slot_share": 0.0,
+        "signed_to_first_landed_notification_ms": {
+          "max": 1088.524,
+          "min": 198.217,
+          "n": 6,
+          "p50": 272.225,
+          "p95": 1088.524,
+          "p99": 1088.524
+        },
+        "signed_to_first_sender_ack_ms": {
+          "max": 169.412,
+          "min": 0.069,
+          "n": 6,
+          "p50": 1.239,
+          "p95": 169.412,
+          "p99": 169.412
+        },
+        "signed_to_shred_seen_ms": {
+          "max": 994.367264,
+          "min": 157.57035299999998,
+          "n": 6,
+          "p50": 201.159052,
+          "p95": 994.367264,
+          "p99": 994.367264
+        },
+        "slots_to_land": {
+          "max": 5.0,
+          "min": 1.0,
+          "n": 6,
+          "p50": 2.0,
+          "p95": 5.0,
+          "p99": 5.0
+        },
+        "trades": 6
+      },
+      "mid(20-60ms)": {
+        "block_position_pct": {
+          "max": 76.2135922330097,
+          "min": 17.475728155339805,
+          "n": 3,
+          "p50": 25.341130604288498,
+          "p95": 76.2135922330097,
+          "p99": 76.2135922330097
+        },
+        "not_finalized": 0,
+        "same_slot_share": 0.0,
+        "signed_to_first_landed_notification_ms": {
+          "max": 570.804,
+          "min": 144.545,
+          "n": 3,
+          "p50": 491.207,
+          "p95": 570.804,
+          "p99": 570.804
+        },
+        "signed_to_first_sender_ack_ms": {
+          "max": 7.974,
+          "min": 1.251,
+          "n": 3,
+          "p50": 1.493,
+          "p95": 7.974,
+          "p99": 7.974
+        },
+        "signed_to_shred_seen_ms": {
+          "max": 366.55050300000005,
+          "min": 147.119869,
+          "n": 3,
+          "p50": 326.460645,
+          "p95": 366.55050300000005,
+          "p99": 366.55050300000005
+        },
+        "slots_to_land": {
+          "max": 2.0,
+          "min": 1.0,
+          "n": 3,
+          "p50": 2.0,
+          "p95": 2.0,
+          "p99": 2.0
+        },
+        "trades": 3
+      },
+      "near(<20ms)": {
+        "block_position_pct": {
+          "max": 89.23611111111111,
+          "min": 1.171875,
+          "n": 15,
+          "p50": 21.658986175115206,
+          "p95": 89.23611111111111,
+          "p99": 89.23611111111111
+        },
+        "not_finalized": 0,
+        "same_slot_share": 0.133,
+        "signed_to_first_landed_notification_ms": {
+          "max": 1065.648,
+          "min": 97.255,
+          "n": 15,
+          "p50": 209.331,
+          "p95": 1065.648,
+          "p99": 1065.648
+        },
+        "signed_to_first_sender_ack_ms": {
+          "max": 5.631,
+          "min": 0.051,
+          "n": 15,
+          "p50": 1.386,
+          "p95": 5.631,
+          "p99": 5.631
+        },
+        "signed_to_shred_seen_ms": {
+          "max": 959.911503,
+          "min": 24.648429,
+          "n": 15,
+          "p50": 130.858131,
+          "p95": 959.911503,
+          "p99": 959.911503
+        },
+        "slots_to_land": {
+          "max": 5.0,
+          "min": 0.0,
+          "n": 15,
+          "p50": 1.0,
+          "p95": 5.0,
+          "p99": 5.0
+        },
+        "trades": 15
+      }
+    },
+    "by_provider": {
+      "p0:mainnet.helius-rpc.com": {
+        "landed_slot_first_seen_ms": {
+          "max": 960.763826,
+          "min": -144.399116,
+          "n": 24,
+          "p50": 80.829497,
+          "p95": 903.748736,
+          "p99": 960.763826
+        },
+        "signature_processed_ms": {
+          "max": 1088.524883,
+          "min": 97.25505500000001,
+          "n": 24,
+          "p50": 245.265523,
+          "p95": 1065.647775,
+          "p99": 1088.524883
+        }
+      },
+      "p1:solana-mainnet.g.alchemy.com": {
+        "landed_slot_first_seen_ms": {
+          "n": 0
+        },
+        "signature_processed_ms": {
+          "n": 0
+        }
+      },
+      "p2:api.mainnet-beta.solana.com": {
+        "landed_slot_first_seen_ms": {
+          "max": 1613.565495,
+          "min": 225.130107,
+          "n": 5,
+          "p50": 398.206932,
+          "p95": 1613.565495,
+          "p99": 1613.565495
+        },
+        "signature_processed_ms": {
+          "max": 2126.8337,
+          "min": 707.118451,
+          "n": 5,
+          "p50": 1273.707447,
+          "p95": 2126.8337,
+          "p99": 2126.8337
+        }
+      },
+      "p3:10.30.0.3": {
+        "landed_slot_first_seen_ms": {
+          "max": 964.384345,
+          "min": -152.156942,
+          "n": 24,
+          "p50": 82.143964,
+          "p95": 905.555801,
+          "p99": 964.384345
+        },
+        "signature_processed_ms": {
+          "max": 1390.676692,
+          "min": 173.097683,
+          "n": 24,
+          "p50": 407.842645,
+          "p95": 1358.060129,
+          "p99": 1390.676692
+        }
+      }
+    },
+    "by_route": {
+      "helius": {
+        "block_position_pct": {
+          "max": 83.65019011406844,
+          "min": 7.2948328267477205,
+          "n": 8,
+          "p50": 42.52199413489736,
+          "p95": 83.65019011406844,
+          "p99": 83.65019011406844
+        },
+        "not_finalized": 0,
+        "same_slot_share": 0.25,
+        "signed_to_first_landed_notification_ms": {
+          "max": 1088.524,
+          "min": 97.255,
+          "n": 8,
+          "p50": 178.093,
+          "p95": 1088.524,
+          "p99": 1088.524
+        },
+        "signed_to_first_sender_ack_ms": {
+          "max": 5.631,
+          "min": 1.239,
+          "n": 8,
+          "p50": 1.323,
+          "p95": 5.631,
+          "p99": 5.631
+        },
+        "signed_to_shred_seen_ms": {
+          "max": 994.367264,
+          "min": 24.648429,
+          "n": 8,
+          "p50": 130.858131,
+          "p95": 994.367264,
+          "p99": 994.367264
+        },
+        "slots_to_land": {
+          "max": 5.0,
+          "min": 0.0,
+          "n": 8,
+          "p50": 1.0,
+          "p95": 5.0,
+          "p99": 5.0
+        },
+        "trades": 8
+      },
+      "jito": {
+        "block_position_pct": {
+          "max": 97.37470167064438,
+          "min": 1.171875,
+          "n": 8,
+          "p50": 15.022421524663677,
+          "p95": 97.37470167064438,
+          "p99": 97.37470167064438
+        },
+        "not_finalized": 0,
+        "same_slot_share": 0.0,
+        "signed_to_first_landed_notification_ms": {
+          "max": 1065.648,
+          "min": 393.973,
+          "n": 8,
+          "p50": 570.804,
+          "p95": 1065.648,
+          "p99": 1065.648
+        },
+        "signed_to_first_sender_ack_ms": {
+          "max": 7.974,
+          "min": 1.395,
+          "n": 8,
+          "p50": 1.47,
+          "p95": 7.974,
+          "p99": 7.974
+        },
+        "signed_to_shred_seen_ms": {
+          "max": 959.911503,
+          "min": 314.242208,
+          "n": 8,
+          "p50": 471.63499800000005,
+          "p95": 959.911503,
+          "p99": 959.911503
+        },
+        "slots_to_land": {
+          "max": 5.0,
+          "min": 2.0,
+          "n": 8,
+          "p50": 3.0,
+          "p95": 5.0,
+          "p99": 5.0
+        },
+        "trades": 8
+      },
+      "tpu": {
+        "block_position_pct": {
+          "max": 89.23611111111111,
+          "min": 15.605095541401274,
+          "n": 8,
+          "p50": 26.451612903225808,
+          "p95": 89.23611111111111,
+          "p99": 89.23611111111111
+        },
+        "not_finalized": 0,
+        "same_slot_share": 0.0,
+        "signed_to_first_landed_notification_ms": {
+          "max": 427.229,
+          "min": 119.086,
+          "n": 8,
+          "p50": 198.217,
+          "p95": 427.229,
+          "p99": 427.229
+        },
+        "signed_to_first_sender_ack_ms": {
+          "max": 169.412,
+          "min": 0.051,
+          "n": 8,
+          "p50": 0.072,
+          "p95": 169.412,
+          "p99": 169.412
+        },
+        "signed_to_shred_seen_ms": {
+          "max": 329.791763,
+          "min": 43.735641,
+          "n": 8,
+          "p50": 95.64838300000001,
+          "p95": 329.791763,
+          "p99": 329.791763
+        },
+        "slots_to_land": {
+          "max": 2.0,
+          "min": 1.0,
+          "n": 8,
+          "p50": 1.0,
+          "p95": 2.0,
+          "p99": 2.0
+        },
+        "trades": 8
+      }
+    },
+    "fee_lamports": {
+      "max": 15000.0,
+      "min": 15000.0,
+      "n": 24,
+      "p50": 15000.0,
+      "p95": 15000.0,
+      "p99": 15000.0
+    },
+    "order_to_signed_ms": {
+      "max": 0.248,
+      "min": 0.182,
+      "n": 24,
+      "p50": 0.196,
+      "p95": 0.242,
+      "p99": 0.248
+    },
+    "same_slot_share": 0.083,
+    "signed_to_bot_final_ms": {
+      "max": 1716.426,
+      "min": 337.741,
+      "n": 24,
+      "p50": 624.708,
+      "p95": 1670.977,
+      "p99": 1716.426
+    },
+    "signed_to_first_landed_notification_ms": {
+      "max": 1088.524,
+      "min": 97.255,
+      "n": 24,
+      "p50": 245.265,
+      "p95": 1065.648,
+      "p99": 1088.524
+    },
+    "signed_to_first_sender_ack_ms": {
+      "max": 169.412,
+      "min": 0.051,
+      "n": 24,
+      "p50": 1.386,
+      "p95": 7.974,
+      "p99": 169.412
+    },
+    "signed_to_shred_seen_ms": {
+      "max": 994.367264,
+      "min": 24.648429,
+      "n": 24,
+      "p50": 201.159052,
+      "p95": 959.911503,
+      "p99": 994.367264
+    },
+    "slots_to_land": {
+      "max": 5.0,
+      "min": 0.0,
+      "n": 24,
+      "p50": 1.0,
+      "p95": 5.0,
+      "p99": 5.0
+    },
+    "tip_lamports": {
+      "max": 5000.0,
+      "min": 0.0,
+      "n": 24,
+      "p50": 1000.0,
+      "p95": 5000.0,
+      "p99": 5000.0
+    },
+    "trades": 24
+  },
+  "websocket": {
+    "balances_warm": true,
+    "coin_warm": true,
+    "host": "mainnet.helius-rpc.com",
+    "live": true,
+    "note": "if not warm the engine falls back to RPC reads",
+    "warmup_ms": 318
+  }
+}

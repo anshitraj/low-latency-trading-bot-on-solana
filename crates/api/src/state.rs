@@ -204,7 +204,8 @@ pub async fn build(cfg: Config) -> anyhow::Result<Built> {
         ));
         senders.push(SenderKind::Helius);
     }
-    // TPU sender is not built (see crates/sender-tpu); never registered.
+    // TPU sender: registered below, once the WebSocket stream exists (its
+    // leader tracker uses the stream's slot heartbeat).
 
     // --- WebSocket account stream (real clusters only; WS_STREAMING=false disables).
     // Coin state and wallet balances are pushed by the RPC; reads fall back to
@@ -241,6 +242,18 @@ pub async fn build(cfg: Config) -> anyhow::Result<Built> {
         Some(s) => Arc::new(StreamBalances::new(rpc.clone(), s.clone())),
         None => Arc::new(RpcBalances { rpc: rpc.clone() }),
     };
+    if cfg.tpu_sender && mock.is_none() {
+        match trader_sender_tpu::TpuSender::start(rpc.clone(), stream.clone(), cfg.tpu_leaders)
+            .await
+        {
+            Ok(t) => {
+                router.add(ManagedSender::new(t, Duration::from_secs(3), None));
+                senders.push(SenderKind::Tpu);
+                tracing::info!(leaders = cfg.tpu_leaders, "direct TPU sender ready");
+            }
+            Err(e) => tracing::warn!(error = %e, "TPU sender unavailable; continuing without it"),
+        }
+    }
     let engine_senders = senders.clone();
     let (tx, _) = broadcast::channel(8192);
     let locks = WalletLocks::default();

@@ -521,6 +521,7 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         })).collect::<Vec<_>>(),
         "route_assignment": "round trip i uses route i % routes",
         "shred_feed": a.get("shred-feed"),
+        "shred_watch": a.get("shred-watch"),
         "received_notifications_from": a.get("received-from"),
         "senders": sender_names,
         "tip_lamports_per_tx": tip,
@@ -837,6 +838,24 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
             )
         })
         .collect();
+    // `--shred-watch 10.30.0.3:9901`: tell tools/shred-observer each signature
+    // right before sending, so it can report the first shred carrying it
+    // without waiting for the whole entry batch. One non-blocking UDP send.
+    if let Some(addr) = a.get("shred-watch") {
+        let sock = std::net::UdpSocket::bind("0.0.0.0:0")?;
+        sock.connect(addr)
+            .map_err(|e| anyhow!("--shred-watch {addr}: {e}"))?;
+        sock.set_nonblocking(true)?;
+        let sock = Arc::new(sock);
+        for e in &engines {
+            let s = sock.clone();
+            e.set_presend_hook(Arc::new(move |sig: &str| {
+                if let Ok(b) = bs58::decode(sig).into_vec() {
+                    let _ = s.send(&b);
+                }
+            }));
+        }
+    }
     let user_id = Uuid::new_v4();
     let wallet_id = Uuid::new_v4();
     let run_tag = Uuid::new_v4().simple().to_string();

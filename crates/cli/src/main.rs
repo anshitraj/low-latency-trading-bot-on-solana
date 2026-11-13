@@ -44,7 +44,7 @@ const HELP: &str = r#"trader-cli <command> [--flags]
       Real engine (PumpAdapter + RpcSender + observer) buy/sell on LOCALNET; verifies balances on-chain.
   keygen [--keypair <path>]
       Create a canary wallet file (default ~/.trader/canary-keypair.json). Prints the pubkey only.
-  mainnet-canary --mint <mint> [--buy-lamports 120000] [--iterations 1..25] [--priority-lamports 100000] [--cu-price N|auto] [--tip-lamports N|auto] [--senders rpc,tpu,jito|helius | --routes "tpu,jito;tpu,helius;tpu,jito@frankfurt+ny"] [--tpu-leaders 3] [--jito-regions frankfurt,amsterdam] [--no-slot-updates] [--shred-feed 0.0.0.0:9900] [--received-from <host>] [--poll-ms 400] [--no-ws] [--ws <url>] [--keypair <path>] [--sell-only] [--send]
+  mainnet-canary --mint <mint> [--buy-lamports 120000] [--iterations 1..25] [--priority-lamports 100000] [--cu-price N|auto] [--tip-lamports N|auto] [--senders rpc,tpu,jito|helius | --routes "tpu,jito;tpu,helius;tpu,jito@frankfurt+ny"] [--tpu-leaders 3] [--jito-regions frankfurt,amsterdam] [--no-slot-updates] [--shred-feed 0.0.0.0:9900] [--received-from <host>] [--shred-watch <node:9901>] [--poll-ms 400] [--no-ws] [--ws <url>] [--keypair <path>] [--sell-only] [--send]
       MAINNET. Without --send: DRY RUN (full engine path, signature zeroed, simulateTransaction only;
       nothing broadcast). With --send: real buy -> sell-100% round trips; needs RPC_URL (mainnet),
       MAINNET_TRADING_ENABLED=I_UNDERSTAND_REAL_FUNDS_AT_RISK and typing a confirmation phrase.

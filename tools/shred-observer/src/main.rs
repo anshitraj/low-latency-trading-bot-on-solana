@@ -19,6 +19,11 @@
 //! - Shred signatures are NOT verified against the slot leader. Fine for timing
 //!   measurements; do not drive trading decisions from this feed until it is.
 //!
+//! Watch list (`--watch-bind 0.0.0.0:9901`): a collector may send 64-byte
+//! signatures it is about to submit; every data shred (received or recovered)
+//! is scanned for them and a hit is reported at once, without waiting for the
+//! rest of the entry batch. The batch path still reports everything else.
+//!
 //! Wire format to collectors: datagrams of N x 72-byte records
 //! [64-byte signature][u64 LE slot].
 //!
@@ -34,7 +39,14 @@ use solana_ledger::shred::{
 };
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::net::{SocketAddr, UdpSocket};
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
+
+/// Watched signatures (first 8 bytes as u64 for a fast prefix scan).
+type WatchList = Arc<RwLock<HashMap<[u8; 64], Instant>>>;
+const WATCH_KEEP: Duration = Duration::from_secs(120);
+/// Data shred headers precede the entry bytes.
+const DATA_OFFSET: usize = 88;
 
 /// Merkle shred payload sizes (solana-ledger 4.4.1): data 1203, code 1228
 /// (= PACKET_DATA_SIZE 1232 - 4); repair responses append a 4-byte nonce.
@@ -73,6 +85,7 @@ struct Stats {
     code_shreds: u64,
     dup_shreds: u64,
     batches: u64,
+    watch_hits: u64,
     recovered_sets: u64,
     recovered_data: u64,
     recover_err: u64,
@@ -95,6 +108,7 @@ struct Observer {
     seen_order: VecDeque<[u8; 64]>,
     out: UdpSocket,
     emit: Vec<SocketAddr>,
+    watch: Option<WatchList>,
     st: Stats,
 }
 
@@ -177,6 +191,7 @@ impl Observer {
         }
         buf.data.insert(index, (bytes.to_vec(), complete));
         self.st.data_shreds += 1;
+        self.check_watch(slot, bytes);
         self.try_batch(slot, index);
         // A DATA_COMPLETE shred also proves where the NEXT batch starts.
         if complete {
@@ -274,6 +289,40 @@ impl Observer {
         }
     }
 
+    /// Report watched signatures found anywhere in this data shred's bytes.
+    fn check_watch(&mut self, slot: u64, bytes: &[u8]) {
+        let Some(w) = &self.watch else {
+            return;
+        };
+        let hits: Vec<[u8; 64]> = {
+            let g = w.read().unwrap();
+            if g.is_empty() || bytes.len() < DATA_OFFSET + 64 {
+                return;
+            }
+            let data = &bytes[DATA_OFFSET..];
+            g.keys()
+                .filter(|sig| {
+                    let p = u64::from_le_bytes(sig[..8].try_into().unwrap());
+                    (0..=data.len() - 64).any(|i| {
+                        u64::from_le_bytes(data[i..i + 8].try_into().unwrap()) == p
+                            && data[i..i + 64] == sig[..]
+                    })
+                })
+                .copied()
+                .collect()
+        };
+        for sig in hits {
+            if !self.seen.insert(sig) {
+                continue;
+            }
+            self.seen_order.push_back(sig);
+            self.st.watch_hits += 1;
+            let mut rec = sig.to_vec();
+            rec.extend_from_slice(&slot.to_le_bytes());
+            self.flush(&rec, 1);
+        }
+    }
+
     fn flush(&mut self, recs: &[u8], n: usize) {
         for a in &self.emit {
             if self.out.send_to(recs, a).is_err() {
@@ -303,12 +352,14 @@ fn main() {
     let mut ports = parse_ports("8000-8030");
     let mut exclude: Vec<u16> = vec![];
     let mut shred_version: Option<u16> = None;
+    let mut watch_bind: Option<String> = None;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--emit" => emit.push(args.next().expect("--emit addr").parse().expect("addr")),
             "--ports" => ports = parse_ports(&args.next().expect("--ports")),
             "--exclude" => exclude = parse_ports(&args.next().expect("--exclude")),
+            "--watch-bind" => watch_bind = Some(args.next().expect("--watch-bind addr")),
             "--shred-version" => {
                 shred_version = Some(args.next().expect("--shred-version").parse().expect("u16"))
             }
@@ -340,6 +391,28 @@ fn main() {
         );
     }
     let out = UdpSocket::bind("0.0.0.0:0").expect("udp out");
+    let watch: Option<WatchList> = watch_bind.map(|b| {
+        let list: WatchList = Default::default();
+        let sock = UdpSocket::bind(&b).expect("--watch-bind");
+        let l = list.clone();
+        std::thread::spawn(move || {
+            let mut buf = [0u8; 2048];
+            loop {
+                let Ok((n, _)) = sock.recv_from(&mut buf) else {
+                    continue;
+                };
+                let now = Instant::now();
+                let mut g = l.write().unwrap();
+                for c in buf[..n].chunks_exact(64) {
+                    let mut k = [0u8; 64];
+                    k.copy_from_slice(c);
+                    g.insert(k, now);
+                }
+                g.retain(|_, t| t.elapsed() < WATCH_KEEP);
+            }
+        });
+        list
+    });
     let mut ob = Observer {
         slots: HashMap::new(),
         fec: HashMap::new(),
@@ -349,6 +422,7 @@ fn main() {
         seen_order: VecDeque::new(),
         out,
         emit,
+        watch,
         st: Stats::default(),
     };
     eprintln!(
@@ -416,9 +490,9 @@ fn main() {
             last = Instant::now();
             let s = &ob.st;
             eprintln!(
-                "stats packets={} shred_udp={} bad_version={} bad_slot={} data={} code={} dup={} recovered_sets={} recovered_data={} recover_err={} batches={} deshred_err={} decode_err={} markers={} txs={} sigs_emitted={} send_err={} slots={} max_slot={}",
+                "stats packets={} shred_udp={} bad_version={} bad_slot={} data={} code={} dup={} recovered_sets={} recovered_data={} recover_err={} batches={} watch_hits={} deshred_err={} decode_err={} markers={} txs={} sigs_emitted={} send_err={} slots={} max_slot={}",
                 s.packets, s.udp_in_range, s.bad_version, s.bad_slot, s.data_shreds, s.code_shreds, s.dup_shreds,
-                s.recovered_sets, s.recovered_data, s.recover_err, s.batches,
+                s.recovered_sets, s.recovered_data, s.recover_err, s.batches, s.watch_hits,
                 s.deshred_err, s.decode_err, s.markers, s.txs, s.sigs_emitted, s.send_err,
                 ob.slots.len(), ob.max_slot
             );

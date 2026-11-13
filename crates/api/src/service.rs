@@ -76,7 +76,7 @@ pub async fn settings(st: &AppState, user: &User) -> Result<UserSettings, Servic
         .app
         .get_settings(user.id)
         .await?
-        .unwrap_or_else(|| UserSettings::defaults_for(vec![trader_domain::SenderKind::Rpc])))
+        .unwrap_or_else(|| UserSettings::defaults_for(crate::appstore::default_route(&st.senders))))
 }
 
 pub async fn default_wallet(st: &AppState, user: &User) -> Result<Option<Wallet>, ServiceError> {

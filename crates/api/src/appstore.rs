@@ -55,6 +55,23 @@ pub struct UserSettings {
     pub senders: Vec<SenderKind>,
 }
 
+/// Default route for new users: every configured sender except Jito (Jito
+/// alone was the slowest path at small tips, BENCHMARKS 2o). The same signed
+/// bytes go to all of them; with Helius in the set the engine adds its
+/// 5,000-lamport minimum tip (shown in the quote, capped by the wallet policy).
+pub fn default_route(available: &[SenderKind]) -> Vec<SenderKind> {
+    let v: Vec<SenderKind> = available
+        .iter()
+        .copied()
+        .filter(|k| !matches!(k, SenderKind::Jito | SenderKind::Mock))
+        .collect();
+    if v.is_empty() {
+        vec![SenderKind::Rpc]
+    } else {
+        v
+    }
+}
+
 impl UserSettings {
     pub fn defaults_for(mode_senders: Vec<SenderKind>) -> Self {
         Self {
@@ -575,5 +592,25 @@ impl AppStore for MemAppStore {
             .audit
             .push((user_id, kind.to_string(), detail, Utc::now()));
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod route_tests {
+    use super::*;
+
+    #[test]
+    fn default_route_excludes_jito_and_mock() {
+        use SenderKind::*;
+        assert_eq!(
+            default_route(&[Rpc, Jito, Helius, Tpu]),
+            vec![Rpc, Helius, Tpu]
+        );
+        assert_eq!(default_route(&[Rpc, Mock]), vec![Rpc]);
+        assert_eq!(default_route(&[Jito]), vec![Rpc]);
+        assert_eq!(default_route(&[]), vec![Rpc]);
+        let s = UserSettings::defaults_for(default_route(&[Rpc, Tpu, Helius]));
+        assert!(s.validate().is_ok());
+        assert_eq!(s.senders, vec![Rpc, Tpu, Helius]);
     }
 }
