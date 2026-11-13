@@ -11,6 +11,9 @@ exec /home/sol/bin/agave-validator \
   --ledger /mnt/solana/ledger \
   --accounts /mnt/solana/accounts \
   --snapshots /mnt/solana/snapshots \
+  --full-snapshot-archive-path /mnt/persist/snap \
+  --incremental-snapshot-archive-path /mnt/persist/snap \
+  --maximum-local-snapshot-age 15000 \
   --log /home/sol/agave.log \
   --entrypoint entrypoint.mainnet-beta.solana.com:8001 \
   --entrypoint entrypoint2.mainnet-beta.solana.com:8001 \
