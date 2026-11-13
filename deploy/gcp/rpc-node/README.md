@@ -33,8 +33,16 @@ Stop (wipes the NVMe; the persistent disk stays attached):
 gcloud compute instances stop trader-rpc-node --project vps-sandbox --zone europe-west3-a --discard-local-ssd=true
 ```
 
-Not yet verified end to end: a stop → start using the backup (the owner asked to keep the
-node running). Expected: well under the ~35–40 min of a cold start.
+**Measured 2026-11-13 (owner-approved stop → start):** start command 15:19:30 UTC →
+`getHealth` ok after **~25 min**, no manual steps (cold start with the 116 GB download:
+~36 min). Breakdown: VM boot + RAID rebuild ~1.5 min, **no snapshot download** (local
+archive reused), unpack ~7 min, account index 3 min, catch-up of 6,433 slots ~13 min.
+All four units (node-prep, sol, shred-observer, snapsync.timer) came up by themselves.
+
+Tip: catch-up is the longest part and grows with snapshot age. Before a planned stop run
+`sudo systemctl start snapsync` so the newest incremental is on the persistent disk.
+The external IP is ephemeral and changes on every start (internal 10.30.0.3 stays);
+reserve a static IP before whitelisting it with a paid shred-feed provider.
 
 ## Files
 
