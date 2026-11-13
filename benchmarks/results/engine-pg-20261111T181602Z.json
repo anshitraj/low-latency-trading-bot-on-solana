@@ -3,7 +3,7 @@
     "arch": "x86_64",
     "cpus": 20,
     "generated_at": "2026-11-11T18:16:02.232354600+00:00",
-    "host": "ANSHITRAJ-PC",
+    "host": "desktop",
     "os": "windows",
     "profile": "release"
   },

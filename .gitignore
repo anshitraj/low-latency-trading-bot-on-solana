@@ -17,3 +17,4 @@
 /localnet/accounts/*.json
 !/localnet/accounts/.gitkeep
 /benchmarks/results/raw-*.jsonl
+/localnet/validator.log

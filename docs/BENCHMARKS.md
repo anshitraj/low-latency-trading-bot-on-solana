@@ -5,7 +5,7 @@ saved as JSON under `benchmarks/results/`. Nothing is estimated. Numbers are
 **not** comparable to any third-party product; we have no comparable dataset
 for GMGN, BullX or others and make no claim about them.
 
-Host: `ANSHITRAJ-PC`, Windows 11 Pro, 20 logical CPUs, release build
+Host: `desktop`, Windows 11 Pro, 20 logical CPUs, release build
 (`opt-level=3, lto=thin, codegen-units=1`). Local validator ran in WSL2
 Ubuntu on the same host. **No GCP VM was used** (no deployment authorized yet),
 so region/RTT numbers are `NOT MEASURED`.
