@@ -59,6 +59,21 @@ impl RpcError {
     pub fn is_retryable(&self) -> bool {
         self.is_rate_limited() || self.is_ambiguous()
     }
+    /// JSON-RPC errors that describe what THIS endpoint can serve, not the
+    /// request: another provider may answer it. Seen on mainnet 2026-11-13: our
+    /// own node (no `--enable-rpc-transaction-history`) answered getTransaction
+    /// with -32011 and the observer kept retrying it.
+    /// -32011 transaction history not available, -32601 method not found,
+    /// -32004 block not available for slot, -32009 missing in long-term storage.
+    pub fn is_endpoint_capability(&self) -> bool {
+        matches!(
+            self,
+            RpcError::Rpc {
+                code: -32011 | -32601 | -32004 | -32009,
+                ..
+            }
+        )
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -347,6 +362,8 @@ impl RpcClient {
             tried[idx] = true;
             match self.call_on(idx, method, &params).await {
                 Ok(v) => return Ok(v),
+                // This endpoint cannot serve the method: ask the next one.
+                Err(e) if e.is_endpoint_capability() => last_err = Some(e),
                 Err(e) if matches!(e, RpcError::Rpc { .. }) && !e.is_rate_limited() => {
                     return Err(e)
                 }
@@ -937,6 +954,46 @@ mod tests {
         assert_eq!(st[1].ok, 4, "{st:?}");
         // While cooling down, the bad endpoint is skipped (fewer 429s than calls).
         assert!(st[0].rate_limited < 4, "{st:?}");
+    }
+
+    #[tokio::test]
+    async fn pool_fails_over_when_endpoint_lacks_the_capability() {
+        let no_history = serve(Router::new().route(
+            "/",
+            post(|| async {
+                Json(json!({"jsonrpc":"2.0","id":1,"error":{"code":-32011,"message":"Transaction history is not available from this node"}}))
+            }),
+        ))
+        .await;
+        let good = serve(Router::new().route(
+            "/",
+            post(|| async { Json(json!({"jsonrpc":"2.0","id":1,"result":7})) }),
+        ))
+        .await;
+        let specs = crate::pool::parse_endpoint_lines(&format!("{no_history}\n{good}\n"));
+        let pool = RpcClient::pool(&specs, Duration::from_secs(2)).unwrap();
+        for _ in 0..4 {
+            assert_eq!(pool.get_slot(Commitment::Processed).await.unwrap(), 7);
+        }
+        // A deterministic per-request error is still returned as-is.
+        let bad_req = serve(Router::new().route(
+            "/",
+            post(|| async {
+                Json(json!({"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"invalid params"}}))
+            }),
+        ))
+        .await;
+        let specs = crate::pool::parse_endpoint_lines(&format!("{bad_req}\n{good}\n"));
+        let pool = RpcClient::pool(&specs, Duration::from_secs(2)).unwrap();
+        let mut saw_err = false;
+        for _ in 0..4 {
+            if let Err(RpcError::Rpc { code: -32602, .. }) =
+                pool.get_slot(Commitment::Processed).await
+            {
+                saw_err = true;
+            }
+        }
+        assert!(saw_err, "invalid params must not be masked by failover");
     }
 
     #[tokio::test]

@@ -366,6 +366,75 @@ What this can and cannot say:
   in 2026; not verified).
 - Our sample is 10 trades; theirs are a ~20-minute window each. Rerun before relying on it.
 
+### 2n. Exact-signature shred observer on our node (2026-11-13)
+`tools/shred-observer`: read-only AF_PACKET copy of the node's incoming shreds; shred
+size + shred-version checks; Merkle erasure recovery with Agave's own `merkle::recover`
+(one-function local build patch); `Shredder::deshred` + Alpenglow `BlockComponent`
+decode; every new signature sent to trader-vm over the private network. Steady state:
+~1,500 transactions/s decoded, 0 deshred/decode/recovery errors.
+
+**Read-only, 24,451 Pump.fun transactions** (`logs_race.py`, 120 s, Helius `logsSubscribe`
+processed vs shred feed): shred feed first on **70%**; head to head **39 ms earlier**
+at the median (p10 128 ms earlier, p90 63 ms later); missed 0.
+
+**Owner-run canary, route fixed `tpu,jito`, 10 round trips = 20 sends**
+(`mainnet-canary-send-20261113T123106Z.json`; 20/20 FINALIZED, balances verified, shred
+slot = landing slot on all 20):
+
+| feed (ms after signing) | median | min | misses |
+|---|---:|---:|---:|
+| **shred observer** (in received shreds) | **136.7** | **54.2** | 0 / 20 |
+| node `receivedSignature` (Agave assembled the batch) | 142.0 | 61.3 | 0 / 20 |
+| Helius processed | 174.8 | 109.5 | 0 / 20 |
+| node processed (stock, at slot freeze) | 312.5 | 171.7 | 0 / 20 |
+
+- Shred observer earlier than Helius on **17 / 20**; median gap **61.7 ms**.
+- `receivedSignature` trails the observer by a median 5 ms (same event, after blockstore).
+- **Seen within 40 ms of signing: 0 / 20** (≤ 60 ms: 1, ≤ 100 ms: 3). Buys only (10):
+  shred median 148.8 ms, 0 within 40 ms.
+- By landing-slot leader: near (<20 ms RTT, n 11) shred median 109.5 ms (min 54);
+  mid (n 3) 133.3; far (≥60 ms, n 6) 246.1.
+- The Reddit-reported 18–25 ms (send → shred visibility) is **not** reproduced. What is
+  left is upstream of our node: the leader admitting and packing the transaction
+  (unstaked TPU + Jito path; our transaction's median block position 55%) and Turbine
+  delivery to an unstaked node. Next measurements: tpu-only vs jito-only with the
+  observer fixed; a staked (SWQoS) route; an earlier shred source.
+
+### 2m. Own RPC node vs Helius (2026-11-13, test session ~55 min, ~US$4–5 of credits)
+Non-voting Agave **4.4.1** RPC node (built from source at the tag; Anza no longer ships the
+validator binary), `n2-highmem-64` (64 vCPU, 512 GB) + 8 local NVMe RAID0 (3 TB),
+europe-west3-a, same VPC as trader-vm; RPC reachable from trader-vm only. Snapshot from the
+4 standard known validators at ~100 MB/s (~116 GB, ~18 min), index build ~10 min, caught up
+in ~3 min. Stopped afterwards (local SSD discarded; boot disk with binary kept).
+
+Read-only race from trader-vm (`rpc-probe-ownnode-20261113.json`, 550 slots):
+
+| | Helius | own node | public |
+|---|---:|---:|---:|
+| getSlot p50 | 17.0 ms | **0.87 ms** | 30.4 ms |
+| first to announce a slot | **45%** | 35% | 19% |
+| slot lag behind first, p50 / p95 | **6 / 124 ms** | 22 / 153 ms | 215 / 5,636 ms |
+
+Canary with the node as an extra observer (owner-run, 6 round trips,
+`mainnet-canary-send-20261113T112816Z.json`; 12/12 FINALIZED, verified):
+
+| per trade | Helius | own node |
+|---|---:|---:|
+| signature processed notification, p50 after signing | **185 ms** | 331 ms |
+| own node earlier | | **0 / 12** (later by 48–252 ms, p50 129) |
+| first shred of the landing slot | same | **same** (median difference 0 ms, −10…+17) |
+
+Finding: the node receives the block's shreds **as early as Helius**, but stock Agave's
+`signatureSubscribe` fires when the bank is frozen (on every trade the node's notification
+time equals its own `frozen` time), while Helius reports during replay. So an own node only
+helps if we read the transaction out of the shreds (or at execution via a Geyser plugin),
+not through standard RPC notifications.
+
+Bug found: the pool sent `getTransaction` to the node (no transaction history, `-32011`)
+and the observer retried it. Fixed: per-endpoint capability errors (-32011, -32601, -32004,
+-32009) now fail over to the next provider (test
+`pool_fails_over_when_endpoint_lacks_the_capability`).
+
 ### 2l. MAINNET run 3 — three routes A/B, new fees (owner-run, 2026-11-13)
 `mainnet-canary --routes "tpu,jito;tpu,helius;tpu,jito@frankfurt+amsterdam+ny+tokyo" --iterations 18 --send`
 on the VM; priority 100,000 lamports/tx at a 100k-CU limit; report

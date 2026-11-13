@@ -1,0 +1,14 @@
+# Built INSIDE an anza-xyz/agave checkout at the node's exact tag (v4.4.1), so it
+# uses Agave's own shred/entry code and Cargo.lock. See README.md. Not a member
+# of this repository's workspace.
+[package]
+name = "trader-shred-observer"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+libc = { workspace = true }
+solana-entry = { workspace = true }
+solana-ledger = { workspace = true }
+wincode = { workspace = true }

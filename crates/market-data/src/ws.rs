@@ -56,6 +56,11 @@ struct Inner {
     wanted_sigs: RwLock<HashSet<String>>,
     /// signature -> (slot, time the notification arrived)
     seen_sigs: Mutex<HashMap<String, (u64, Instant)>>,
+    /// Ask for `receivedSignature` too (Agave: fired when the node has
+    /// assembled the entry batch containing the transaction from shreds).
+    want_received: AtomicBool,
+    /// signature -> (slot, time the receivedSignature notification arrived)
+    received_sigs: Mutex<HashMap<String, (u64, Instant)>>,
     sig_notify: RwLock<Option<Arc<Notify>>>,
     state: RwLock<State>,
     cmd: mpsc::UnboundedSender<Cmd>,
@@ -119,6 +124,8 @@ impl AccountStream {
             wanted: Default::default(),
             wanted_sigs: Default::default(),
             seen_sigs: Default::default(),
+            want_received: AtomicBool::new(false),
+            received_sigs: Default::default(),
             sig_notify: Default::default(),
             state: Default::default(),
             cmd: tx,
@@ -166,6 +173,18 @@ impl AccountStream {
     /// (slot, arrival time) of the processed notification, if one arrived.
     pub fn seen_signature(&self, sig: &str) -> Option<(u64, Instant)> {
         self.inner.seen_sigs.lock().get(sig).copied()
+    }
+
+    /// Also request `receivedSignature` notifications on later signature
+    /// subscriptions (`enableReceivedNotification`). Only for providers known
+    /// to support it (Agave with `--full-rpc-api`).
+    pub fn enable_received_notifications(&self) {
+        self.inner.want_received.store(true, Ordering::Release);
+    }
+
+    /// (slot, arrival time) of the receivedSignature notification, if one arrived.
+    pub fn received_signature(&self, sig: &str) -> Option<(u64, Instant)> {
+        self.inner.received_sigs.lock().get(sig).copied()
     }
 
     pub fn is_acked(&self, key: &Pubkey) -> bool {
@@ -335,6 +354,11 @@ pub(crate) enum WsEvent {
         sub_id: u64,
         slot: u64,
     },
+    /// `receivedSignature`: the subscription stays open for `processed`.
+    SignatureReceived {
+        sub_id: u64,
+        slot: u64,
+    },
     SlotUpdate {
         slot: u64,
         kind: String,
@@ -404,9 +428,13 @@ pub(crate) fn parse_message(text: &str) -> WsEvent {
                 p["subscription"].as_u64(),
                 p["result"]["context"]["slot"].as_u64(),
             ) {
-                // `receivedSignature` notifications are not requested (no enableReceivedNotification).
                 (Some(sub_id), Some(slot)) if p["result"]["value"].is_object() => {
                     WsEvent::Signature { sub_id, slot }
+                }
+                (Some(sub_id), Some(slot))
+                    if p["result"]["value"].as_str() == Some("receivedSignature") =>
+                {
+                    WsEvent::SignatureReceived { sub_id, slot }
                 }
                 _ => WsEvent::Other,
             }
@@ -461,8 +489,13 @@ async fn session(
     let mut sig_subs: HashMap<u64, String> = HashMap::new();
     let mut slot_sub: Option<u64> = None;
     let sig_msg = |id: u64, sig: &str| {
+        let cfg = if inner.want_received.load(Ordering::Acquire) {
+            json!({"commitment":"processed","enableReceivedNotification":true})
+        } else {
+            json!({"commitment":"processed"})
+        };
         json!({"jsonrpc":"2.0","id":id,"method":"signatureSubscribe",
-               "params":[sig, {"commitment":"processed"}]})
+               "params":[sig, cfg]})
         .to_string()
     };
     let sub_msg = |id: u64, k: &Pubkey| {
@@ -579,6 +612,15 @@ async fn session(
                             if let Some(n) = inner.sig_notify.read().as_ref() {
                                 n.notify_one();
                             }
+                        }
+                    }
+                    WsEvent::SignatureReceived { sub_id, slot } => {
+                        if let Some(sig) = sig_subs.get(&sub_id) {
+                            let mut r = inner.received_sigs.lock();
+                            if r.len() > 10_000 {
+                                r.clear();
+                            }
+                            r.entry(sig.clone()).or_insert((slot, Instant::now()));
                         }
                     }
                     WsEvent::Other => {}
@@ -704,6 +746,15 @@ mod tests {
                 r#"{"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found"},"id":2}"#
             ),
             WsEvent::ReqError { req_id: 2 }
+        );
+        assert_eq!(
+            parse_message(
+                r#"{"jsonrpc":"2.0","method":"signatureNotification","params":{"result":{"context":{"slot":78},"value":"receivedSignature"},"subscription":9}}"#
+            ),
+            WsEvent::SignatureReceived {
+                sub_id: 9,
+                slot: 78
+            }
         );
         assert_eq!(
             parse_message(

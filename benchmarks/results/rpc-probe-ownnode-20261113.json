@@ -1,0 +1,122 @@
+{
+  "generated_at": "2026-11-13T11:20:48.105646501+00:00",
+  "host": "",
+  "http": [
+    {
+      "errors": {},
+      "first_call_ms": 27.086074,
+      "get_slot": {
+        "max_ms": 27.192247,
+        "min_ms": 13.469076,
+        "n": 40,
+        "p50_ms": 16.971857,
+        "p95_ms": 22.038411
+      },
+      "processed_slot": 468906999,
+      "provider": "p0:mainnet.helius-rpc.com"
+    },
+    {
+      "errors": {},
+      "first_call_ms": 32.682779000000004,
+      "get_slot": {
+        "max_ms": 24.481814,
+        "min_ms": 5.505185999999999,
+        "n": 40,
+        "p50_ms": 6.926723,
+        "p95_ms": 21.602615
+      },
+      "processed_slot": 468907024,
+      "provider": "p1:solana-mainnet.g.alchemy.com"
+    },
+    {
+      "errors": {
+        "http status 429: {\"jsonrpc\":\"2.0\",\"error\":{\"code\": 429,\"message\":\"Connection rate limits exceeded\"},": 1
+      },
+      "first_call_ms": 444.245207,
+      "get_slot": {
+        "max_ms": 102.544234,
+        "min_ms": 8.254614,
+        "n": 39,
+        "p50_ms": 30.366353,
+        "p95_ms": 91.849575
+      },
+      "processed_slot": 468907054,
+      "provider": "p2:api.mainnet-beta.solana.com"
+    },
+    {
+      "errors": {},
+      "first_call_ms": 1.9899010000000001,
+      "get_slot": {
+        "max_ms": 0.956931,
+        "min_ms": 0.567379,
+        "n": 40,
+        "p50_ms": 0.872082,
+        "p95_ms": 0.939885
+      },
+      "processed_slot": 468907075,
+      "provider": "p3:10.30.0.3"
+    }
+  ],
+  "kind": "rpc_probe",
+  "note": "read-only: no transaction sent. ws lag = slotNotification arrival behind the first provider to announce the same slot.",
+  "slots_compared": 550,
+  "slots_updates_supported": {
+    "p0:mainnet.helius-rpc.com": true,
+    "p1:solana-mainnet.g.alchemy.com": false,
+    "p2:api.mainnet-beta.solana.com": true,
+    "p3:10.30.0.3": true
+  },
+  "ws_slot_race": [
+    {
+      "connected": true,
+      "first_to_announce": 249,
+      "lag_behind_first_ms": {
+        "max_ms": 184.21219,
+        "min_ms": 0.0,
+        "n": 550,
+        "p50_ms": 6.254134,
+        "p95_ms": 123.504397
+      },
+      "missed_slots": 0,
+      "provider": "p0:mainnet.helius-rpc.com",
+      "reconnects": 0
+    },
+    {
+      "connected": false,
+      "first_to_announce": 0,
+      "lag_behind_first_ms": null,
+      "missed_slots": 550,
+      "provider": "p1:solana-mainnet.g.alchemy.com",
+      "reconnects": 0
+    },
+    {
+      "connected": true,
+      "first_to_announce": 107,
+      "lag_behind_first_ms": {
+        "max_ms": 6018.222484,
+        "min_ms": 0.0,
+        "n": 550,
+        "p50_ms": 214.98854,
+        "p95_ms": 5636.358712
+      },
+      "missed_slots": 0,
+      "provider": "p2:api.mainnet-beta.solana.com",
+      "reconnects": 0
+    },
+    {
+      "connected": true,
+      "first_to_announce": 194,
+      "lag_behind_first_ms": {
+        "max_ms": 229.462551,
+        "min_ms": 0.0,
+        "n": 550,
+        "p50_ms": 21.595956,
+        "p95_ms": 152.599292
+      },
+      "missed_slots": 0,
+      "provider": "p3:10.30.0.3",
+      "reconnects": 0
+    }
+  ],
+  "ws_window_s": 120
+}

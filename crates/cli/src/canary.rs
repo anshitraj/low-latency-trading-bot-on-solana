@@ -520,6 +520,8 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
             "jito_hosts": r.jito_urls.iter().map(|u| trader_market_data::rpc::url_host(u)).collect::<Vec<_>>(),
         })).collect::<Vec<_>>(),
         "route_assignment": "round trip i uses route i % routes",
+        "shred_feed": a.get("shred-feed"),
+        "received_notifications_from": a.get("received-from"),
         "senders": sender_names,
         "tip_lamports_per_tx": tip,
         "est_fee_per_tx_lamports": fee_per_tx,
@@ -575,9 +577,33 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
             st.enable_slot_updates();
         }
     }
+    // `--received-from 10.30.0.3`: also ask these providers (Agave, full RPC
+    // API) for `receivedSignature` = entry batch assembled from shreds.
+    let received_hosts: Vec<String> = a
+        .get("received-from")
+        .map(|v| {
+            v.split(',')
+                .map(|x| x.trim().to_string())
+                .filter(|x| !x.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+    for st in &streams {
+        if received_hosts.iter().any(|h| *h == st.host()) {
+            st.enable_received_notifications();
+        }
+    }
     // The first provider's stream feeds coin state and balances; all of them
     // report signatures (independent landing observers) and slots.
     let stream = streams.first().cloned();
+    // `--shred-feed 0.0.0.0:9900`: signatures reported by tools/shred-observer on
+    // our own node the moment their entry batch is in the received shreds.
+    let shred_feed = match a.get("shred-feed") {
+        Some(b) => Some(
+            crate::shred_feed::ShredFeed::spawn(b).map_err(|e| anyhow!("--shred-feed {b}: {e}"))?,
+        ),
+        None => None,
+    };
     let mut adapter = PumpAdapter::new(rpc.clone());
     if let Some(s) = &stream {
         adapter = adapter.with_stream(s.clone());
@@ -959,11 +985,19 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
                 })
             };
             let landed = fill.as_ref().map(|f| f.slot);
+            let shred_seen = match (&shred_feed, sig.as_deref()) {
+                (Some(f), Some(sg)) => f.seen(sg),
+                _ => None,
+            };
             let mut providers = vec![];
             for (i, st) in streams.iter().enumerate() {
                 let seen = sig
                     .as_deref()
                     .and_then(|sg| st.seen_signature(sg))
+                    .and_then(|(_, t)| ms_after(t));
+                let received = sig
+                    .as_deref()
+                    .and_then(|sg| st.received_signature(sg))
                     .and_then(|(_, t)| ms_after(t));
                 let slot_first = landed
                     .and_then(|ls| st.slot_first_seen(ls))
@@ -977,6 +1011,7 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
                 providers.push(json!({
                     "provider": format!("p{i}:{}", st.host()),
                     "signature_processed_ms_after_signed": seen,
+                    "signature_received_ms_after_signed": received,
                     "landed_slot_first_seen_ms_after_signed": slot_first,
                     "landed_slot_events_ms_after_signed": events,
                     "slot_updates_supported": st.slot_updates_supported(),
@@ -1012,6 +1047,8 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
                 "tip_auto": tip_info,
                 "senders": senders,
                 "providers": providers,
+                "shred_seen_ms_after_signed": shred_seen.and_then(|(t, _)| ms_after(t)),
+                "shred_slot": shred_seen.map(|(_, s)| s),
                 "landed_slot": fill.as_ref().map(|f| f.slot),
                 "slots_to_land": fill.as_ref().map(|f| f.slot.saturating_sub(send_slot)),
                 "fee_lamports": fill.as_ref().map(|f| f.fee_lamports),
@@ -1060,6 +1097,7 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         "kind": "mainnet_pump_canary",
         "summary": summary,
         "rpc_providers": rpc.stats(),
+        "shred_feed_records": shred_feed.as_ref().map(|f| f.records()),
         "network": net.as_str(),
         "mode": if send { "send" } else { "dry_run" },
         "generated_at": chrono::Utc::now().to_rfc3339(),
@@ -1433,6 +1471,7 @@ fn summarize(rows: &[serde_json::Value]) -> serde_json::Value {
         "order_to_signed_ms": stat(rows, ms("intent_to_signed_us")),
         "signed_to_first_sender_ack_ms": stat(rows, ms("signed_to_sender_ack_us")),
         "signed_to_first_landed_notification_ms": stat(rows, ms("signed_to_processed_us")),
+        "signed_to_shred_seen_ms": stat(rows, |r| r["shred_seen_ms_after_signed"].as_f64()),
         "signed_to_bot_final_ms": stat(rows, ms("signed_to_finalized_us")),
         "slots_to_land": stat(rows, |r| r["slots_to_land"].as_f64()),
         "same_slot_share": same_slot_share(rows),
@@ -1477,6 +1516,7 @@ fn group_stats(rows: &[serde_json::Value], key: &str) -> serde_json::Value {
                 "not_finalized": sub.iter().filter(|r| r["state"].as_str() != Some("FINALIZED")).count(),
                 "signed_to_first_sender_ack_ms": stat(&sub, |r| r["signed_to_sender_ack_us"].as_f64().map(|u| u / 1e3)),
                 "signed_to_first_landed_notification_ms": stat(&sub, |r| r["signed_to_processed_us"].as_f64().map(|u| u / 1e3)),
+                "signed_to_shred_seen_ms": stat(&sub, |r| r["shred_seen_ms_after_signed"].as_f64()),
                 "slots_to_land": stat(&sub, |r| r["slots_to_land"].as_f64()),
                 "same_slot_share": same_slot_share(&sub),
                 "block_position_pct": stat(&sub, |r| r["block_position_pct"].as_f64()),
