@@ -366,6 +366,57 @@ What this can and cannot say:
   in 2026; not verified).
 - Our sample is 10 trades; theirs are a ~20-minute window each. Rerun before relying on it.
 
+### 2l. MAINNET run 3 — three routes A/B, new fees (owner-run, 2026-11-13)
+`mainnet-canary --routes "tpu,jito;tpu,helius;tpu,jito@frankfurt+amsterdam+ny+tokyo" --iterations 18 --send`
+on the VM; priority 100,000 lamports/tx at a 100k-CU limit; report
+`mainnet-canary-send-20261113T092346Z.json`. **36/36 FINALIZED**, balances verified per
+trade, and independently afterwards (Alchemy `getSignatureStatuses`): 36/36 finalized,
+`err = null`, all slots match. Spent 3,917,384 lamports (~US$0.33; 36 × 105,000 fees, tips
+24 × 1,000 + 12 × 5,000, Pump fees); position closed.
+
+| stage (n = 36) | p50 | p95 | min / max |
+|---|---:|---:|---:|
+| order → signed | 0.203 ms | 0.239 ms | 0.185 / 0.241 |
+| signed → first sender accepted | **0.084 ms** | 1.32 ms | 0.04 / 6.97 |
+| **signed → landed (first processed notification)** | **180.6 ms** | 869 ms | **68.2** / 1,087 |
+| signed → bot saw it final | 523 ms | 1,434 ms | 395 / 1,594 |
+| slots after the slot seen at submit | 1 | 4 | 0 / 4 |
+
+By route (12 trades each) — **no significant difference at this sample size**:
+
+| route | landed p50 | p95 | min |
+|---|---:|---:|---:|
+| tpu + Jito Frankfurt | 207 ms | 302 ms | 117 |
+| tpu + Helius Sender Frankfurt | 163 ms | 1,087 ms | 120 |
+| tpu + Jito FRA/AMS/NY/TYO | 181 ms | 388 ms | 68 |
+
+Helius's two slow trades (869, 1,087 ms; 4 slots) both had a far leader (176 ms RTT), and the
+Tokyo engine once refused (rate limit after the first call). By leader distance — **this is the
+factor that matters**:
+
+| landing-slot leader (QUIC RTT from VM) | n | landed p50 | p95 | max |
+|---|---:|---:|---:|---:|
+| near < 20 ms | 20 | 163 ms | 277 ms | 328 |
+| mid 20–60 ms | 7 | 155 ms | 388 ms | 388 |
+| far ≥ 60 ms | 9 | **302 ms** | **1,087 ms** | 1,087 |
+
+Near + mid leaders (27 trades): p50 163 ms, p90 277 ms.
+
+Where the time goes (from Helius `slotsUpdatesSubscribe` events of each landing slot):
+- In ~60% of trades Helius had already received the landing slot's first shred **before we
+  signed**: the trade went into a block that was already being produced.
+- The signature notification arrives **before** that slot is frozen (p50 115 ms earlier;
+  7–255 ms), i.e. Helius reports as it replays the block, not at slot end.
+- So the ~180 ms is: time until the leader packs our transaction + shred propagation to the
+  RPC + the RPC's replay of the block up to our position (our median block position: 50%).
+  A per-trade split is not reliable from this data (transactions are not evenly spaced in
+  time within a block), so we cannot yet say how many ms is inclusion vs observation.
+- Second observer: the public endpoint delivered only 5/36 signature notifications, all later
+  than Helius; Alchemy has none. Helius was first on every trade.
+
+Compared with run 2 (old 3,000-lamport fee, n = 5, 184–298 ms): median about the same, minimum
+68 ms, 4 trades ≤ 120 ms. The network was not congested, so the higher fee is not visible here.
+
 ### 2k. Phase 2: multi-route A/B tooling, leader distance (2026-11-13)
 **Tooling.** `mainnet-canary --routes "tpu,jito;tpu,helius;tpu,jito@frankfurt+amsterdam+ny+tokyo"`
 runs one engine per route (shared store, wallet lock, blockhash, observer); round trip

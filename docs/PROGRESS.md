@@ -176,3 +176,14 @@ stalled the canary on the last sell. Fixed with a regression test; observer RPC 
 - Verified: workspace tests pass; VM mainnet dry run simulates cleanly at 100,000 lamports
   priority (53,357 CU), order→signed 0.222 ms (`mainnet-canary-dryrun-20261112T140241Z.json`
   on the VM). Not yet measured: real sends with the new fees (owner action).
+
+## 2026-11-13 — session 1, part 9 (phase 2 routes, mainnet run 3)
+- Phase 2 built (commit 25948fb): `--routes` A/B per round trip, landing annotation (leader,
+  RTT region, block position), and a real fix — the engine tracked a trade only after every
+  sender returned (one slow route delayed detection by 1.5 s on localnet); it now tracks at
+  the first possible forward.
+- Phases 3–5 not built: leader-distance probe shows regional relays cannot beat the direct
+  path while orders are signed in Frankfurt (BENCHMARKS 2k).
+- Mainnet run 3 (owner-run, 36 trades, 3 routes): 36/36 finalized, verified on-chain; signed →
+  landed p50 181 ms (min 68), p95 869 ms; routes indistinguishable at n=12; far leaders
+  (≥60 ms) are the slow cases (p50 302 ms). Spent ~US$0.33 (BENCHMARKS 2l).
