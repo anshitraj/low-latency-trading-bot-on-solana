@@ -47,6 +47,20 @@ https://docs.cloud.google.com/billing/docs/how-to/budgets-spend-caps).
 Daily check (5 min): Billing → Reports (group by SKU, last 7 days) · Credits
 remaining · Compute → VM instances list (only `trader-vm`) · Snapshots count.
 
+## Own RPC node (test) — what costs money now (2026-11-13)
+| resource | state | approx. cost (GCP credits) |
+|---|---|---|
+| `trader-rpc-node` n2-highmem-64 + 3 TB local NVMe | **stopped** | US$0 while stopped (~US$4.5/hour when running) |
+| boot disk 100 GB pd-balanced | kept | ~US$12/month |
+| `trader-rpc-node-snapshots` 300 GB pd-balanced (snapshot backup) | kept | ~US$36/month |
+| static IP `trader-rpc-node-ip` (34.185.247.96) | reserved, attached to the stopped VM | ~US$7/month while the VM is stopped |
+| boot-disk snapshot `trader-rpc-node-boot-20261113` | kept | ~US$0.12/month |
+| `trader-vm` c4-standard-4 (bot/benchmark VM) | running | ~US$0.23/hour (~US$170/month) |
+Restart: `gcloud compute instances start trader-rpc-node --project vps-sandbox --zone europe-west3-a`
+(~25 min to healthy, no manual steps). To stop paying for the IP, release it
+(`gcloud compute addresses delete trader-rpc-node-ip --region europe-west3`); the node then
+gets a new ephemeral IP on its next start.
+
 ## Shutdown
 ```
 GCP_PROJECT=my-project deploy/gcp/scripts/stop-all.sh            # stop compute billing

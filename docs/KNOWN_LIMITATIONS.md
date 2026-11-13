@@ -2,6 +2,13 @@
 
 Status labels: **implemented/tested**, **implemented/untested**, **gated**, **not implemented**.
 
+> **Update 2026-11-13:** 162 mainnet Pump trades via `trader-cli mainnet-canary` (same engine
+> as the bot), all finalized and verified on-chain (BENCHMARKS 2g–2r, [SPEED.md](SPEED.md)).
+> The Telegram bot/API itself is still not deployed and has not traded on mainnet.
+> The shred observer is **measurement only**: it does not verify shred signatures against the
+> slot leader, so it must not drive fills or balances until that is added. Own RPC node VM is
+> stopped (disks kept); the pro shred feed was a 2-hour trial only.
+
 ## Feature matrix
 
 | feature | status | notes |
@@ -17,7 +24,7 @@ Status labels: **implemented/tested**, **implemented/untested**, **gated**, **no
 | Cluster parameters | rent rate read at startup; slot time measured in the TPU tracker | mainnet changed (Alpenglow ~150 ms finality target, ~210 ms slots, 5,080 lamports/byte rent); localnet still uses the older values |
 | Async pre-sign commits (`synchronous_commit=off` before SIGNED) | implemented/tested | commit modes asserted on Postgres; crash-loss window argued in DATABASE.md, crash itself not simulated |
 | Restart reconciliation | implemented/tested (mock) | recovered orders are observed, never rebroadcast |
-| Pump bonding-curve buy/sell (v3) | implemented/tested on localnet | real `pump.so`; **no devnet/mainnet fill yet** |
+| Pump bonding-curve buy/sell (v3) | implemented/tested on localnet **and mainnet** | real `pump.so`; 162 mainnet fills via the canary (2026-11-12/13), every one verified on-chain |
 | PumpSwap (post-migration AMM) | not implemented | migrated coins are refused (`Unsupported`) |
 | Pump non-SOL quote mints, mayhem coins, legacy cashback coins | not supported | refused (fail closed) |
 | Raydium CPMM adapter | not implemented | |
