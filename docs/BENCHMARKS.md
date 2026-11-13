@@ -366,6 +366,37 @@ What this can and cannot say:
   in 2026; not verified).
 - Our sample is 10 trades; theirs are a ~20-minute window each. Rerun before relying on it.
 
+### 2r. GetBlock shred stream (2-hour free trial) vs our own node (2026-11-13)
+GetBlock Solana Shred Streaming, Frankfurt, raw UDP to our node (static IP, UDP 20000, firewall
+limited to GetBlock's 4 source IPs); decoded by a second `trader-shred-observer`
+(`run-observer-feed.sh`, → trader-vm:9902). ~6,000 packets/s from 104.204.140.83.
+
+**Read-only race, 10 min, 393,165 Pump.fun transactions** (`race-getblock-vs-own-20261113.json`):
+
+| feed | first | lag behind first p50 / p90 / p99 | missed |
+|---|---:|---:|---:|
+| **GetBlock** | **99.98%** | 0 / 0 / 0 ms | 31 |
+| own node (Turbine, unstaked) | 0.02% | 82.9 / 162.8 / 253.7 ms | 18 |
+| Helius processed | ~0% | 134.8 / 209.8 / 260.2 ms | 0 |
+
+**Owner-run canary observed through GetBlock** (`--shred-feed 0.0.0.0:9902 --shred-watch
+10.30.0.3:9903`, `--routes "tpu;tpu,helius" --priority-lamports 10000 --iterations 8`,
+`mainnet-canary-send-20261113T172645Z.json`): 16/16 FINALIZED, verified, shred slot = landing
+slot on all; spent 303,726 lamports (~US$0.03).
+
+| | send → seen in GetBlock shreds, median | min | **≤ 40 ms** | ≤ 60 ms | ≤ 100 ms |
+|---|---:|---:|---:|---:|---:|
+| **all 16** | **54.2 ms** | **13.0** | **4** | 10 | 13 |
+| tpu only (8) | 55.9 ms | 36.7 | 1 | 5 | 7 |
+| tpu + helius (8) | 49.5 ms | 13.0 | 3 | 5 | 6 |
+| near leaders (12) | 49.6 ms | 13.0 | 4 | 8 | 10 |
+| buys (8) | 48.7 ms | 13.0 | 3 | 5 | 7 |
+
+Same trades: own-node `receivedSignature` median 145.9 ms (72 ms later than GetBlock),
+Helius processed 162.3 ms. No feed missed a trade. **The remaining gap to 40 ms was the
+delivery of block data to our unstaked node, not landing.** Price after the trial:
+US$20 for a 24-hour test, US$300/month (US$250/month yearly).
+
 ### 2q. Helius Sender Max (0.001 SOL tip) vs SWQoS-only vs TPU (owner-run, 2026-11-13)
 `--routes "helius-max;helius;tpu" --priority-lamports 10000 --iterations 9`
 (`mainnet-canary-send-20261113T155443Z.json`): 18/18 FINALIZED, verified, shred slot =

@@ -1,0 +1,47 @@
+{
+ "window_s": 600.0,
+ "signatures_seen_by_2plus": 393165,
+ "per_provider": {
+  "getblock": {
+   "notifications": 1175676,
+   "first": 393073,
+   "missed": 31,
+   "lag_behind_first_ms": {
+    "p50": 0.0,
+    "p90": 0.0,
+    "p99": 0.0,
+    "n": 393134
+   }
+  },
+  "ownnode": {
+   "notifications": 1175845,
+   "first": 83,
+   "missed": 18,
+   "lag_behind_first_ms": {
+    "p50": 82.92,
+    "p90": 162.83,
+    "p99": 253.72,
+    "n": 393147
+   }
+  },
+  "helius": {
+   "notifications": 393183,
+   "first": 9,
+   "missed": 0,
+   "lag_behind_first_ms": {
+    "p50": 134.78,
+    "p90": 209.81,
+    "p99": 260.23,
+    "n": 393165
+   }
+  }
+ },
+ "head_to_head": {
+  "pair": "ownnode minus getblock (ms; negative = ownnode earlier)",
+  "n": 393116,
+  "p10": 25.5,
+  "p50": 82.92,
+  "p90": 162.83,
+  "ownnode_earlier_share": 0.0
+ }
+}
