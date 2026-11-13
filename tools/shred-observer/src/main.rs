@@ -31,6 +31,9 @@
 //!   trader-shred-observer --emit 10.30.0.2:9900 [--emit 127.0.0.1:9901]
 //!       [--ports 8000-8030] [--exclude 8001,8002,8003,8005]
 //!       [--shred-version 50093]   (cluster shred version; strongly recommended)
+//!       [--sink 20000]            (open + drain a UDP port for an external shred
+//!                                  feed, so the kernel does not answer with ICMP
+//!                                  port-unreachable; packets are still copied above)
 
 use solana_entry::block_component::BlockComponent;
 use solana_ledger::shred::{
@@ -353,6 +356,7 @@ fn main() {
     let mut exclude: Vec<u16> = vec![];
     let mut shred_version: Option<u16> = None;
     let mut watch_bind: Option<String> = None;
+    let mut sinks: Vec<u16> = vec![];
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -360,6 +364,7 @@ fn main() {
             "--ports" => ports = parse_ports(&args.next().expect("--ports")),
             "--exclude" => exclude = parse_ports(&args.next().expect("--exclude")),
             "--watch-bind" => watch_bind = Some(args.next().expect("--watch-bind addr")),
+            "--sink" => sinks.extend(parse_ports(&args.next().expect("--sink ports"))),
             "--shred-version" => {
                 shred_version = Some(args.next().expect("--shred-version").parse().expect("u16"))
             }
@@ -389,6 +394,15 @@ fn main() {
             &rcvbuf as *const _ as *const libc::c_void,
             std::mem::size_of::<libc::c_int>() as libc::socklen_t,
         );
+    }
+    for p in &sinks {
+        let sock = UdpSocket::bind(("0.0.0.0", *p)).expect("--sink bind");
+        std::thread::spawn(move || {
+            let mut b = [0u8; 2048];
+            loop {
+                let _ = sock.recv_from(&mut b);
+            }
+        });
     }
     let out = UdpSocket::bind("0.0.0.0:0").expect("udp out");
     let watch: Option<WatchList> = watch_bind.map(|b| {

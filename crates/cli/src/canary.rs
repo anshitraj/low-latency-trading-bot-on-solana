@@ -65,6 +65,11 @@ pub const DEFAULT_PRIORITY_LAMPORTS: u64 = 100_000;
 pub const MAX_PRIORITY_LAMPORTS: u64 = 250_000;
 /// Tip ceiling per transaction (0.00005 SOL).
 pub const MAX_TIP_LAMPORTS: u64 = 50_000;
+/// Tip ceiling for the Helius Sender Max route only (its minimum is 0.001 SOL,
+/// ~US$0.08 per transaction).
+pub const MAX_TIP_LAMPORTS_SENDER_MAX: u64 = trader_sender_rpc::HELIUS_MAX_MIN_TIP;
+/// Helius Sender Max, Frankfurt: Jito auction + staked paths (no swqos_only).
+pub const HELIUS_FRANKFURT_MAX: &str = "http://fra-sender.helius-rpc.com/fast";
 pub const JITO_FRANKFURT: &str = "https://frankfurt.mainnet.block-engine.jito.wtf";
 /// Helius Sender, Frankfurt, SWQoS-only tier (regional endpoints are plain HTTP).
 pub const HELIUS_FRANKFURT: &str = "http://fra-sender.helius-rpc.com/fast?swqos_only=true";
@@ -673,12 +678,30 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     } else {
         None
     };
-    let helius_sender = if send && kinds.contains(&SenderKind::Helius) {
+    let helius_sender = if send
+        && routes
+            .iter()
+            .any(|r| r.kinds.contains(&SenderKind::Helius) && !r.helius_max)
+    {
         let mut hc = RpcConfig::new(helius_url.clone());
         hc.timeout = Duration::from_secs(5);
         Some(Arc::new(RpcSender::helius_sender(
             RpcClient::new(hc)?,
             true,
+        )))
+    } else {
+        None
+    };
+    let helius_max_sender = if send && routes.iter().any(|r| r.helius_max) {
+        let mut hc = RpcConfig::new(
+            a.get("helius-max-url")
+                .cloned()
+                .unwrap_or_else(|| HELIUS_FRANKFURT_MAX.to_string()),
+        );
+        hc.timeout = Duration::from_secs(5);
+        Some(Arc::new(RpcSender::helius_sender(
+            RpcClient::new(hc)?,
+            false,
         )))
     } else {
         None
@@ -727,7 +750,11 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
                         }
                     }
                     SenderKind::Helius => router.add(ManagedSender::new(
-                        helius_sender.clone().expect("helius set up above"),
+                        if route.helius_max {
+                            helius_max_sender.clone().expect("helius-max set up above")
+                        } else {
+                            helius_sender.clone().expect("helius set up above")
+                        },
                         Duration::from_secs(5),
                         Some(trader_router::TokenBucket::new(1, Duration::from_secs(1))),
                     )),
@@ -744,7 +771,11 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
                 }
             } else if route.kinds.contains(&SenderKind::Helius) {
                 TipPolicy::Required {
-                    min_lamports: trader_sender_rpc::HELIUS_SWQOS_MIN_TIP,
+                    min_lamports: if route.helius_max {
+                        trader_sender_rpc::HELIUS_MAX_MIN_TIP
+                    } else {
+                        trader_sender_rpc::HELIUS_SWQOS_MIN_TIP
+                    },
                     accounts: helius_tip_accounts.clone(),
                 }
             } else {
@@ -1274,6 +1305,8 @@ pub struct RouteSpec {
     pub tip: u64,
     /// Jito tip chosen per order from the tip-floor API (capped by `tip`).
     pub tip_auto: bool,
+    /// The Helius sender in this route is Sender Max (not SWQoS-only).
+    pub helius_max: bool,
 }
 
 pub fn jito_region_url(region: &str) -> String {
@@ -1293,6 +1326,7 @@ pub fn parse_routes(
     for raw in text.split(';').map(str::trim).filter(|r| !r.is_empty()) {
         let mut kinds = vec![];
         let mut jito_urls = vec![];
+        let mut helius_max = false;
         for tok in raw.split(',').map(|t| t.trim().to_lowercase()) {
             let (name, regions) = match tok.split_once('@') {
                 Some((n, r)) => (n.to_string(), Some(r.to_string())),
@@ -1303,8 +1337,14 @@ pub fn parse_routes(
                 "tpu" => SenderKind::Tpu,
                 "jito" => SenderKind::Jito,
                 "helius" => SenderKind::Helius,
+                "helius-max" => {
+                    helius_max = true;
+                    SenderKind::Helius
+                }
                 "" => continue,
-                other => bail!("unknown sender {other} in route `{raw}` (use rpc,tpu,jito,helius)"),
+                other => bail!(
+                    "unknown sender {other} in route `{raw}` (use rpc,tpu,jito,helius,helius-max)"
+                ),
             };
             if regions.is_some() && k != SenderKind::Jito {
                 bail!("only jito takes @regions (route `{raw}`)");
@@ -1335,7 +1375,17 @@ pub fn parse_routes(
         if jito && helius {
             bail!("route `{raw}`: jito and helius use different tip accounts; put them in separate routes");
         }
-        let tip = if helius {
+        let tip = if helius && helius_max {
+            // Sender Max: its own minimum; a smaller --tip-lamports (meant for
+            // the other routes) does not apply here.
+            let t = tip_arg
+                .unwrap_or(0)
+                .max(trader_sender_rpc::HELIUS_MAX_MIN_TIP);
+            if t > MAX_TIP_LAMPORTS_SENDER_MAX {
+                bail!("route `{raw}`: helius-max tip must be <= {MAX_TIP_LAMPORTS_SENDER_MAX}");
+            }
+            t
+        } else if helius {
             let t = tip_arg.unwrap_or(trader_sender_rpc::HELIUS_SWQOS_MIN_TIP);
             if t < trader_sender_rpc::HELIUS_SWQOS_MIN_TIP {
                 bail!(
@@ -1360,7 +1410,7 @@ pub fn parse_routes(
         } else {
             0
         };
-        if tip > MAX_TIP_LAMPORTS {
+        if tip > MAX_TIP_LAMPORTS && !helius_max {
             bail!("--tip-lamports must be <= {MAX_TIP_LAMPORTS}");
         }
         out.push(RouteSpec {
@@ -1369,6 +1419,7 @@ pub fn parse_routes(
             jito_urls,
             tip,
             tip_auto: tip_auto && jito,
+            helius_max,
         });
     }
     if out.is_empty() {
@@ -1589,6 +1640,11 @@ mod tests {
         assert!(parse_routes("tpu@ny", &fra, None, false).is_err());
         assert!(parse_routes("foo", &fra, None, false).is_err());
         assert!(parse_routes("tpu;tpu;tpu;tpu;tpu", &fra, None, false).is_err());
+        let m = parse_routes("helius-max;tpu,helius", &fra, Some(5_000), false).unwrap();
+        assert!(m[0].helius_max && !m[1].helius_max);
+        assert_eq!(m[0].tip, trader_sender_rpc::HELIUS_MAX_MIN_TIP);
+        assert_eq!(m[1].tip, 5_000);
+        assert!(parse_routes("helius-max", &fra, Some(2_000_000), false).is_err());
         let auto = parse_routes("tpu,jito;tpu", &fra, None, true).unwrap();
         assert!(auto[0].tip_auto && !auto[1].tip_auto);
     }

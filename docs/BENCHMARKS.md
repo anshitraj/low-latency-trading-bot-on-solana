@@ -366,6 +366,27 @@ What this can and cannot say:
   in 2026; not verified).
 - Our sample is 10 trades; theirs are a ~20-minute window each. Rerun before relying on it.
 
+### 2q. Helius Sender Max (0.001 SOL tip) vs SWQoS-only vs TPU (owner-run, 2026-11-13)
+`--routes "helius-max;helius;tpu" --priority-lamports 10000 --iterations 9`
+(`mainnet-canary-send-20261113T155443Z.json`): 18/18 FINALIZED, verified, shred slot =
+landing slot on all. Spent 6,326,692 lamports (~US$0.53), of which 6,000,000 were Sender Max
+tips.
+
+| route (6 sends each) | tip / tx | shred-seen median | min | ≤ 100 ms | near-leader median (n) | block position median |
+|---|---:|---:|---:|---:|---:|---:|
+| helius-max (Sender Max) | 1,000,000 | 129.1 ms | 61.5 | 2 | 98.8 ms (4) | 41% |
+| helius (SWQoS-only) | 5,000 | 203.8 ms | **23.7** | 2 | 192.4 ms (5) | 63% |
+| **tpu only** | 0 | **110.8 ms** | 53.5 | **3** | **69.5 ms** (4) | 45% |
+
+- **Sender Max did not beat free direct TPU** (near leaders 98.8 vs 69.5 ms; overall 129 vs
+  111 ms) at 200× the SWQoS tip (~US$0.08 per trade). No same-slot landing on either.
+  Not worth paying for at this sample size.
+- SWQoS-only had the single fastest trade again (**23.7 ms**, same slot) but a slow median.
+- On 3 of 6 SWQoS-only trades Helius's own RPC reported the trade before our shred
+  observer (e.g. 132.8 vs 222.5 ms): transactions delivered through Helius seem to reach
+  Helius's RPC first.
+- Sub-40 ms seen so far: 3 of 66 sends across 2o/2p/2q (24.6, 35.4, 23.7 ms).
+
 ### 2p. tpu+helius combined vs each alone (owner-run, 2026-11-13)
 Same settings as 2o (`--priority-lamports 10000`, watch-list observer),
 `--routes "tpu,helius;tpu;helius" --iterations 12` (`mainnet-canary-send-20261113T130000Z.json`):

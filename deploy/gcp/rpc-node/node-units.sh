@@ -43,6 +43,27 @@ RestartSec=3
 WantedBy=multi-user.target
 EOF
 
+# Optional second observer for a third-party shred feed on UDP 20000 (enabled only
+# when run-observer-feed.sh is present next to this script).
+if [ -f "$(dirname "$0")/run-observer-feed.sh" ]; then
+  install -m 755 "$(dirname "$0")/run-observer-feed.sh" /usr/local/bin/run-observer-feed.sh
+  cat >/etc/systemd/system/shred-observer-feed.service <<'UNIT'
+[Unit]
+Description=trader shred observer for an external shred feed (UDP 20000 -> 9902)
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/run-observer-feed.sh
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  FEED_UNIT=shred-observer-feed.service
+fi
+
 install -m 755 "$(dirname "$0")/snapsync.sh" /usr/local/bin/snapsync.sh
 cat >/etc/systemd/system/snapsync.service <<'UNIT'
 [Unit]
@@ -65,6 +86,6 @@ WantedBy=timers.target
 UNIT
 
 systemctl daemon-reload
-systemctl enable node-prep.service sol.service shred-observer.service
+systemctl enable node-prep.service sol.service shred-observer.service ${FEED_UNIT:-}
 systemctl enable --now snapsync.timer
 echo "units installed"
