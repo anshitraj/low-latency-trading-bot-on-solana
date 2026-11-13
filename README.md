@@ -1,15 +1,32 @@
 # Solana Telegram Trader
 
-A Solana trading bot (Telegram bot + Mini App) built for speed: a Rust execution engine
-that signs a Pump.fun trade in **0.2 ms**, puts it on the wire to the block leaders in
-**~2 ms**, and — with a professional shred feed — sees it inside the block in **~50 ms
-(best 13 ms)**. Every number below comes from real mainnet trades, verified on-chain.
+**A Solana trading bot built for speed, with every millisecond measured on mainnet.**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/pipeline-dark.svg">
+  <img alt="How one trade travels: the Rust engine signs in 0.2 ms, the same signed bytes go to direct TPU, Helius staked and RPC in about 2 ms, the leader packs the block, and our shred observer sees the trade about 50 ms after sending" src="docs/assets/pipeline-light.svg">
+</picture>
+
+### In one minute
+1. You press **Buy** in Telegram. Our Rust engine prices the trade from live data and
+   **signs it in 0.2 ms**.
+2. The **same signed transaction** is sent over three roads at once — straight to the
+   Solana leaders (TPU), through Helius's staked connection, and through a normal RPC —
+   and is on the wire in **~2 ms**.
+3. The current leader puts it into its block.
+4. Instead of waiting for an RPC to tell us, our own code reads the raw block data
+   ("shreds") and spots our trade there — **~50 ms after sending, 13 ms at best**.
 
 > **Status:** private beta, **unaudited**, custodial test wallets, mainnet trading
 > **off by default**. Do not use with funds you cannot lose.
 > See [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md).
 
 ## Results (mainnet, 162 verified trades, 2026-11-12/13)
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/speed-dark.svg">
+  <img alt="Median time from send to our trade seen in the block: Helius notification 181 ms, own node with our shred observer 137 ms, plus watch list 99 ms, plus GetBlock shred feed 54 ms; 40 ms target line" src="docs/assets/speed-light.svg">
+</picture>
 
 | | result |
 |---|---|
@@ -20,30 +37,27 @@ that signs a Pump.fun trade in **0.2 ms**, puts it on the wire to the block lead
 | landed / finalized / failed | 162 / 162 / 0 |
 | cost of the whole test campaign | ~US$1.30 in fees and tips |
 
-Full story, route comparison and an honest comparison with Axiom, GMGN, Photon and
-BullX: **[docs/SPEED.md](docs/SPEED.md)**. Raw data: [docs/BENCHMARKS.md](docs/BENCHMARKS.md),
-`benchmarks/results/`.
+### Proof on mainnet
+Real trades from our test wallet, each **finalized with no error** (checked with
+`getSignatureStatuses`). "Seen" = time from sending until the trade appeared in the
+block data we receive.
+
+| trade | seen after | how it was sent | observed via | Solscan |
+|---|---:|---|---|---|
+| buy | **13.0 ms** | TPU + Helius | GetBlock shred feed | [3skck6Fz…Y](https://solscan.io/tx/3skck6FzyuzRVE2F8nfAmJ4dF9sdpKcj9gaPtQG9jx2v5rUWXVyuY6GsxgVhjV4xxdfoFVTGZmYksFQKkZDBKH2Y) |
+| sell | 23.7 ms | Helius staked | own node | [2z3zGc5n…4D](https://solscan.io/tx/2z3zGc5nuLLrnGZhs9ueE2Lb9DCdyozEJVQk9tFuMxnEtDV4kws1iW5DvQQS854wDWn5qc3FmPRLhn85cDfYTs4D) |
+| buy | 24.6 ms | Helius staked | own node | [4nyCggkP…rj](https://solscan.io/tx/4nyCggkPHoiC5WLiBQJjs4r3zn1FCp2w5zrcwWe83c8KdvhncU3Dmzf9bn6bTvNpGrUHMWhgb1xBG4N4dzxYKYrj) |
+| sell | 35.4 ms | TPU | own node | [48x9pU4q…Pd](https://solscan.io/tx/48x9pU4qV9jp59YTwjQBCqFRvb5NTvRX2vnJe1he7v6Pin756D4KXvbGWDUZ9F5wsC5ZFoMZx4N3nx1qqZrjkNPd) |
+| sell | 35.8 ms | TPU + Helius | GetBlock shred feed | [4Yd8icqL…ag](https://solscan.io/tx/4Yd8icqLJvKucoKbUzrjF2HzsfqmFcssgTpCaYV2bjxUXY8orZwWjXJf1HETT5pfDAVNLTbAtBD3tXja7A92A6ag) |
+| buy | 36.7 ms | TPU | GetBlock shred feed | [236NM21U…vR](https://solscan.io/tx/236NM21UUF6yhu5B9jsyAjSBTLDCYRYTY5nf1SNXAr3Jp1VfFfkj5zDgasbTcGR4HELEt1H41VkgCsZnNq3YX5vR) |
+| buy | 39.4 ms | TPU + Helius | GetBlock shred feed | [2Q4HMant…Dw](https://solscan.io/tx/2Q4HMantTt2DaSrzZJvQVL7fRKk9LQcuNuSKKcHFGVPpcQEvhVDQ6VGaDQeTfeAXzVBDzYjnudNoVhLrFhzVnLDw) |
+| first mainnet trade (2026-11-12) | — | TPU + Jito | Helius | [3UBRH2pb…qJ](https://solscan.io/tx/3UBRH2pbwo9FKNMHt9Dj7SvXRa8kJFeXAv3BSEuyEm1YsbsSgvnsG6hi31znXEaoTWm7sPHFHMrbV1uar94rpuqJ) |
+
+161 of the 162 signatures are in `benchmarks/results/mainnet-canary-send-*.json` (one run-2 sell was transcribed without it). Full story,
+every route, and an honest comparison with Axiom, GMGN, Photon and BullX:
+**[docs/SPEED.md](docs/SPEED.md)** · raw data: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 ## How it is fast
-
-```
-Telegram / Mini App ──► engine (Rust)
-                         │ quote from a live WebSocket account stream (no RPC round trip)
-                         │ build + guard + sign once                       0.2 ms
-                         ▼
-                 same signed bytes, in parallel                            ~2 ms
-          ┌──────────────┼───────────────────┐
-     direct TPU/QUIC   Helius Sender       RPC (backup)
-   (current + next     (staked, SWQoS,
-    2 leaders)          ~US$0.0004 tip)
-          └──────────────┼───────────────────┘
-                         ▼
-                   leader packs it into the block
-                         ▼
-   shred observer (our code, on our own Agave node) reads the trade
-   straight out of the block data — fed by our node's Turbine stream or a
-   pro shred feed (GetBlock) — before any RPC knows               ~50 ms
-```
 
 - **Sign once, send everywhere:** one signature, the same bytes to every route — never two
   different orders. Detection starts at the first route that may have forwarded it.
