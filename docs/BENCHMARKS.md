@@ -366,6 +366,42 @@ What this can and cannot say:
   in 2026; not verified).
 - Our sample is 10 trades; theirs are a ~20-minute window each. Rerun before relying on it.
 
+### 2k. Phase 2: multi-route A/B tooling, leader distance (2026-11-13)
+**Tooling.** `mainnet-canary --routes "tpu,jito;tpu,helius;tpu,jito@frankfurt+amsterdam+ny+tokyo"`
+runs one engine per route (shared store, wallet lock, blockhash, observer); round trip
+*i* uses route *i mod n*, so routes interleave in time. After a send run each landed trade
+is annotated read-only with the landing slot's leader, its TPU address, our QUIC handshake
+RTT to it (`leader_region` near <20 ms / mid / far ≥60 ms) and the transaction's index in
+its block. The summary adds `by_route`, `by_leader_region`, `same_slot_share` and
+`block_position_pct`.
+
+**Bug found and fixed while testing.** The engine waited for *every* sender before handing
+the signature to the observer, so one slow route delayed detection of a trade another route
+had already delivered. Localnet (`localnet-canary-routes-20261113.json`, TPU unreachable
+from Windows→WSL over UDP, gives up after 1.5 s): `rpc,tpu` trades landed in the send slot
+but were "seen" 1.70–1.80 s after signing. Fix: `Router::fan_out_first` returns at the first
+attempt that may have forwarded the transaction; slower attempts finish in the background
+and are recorded later; "nothing forwarded" still requires every attempt. After
+(`…-20261113-b.json`): same route acks in 1.2 ms and lands 126–425 ms after signing (local
+400 ms slots), 8/8 FINALIZED, balances verified. On mainnet this matters whenever a leader
+connection is cold.
+
+**Mainnet dry run (VM)**: all three routes simulate cleanly (53,355 CU; tips 1,000 Jito /
+5,000 Helius); order→signed 0.23–0.26 ms.
+
+**Leader distance from the Frankfurt VM** (`send-probe --leaders 90`, next 400 slots,
+49 distinct leaders, read-only QUIC handshakes): near <20 ms **30 (61%)**, mid 20–60 ms 11
+(22%), far ≥60 ms **8 (16%)** (86–459 ms). Jito: Frankfurt 2.4 ms, Amsterdam 7.5, NY 85,
+Tokyo 231. Helius Sender: Frankfurt 1.3 ms, Amsterdam 7.4.
+
+What this means for phases 3–5 (regional servers): orders are signed in Frankfurt, so a
+relay in New York cannot beat the direct path to a US leader (Frankfurt→NY→leader ≈
+Frankfurt→leader, ~40–45 ms one way either way). A regional server only helps if the
+*order itself* starts there (a user or signal near that region) — i.e. phase 4, which
+means signing keys on that server. For ~16% of leader windows the far leader adds roughly
+one-way RTT (~45–230 ms) before our transaction can be included; the fan-out to the next
+leaders and Jito's regional engines already cover the following windows.
+
 ### 2f. Send hop and direct TPU
 Read-only probe from the GCP VM (`trader-cli send-probe`; no transaction sent):
 

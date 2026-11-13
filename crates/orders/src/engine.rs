@@ -824,9 +824,32 @@ impl Engine {
             rebroadcast: false,
         };
         self.mark(id, Stage::SendStart);
-        let attempts = Router::fan_out(&plan, &signed.wire, &ctx).await;
+        // Track as soon as ONE route may have forwarded it: a slow route (cold
+        // QUIC handshake, stalled endpoint) must not delay observing a
+        // transaction another route already delivered. Late attempts are
+        // recorded when they finish. NothingForwarded is only possible when
+        // every attempt is already in `attempts` (rest is empty).
+        let (attempts, rest) = Router::fan_out_first(&plan, &signed.wire, &ctx).await;
         if attempts.iter().any(|a| a.outcome.is_success()) {
             self.mark(id, Stage::SenderAck);
+        }
+        if rest.remaining() > 0 {
+            let store = self.store.clone();
+            let sig = rec.signature.clone();
+            tokio::spawn(async move {
+                let late: Vec<AttemptRecord> = rest
+                    .collect()
+                    .await
+                    .into_iter()
+                    .map(|a| AttemptRecord {
+                        order_id: id,
+                        signature: sig.clone(),
+                        attempt: a,
+                        rebroadcast: false,
+                    })
+                    .collect();
+                let _ = store.record_attempts(&late).await;
+            });
         }
         let recs: Vec<AttemptRecord> = attempts
             .iter()

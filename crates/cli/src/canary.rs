@@ -400,76 +400,12 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     if !(100..=5_000).contains(&poll_ms) {
         bail!("--poll-ms must be 100..=5000");
     }
-    // Senders get the SAME signed bytes in parallel: rpc (sendTransaction),
-    // tpu (QUIC straight to the next leaders), jito (block engine, tip required).
-    let sender_names: Vec<String> = a
-        .get("senders")
-        .map(String::as_str)
-        .unwrap_or("rpc")
-        .split(',')
-        .map(|x| x.trim().to_lowercase())
-        .filter(|x| !x.is_empty())
-        .collect();
-    let mut kinds: Vec<SenderKind> = vec![];
-    for n in &sender_names {
-        let k = match n.as_str() {
-            "rpc" => SenderKind::Rpc,
-            "tpu" => SenderKind::Tpu,
-            "jito" => SenderKind::Jito,
-            "helius" => SenderKind::Helius,
-            other => bail!("unknown sender {other} (use rpc,tpu,jito,helius)"),
-        };
-        if !kinds.contains(&k) {
-            kinds.push(k);
-        }
-    }
-    let use_jito = kinds.contains(&SenderKind::Jito);
-    let use_helius = kinds.contains(&SenderKind::Helius);
-    if use_jito && use_helius {
-        bail!("pick one tipped sender per run: jito and helius use different tip accounts");
-    }
-    // `--tip-lamports auto` (Jito only): median landed tip from Jito's tip floor
-    // API, per order, capped at MAX_TIP_LAMPORTS.
-    let tip_auto = a.get("tip-lamports").map(String::as_str) == Some("auto");
-    if tip_auto && !use_jito {
-        bail!("--tip-lamports auto needs --senders ...,jito");
-    }
-    let tip: u64 = if tip_auto {
-        MAX_TIP_LAMPORTS
-    } else {
-        parse(
-            a,
-            "tip-lamports",
-            if use_helius {
-                trader_sender_rpc::HELIUS_SWQOS_MIN_TIP
-            } else if use_jito {
-                1_000
-            } else {
-                0
-            },
-        )?
-    };
-    if use_helius && tip < trader_sender_rpc::HELIUS_SWQOS_MIN_TIP {
-        bail!(
-            "helius (SWQoS-only) needs --tip-lamports >= {}",
-            trader_sender_rpc::HELIUS_SWQOS_MIN_TIP
-        );
-    }
-    let helius_url = a
-        .get("helius-url")
-        .cloned()
-        .unwrap_or_else(|| HELIUS_FRANKFURT.to_string());
-    if tip > MAX_TIP_LAMPORTS {
-        bail!("--tip-lamports must be <= {MAX_TIP_LAMPORTS}");
-    }
-    if use_jito && tip < trader_sender_jito::JITO_MIN_TIP_LAMPORTS {
-        bail!(
-            "jito needs --tip-lamports >= {}",
-            trader_sender_jito::JITO_MIN_TIP_LAMPORTS
-        );
-    }
-    // `--jito-regions frankfurt,amsterdam,ny,tokyo`: the same signed bytes go to
-    // each regional block engine (it lands once; the tip is paid once).
+    // Routes. Each route is a set of senders that get the SAME signed bytes in
+    // parallel: rpc (sendTransaction), tpu (QUIC straight to the current and
+    // next leaders), jito (block engine; `jito@frankfurt+amsterdam+ny+tokyo`
+    // picks regions), helius (Helius Sender, SWQoS-only). `--routes "a;b;c"`
+    // assigns round trip i to route i % n, so routes are compared under the same
+    // market conditions (phase 2 A/B). `--senders a,b` = one route.
     let jito_regions: Vec<String> = a
         .get("jito-regions")
         .map(|v| {
@@ -479,14 +415,50 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
                 .collect()
         })
         .unwrap_or_default();
-    let tpu_leaders: usize = parse(a, "tpu-leaders", 3)?;
-    if !(1..=8).contains(&tpu_leaders) {
-        bail!("--tpu-leaders must be 1..=8");
-    }
     let jito_url = a
         .get("jito-url")
         .cloned()
         .unwrap_or_else(|| JITO_FRANKFURT.to_string());
+    let default_jito_urls: Vec<String> = if jito_regions.is_empty() {
+        vec![jito_url.clone()]
+    } else {
+        jito_regions.iter().map(|r| jito_region_url(r)).collect()
+    };
+    let route_text = match (a.get("routes"), a.get("senders")) {
+        (Some(_), Some(_)) => bail!("use --routes or --senders, not both"),
+        (Some(r), None) => r.clone(),
+        (None, Some(s)) => s.clone(),
+        (None, None) => "rpc".into(),
+    };
+    let tip_auto = a.get("tip-lamports").map(String::as_str) == Some("auto");
+    let tip_arg: Option<u64> = if tip_auto || !a.contains_key("tip-lamports") {
+        None
+    } else {
+        Some(parse(a, "tip-lamports", 0)?)
+    };
+    let routes = parse_routes(&route_text, &default_jito_urls, tip_arg, tip_auto)?;
+    let kinds: Vec<SenderKind> =
+        routes
+            .iter()
+            .flat_map(|r| r.kinds.iter().copied())
+            .fold(vec![], |mut v, k| {
+                if !v.contains(&k) {
+                    v.push(k);
+                }
+                v
+            });
+    let sender_names: Vec<String> = routes.iter().map(|r| r.name.clone()).collect();
+    let use_jito = kinds.contains(&SenderKind::Jito);
+    // Largest tip any route pays (fee estimate and the policy ceiling).
+    let tip: u64 = routes.iter().map(|r| r.tip).max().unwrap_or(0);
+    let helius_url = a
+        .get("helius-url")
+        .cloned()
+        .unwrap_or_else(|| HELIUS_FRANKFURT.to_string());
+    let tpu_leaders: usize = parse(a, "tpu-leaders", 3)?;
+    if !(1..=8).contains(&tpu_leaders) {
+        bail!("--tpu-leaders must be 1..=8");
+    }
     let slippage =
         Bps::new(parse(a, "slippage-bps", 500u32)?).map_err(|e| anyhow!("--slippage-bps: {e}"))?;
 
@@ -542,6 +514,12 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         "providers": rpc.hosts(),
         "tpu_leaders": tpu_leaders,
         "jito_regions": jito_regions,
+        "routes": routes.iter().map(|r| json!({
+            "route": r.name,
+            "tip_lamports": if r.tip_auto { json!("auto") } else { json!(r.tip) },
+            "jito_hosts": r.jito_urls.iter().map(|u| trader_market_data::rpc::url_host(u)).collect::<Vec<_>>(),
+        })).collect::<Vec<_>>(),
+        "route_assignment": "round trip i uses route i % routes",
         "senders": sender_names,
         "tip_lamports_per_tx": tip,
         "est_fee_per_tx_lamports": fee_per_tx,
@@ -636,22 +614,12 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     // ~2 slots: a fresh hash costs ~2.5 getLatestBlockhash/s, spread over the pool.
     blockhash.spawn(rpc.clone(), Duration::from_millis(400));
     let sims = Arc::new(Mutex::new(vec![]));
-    let mut router = Router::new();
-    let jito_urls: Vec<String> = if jito_regions.is_empty() {
-        vec![jito_url.clone()]
-    } else {
-        jito_regions
-            .iter()
-            .map(|r| format!("https://{r}.mainnet.block-engine.jito.wtf"))
-            .collect()
-    };
     let jito_tip_accounts = if use_jito {
-        let j = trader_sender_jito::JitoSender::new(
-            jito_urls[0].clone(),
-            false,
-            None,
-            Duration::from_secs(5),
-        );
+        let first = routes
+            .iter()
+            .find_map(|r| r.jito_urls.first().cloned())
+            .expect("a jito route has a url");
+        let j = trader_sender_jito::JitoSender::new(first, false, None, Duration::from_secs(5));
         let accts = j
             .fetch_tip_accounts()
             .await
@@ -663,87 +631,122 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     } else {
         None
     };
-    if send {
-        for k in &kinds {
-            match k {
-                SenderKind::Rpc => router.add(ManagedSender::new(
-                    Arc::new(RpcSender::standard(rpc.clone(), false)),
-                    Duration::from_secs(10),
-                    None,
-                )),
-                SenderKind::Tpu => {
-                    let t = trader_sender_tpu::TpuSender::start(
-                        rpc.clone(),
-                        stream.clone(),
-                        tpu_leaders,
-                    )
-                    .await
-                    .map_err(|e| anyhow!("tpu sender: {e}"))?;
-                    router.add(ManagedSender::new(t, Duration::from_secs(3), None));
-                }
-                SenderKind::Jito => {
-                    let accts = jito_tip_accounts.clone().expect("jito set up above");
-                    // Jito's default limit is 1 request/s per IP per region.
-                    for ju in &jito_urls {
-                        router.add(ManagedSender::new(
-                            Arc::new(
-                                trader_sender_jito::JitoSender::new(
-                                    ju.clone(),
-                                    false,
-                                    None,
-                                    Duration::from_secs(5),
-                                )
-                                .with_tip_accounts(accts.clone()),
-                            ),
-                            Duration::from_secs(5),
-                            Some(trader_router::TokenBucket::new(1, Duration::from_secs(1))),
-                        ));
+    let helius_tip_accounts: Vec<Pubkey> = trader_sender_rpc::HELIUS_TIP_ACCOUNTS
+        .iter()
+        .map(|k| Pubkey::from_str(k).expect("valid tip account"))
+        .collect();
+    // Senders shared by every route that uses them (one TPU client and QUIC
+    // connection cache, one client per Jito region, one Helius client).
+    let tpu_sender = if send && kinds.contains(&SenderKind::Tpu) {
+        Some(
+            trader_sender_tpu::TpuSender::start(rpc.clone(), stream.clone(), tpu_leaders)
+                .await
+                .map_err(|e| anyhow!("tpu sender: {e}"))?,
+        )
+    } else {
+        None
+    };
+    let helius_sender = if send && kinds.contains(&SenderKind::Helius) {
+        let mut hc = RpcConfig::new(helius_url.clone());
+        hc.timeout = Duration::from_secs(5);
+        Some(Arc::new(RpcSender::helius_sender(
+            RpcClient::new(hc)?,
+            true,
+        )))
+    } else {
+        None
+    };
+    let rpc_sender = Arc::new(RpcSender::standard(rpc.clone(), false));
+    let mut jito_clients: HashMap<String, Arc<trader_sender_jito::JitoSender>> = HashMap::new();
+    let mut routers = vec![];
+    for route in &routes {
+        let mut router = Router::new();
+        if send {
+            for k in &route.kinds {
+                match k {
+                    SenderKind::Rpc => router.add(ManagedSender::new(
+                        rpc_sender.clone(),
+                        Duration::from_secs(10),
+                        None,
+                    )),
+                    SenderKind::Tpu => router.add(ManagedSender::new(
+                        tpu_sender.clone().expect("tpu started above"),
+                        Duration::from_secs(3),
+                        None,
+                    )),
+                    SenderKind::Jito => {
+                        let accts = jito_tip_accounts.clone().expect("jito set up above");
+                        for ju in &route.jito_urls {
+                            let j = jito_clients
+                                .entry(ju.clone())
+                                .or_insert_with(|| {
+                                    Arc::new(
+                                        trader_sender_jito::JitoSender::new(
+                                            ju.clone(),
+                                            false,
+                                            None,
+                                            Duration::from_secs(5),
+                                        )
+                                        .with_tip_accounts(accts.clone()),
+                                    )
+                                })
+                                .clone();
+                            // Jito's default limit is 1 request/s per IP per region.
+                            router.add(ManagedSender::new(
+                                j,
+                                Duration::from_secs(5),
+                                Some(trader_router::TokenBucket::new(1, Duration::from_secs(1))),
+                            ));
+                        }
                     }
-                }
-                SenderKind::Helius => {
-                    let mut hc = RpcConfig::new(helius_url.clone());
-                    hc.timeout = Duration::from_secs(5);
-                    router.add(ManagedSender::new(
-                        Arc::new(RpcSender::helius_sender(RpcClient::new(hc)?, true)),
+                    SenderKind::Helius => router.add(ManagedSender::new(
+                        helius_sender.clone().expect("helius set up above"),
                         Duration::from_secs(5),
                         Some(trader_router::TokenBucket::new(1, Duration::from_secs(1))),
-                    ));
+                    )),
+                    _ => unreachable!(),
                 }
-                _ => unreachable!(),
             }
+        } else {
+            // Dry run: one simulate-only sender carrying this route's tip policy,
+            // so the simulated transaction has the shape that would be sent.
+            let tip = if route.kinds.contains(&SenderKind::Jito) {
+                TipPolicy::Required {
+                    min_lamports: trader_sender_jito::JITO_MIN_TIP_LAMPORTS,
+                    accounts: jito_tip_accounts.clone().expect("jito set up above"),
+                }
+            } else if route.kinds.contains(&SenderKind::Helius) {
+                TipPolicy::Required {
+                    min_lamports: trader_sender_rpc::HELIUS_SWQOS_MIN_TIP,
+                    accounts: helius_tip_accounts.clone(),
+                }
+            } else {
+                TipPolicy::None
+            };
+            router.add(ManagedSender::new(
+                Arc::new(SimulateOnly {
+                    rpc: rpc.clone(),
+                    out: sims.clone(),
+                    tip,
+                }),
+                Duration::from_secs(10),
+                None,
+            ));
         }
-    } else {
-        // Dry run: one simulate-only sender carrying the same tip policy, so the
-        // simulated transaction is byte-for-byte the shape that would be sent.
-        let tip = match &jito_tip_accounts {
-            Some(accts) => TipPolicy::Required {
-                min_lamports: trader_sender_jito::JITO_MIN_TIP_LAMPORTS,
-                accounts: accts.clone(),
-            },
-            None if use_helius => TipPolicy::Required {
-                min_lamports: trader_sender_rpc::HELIUS_SWQOS_MIN_TIP,
-                accounts: trader_sender_rpc::HELIUS_TIP_ACCOUNTS
-                    .iter()
-                    .map(|k| Pubkey::from_str(k).expect("valid tip account"))
-                    .collect(),
-            },
-            None => TipPolicy::None,
-        };
-        router.add(ManagedSender::new(
-            Arc::new(SimulateOnly {
-                rpc: rpc.clone(),
-                out: sims.clone(),
-                tip,
-            }),
-            Duration::from_secs(10),
-            None,
-        ));
+        routers.push(router);
     }
-    // Intent / policy sender lists: dry run only has the simulate-only (rpc) sender.
-    let intent_senders: Vec<SenderKind> = if send {
+    // Policy sender list; dry run only has the simulate-only (rpc) sender.
+    let allowed_senders: Vec<SenderKind> = if send {
         kinds.clone()
     } else {
         vec![SenderKind::Rpc]
+    };
+    let route_senders = |r: usize| -> Vec<SenderKind> {
+        if send {
+            routes[r].kinds.clone()
+        } else {
+            vec![SenderKind::Rpc]
+        }
     };
     let (tx, _rx) = broadcast::channel(1024);
     let mut observer = Observer::new(
@@ -766,7 +769,7 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     // Canary wallet policy (explicit, not defaults): per-wallet mainnet switch
     // on for this disposable wallet only; reserve = system-account rent floor
     // plus margin (the 0.01 SOL default reserve would exceed a ~US$1 wallet);
-    // no tips; daily loss capped at 0.01 SOL.
+    // tips capped at the largest route tip; daily loss capped at 0.01 SOL.
     let policy = WalletPolicy {
         max_order: Lamports(MAX_BUY_LAMPORTS),
         max_daily_turnover: Lamports(50_000_000),
@@ -776,29 +779,38 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         max_tip: Lamports(tip),
         daily_loss_limit: Lamports(10_000_000),
         mainnet_enabled: true,
-        allowed_senders: intent_senders.clone(),
+        allowed_senders: allowed_senders.clone(),
         ..Default::default()
     };
-    let engine = Engine::new(
-        EngineConfig {
-            network: net,
-            // Operator gate for this process. In dry-run mode the router holds
-            // only the simulate-only sender, which cannot forward.
-            mainnet_enabled: true,
-            max_state_age: Duration::from_secs(3),
-            ..Default::default()
-        },
-        store.clone(),
-        vec![adapter.clone()],
-        router,
-        blockhash,
-        locks,
-        Arc::new(OneSigner(signer)),
-        balances,
-        Arc::new(FixedPolicy(Mutex::new(policy))),
-        observer.handle.clone(),
-        tx,
-    );
+    // One engine per route, sharing store, wallet lock, blockhash, balances,
+    // policy and observer: orders stay serialized per wallet and one observer
+    // tracks them all; only the delivery route differs.
+    let policy_src = Arc::new(FixedPolicy(Mutex::new(policy)));
+    let engines: Vec<Arc<Engine>> = routers
+        .into_iter()
+        .map(|router| {
+            Engine::new(
+                EngineConfig {
+                    network: net,
+                    // Operator gate for this process. In dry-run mode the router
+                    // holds only the simulate-only sender, which cannot forward.
+                    mainnet_enabled: true,
+                    max_state_age: Duration::from_secs(3),
+                    ..Default::default()
+                },
+                store.clone(),
+                vec![adapter.clone()],
+                router,
+                blockhash.clone(),
+                locks.clone(),
+                Arc::new(OneSigner(signer.clone())),
+                balances.clone(),
+                policy_src.clone(),
+                observer.handle.clone(),
+                tx.clone(),
+            )
+        })
+        .collect();
     let user_id = Uuid::new_v4();
     let wallet_id = Uuid::new_v4();
     let run_tag = Uuid::new_v4().simple().to_string();
@@ -809,7 +821,12 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         trader_protocol_pump::PUMP_PROGRAM_ID,
         pump_rust_client::pda::pump::bonding_curve(&mint).0,
     ];
-    let mk = |side: Side, amount: AmountSpec, key: String, cu_price: u64, tip: u64| TradeIntent {
+    let mk = |side: Side,
+              amount: AmountSpec,
+              key: String,
+              cu_price: u64,
+              tip: u64,
+              senders: Vec<SenderKind>| TradeIntent {
         id: Uuid::new_v4(),
         user_id,
         wallet_id,
@@ -823,7 +840,7 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
             max_priority_fee: Lamports(MAX_PRIORITY_LAMPORTS),
             tip: Lamports(tip),
         },
-        senders: intent_senders.clone(),
+        senders,
         idempotency_key: key,
         requires_approval: false,
         created_at: chrono::Utc::now(),
@@ -833,6 +850,11 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     let mut failed: Option<String> = None;
     let runs = iterations;
     'outer: for it in 0..runs {
+        // Round trip `it` (buy and sell) uses route it % n, so each route sees
+        // both sides and the routes interleave in time.
+        let ri = it % routes.len();
+        let route = &routes[ri];
+        let engine = &engines[ri];
         // Dry run simulates the buy only: a sell needs tokens the wallet does not hold.
         let sides: &[Side] = if sell_only {
             &[Side::Sell]
@@ -862,10 +884,10 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
             } else {
                 (cu_price, json!(null))
             };
-            let (tip_now, tip_info) = if tip_auto {
+            let (tip_now, tip_info) = if route.tip_auto {
                 auto_jito_tip(&http, MAX_TIP_LAMPORTS).await
             } else {
-                (tip, json!(null))
+                (route.tip, json!(null))
             };
             let intent = mk(
                 side,
@@ -873,6 +895,7 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
                 format!("canary-{run_tag}-{it}-{}", side.as_str()),
                 cu_now,
                 tip_now,
+                route_senders(ri),
             );
             // Slot at submit: the stream's live slot (no extra round trip), else RPC.
             let (send_slot, send_slot_source) = match &stream {
@@ -974,6 +997,7 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
                 .collect();
             let row = json!({
                 "iteration": it,
+                "route": route.name,
                 "side": side.as_str(),
                 "order_id": o.id,
                 "state": o.state.as_str(),
@@ -1022,6 +1046,11 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
                 json!({"simulation": {"err": s["err"], "units_consumed": s["units_consumed"], "rpc_error": s["rpc_error"]}})
             );
         }
+    }
+    if send {
+        // Read-only: who led each landing slot, how far that leader is from us,
+        // and where our transaction sits in its block.
+        annotate_landings(&rpc, &mut rows).await;
     }
     let summary = summarize(&rows);
     if send || !rows.is_empty() {
@@ -1077,6 +1106,221 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         println!("dry run OK: the buy simulates cleanly on {net}. Nothing was broadcast.");
     }
     Ok(())
+}
+
+/// Leader location bucket from our QUIC handshake RTT to its TPU (measured
+/// from wherever this runs; from Frankfurt: Amsterdam/Frankfurt < 20 ms,
+/// rest of Europe < 60 ms, Americas/Asia above).
+pub fn rtt_region(rtt_ms: Option<f64>) -> &'static str {
+    match rtt_ms {
+        Some(x) if x < 20.0 => "near(<20ms)",
+        Some(x) if x < 60.0 => "mid(20-60ms)",
+        Some(_) => "far(>=60ms)",
+        None => "unknown",
+    }
+}
+
+/// Adds to each landed row: `leader` (of the landing slot), `send_slot_leader`,
+/// `leader_tpu`, `leader_rtt_ms` (QUIC handshake from here, best of 2),
+/// `leader_region`, `block_index` / `block_tx_count` / `block_position_pct`.
+/// Read-only; failures leave the fields null.
+async fn annotate_landings(rpc: &RpcClient, rows: &mut [serde_json::Value]) {
+    let leader_of = |slot: u64| async move {
+        rpc.call::<Vec<String>>("getSlotLeaders", json!([slot, 1]))
+            .await
+            .ok()
+            .and_then(|v| v.into_iter().next())
+    };
+    let tpu: HashMap<String, String> = rpc
+        .call::<Vec<serde_json::Value>>("getClusterNodes", json!([]))
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|n| {
+            Some((
+                n["pubkey"].as_str()?.to_string(),
+                n["tpuQuic"].as_str()?.to_string(),
+            ))
+        })
+        .collect();
+    let conns = trader_sender_tpu::ConnCache::new(Duration::from_secs(2)).ok();
+    let mut rtt_cache: HashMap<String, Option<f64>> = HashMap::new();
+    for row in rows.iter_mut() {
+        let Some(landed) = row["landed_slot"].as_u64() else {
+            continue;
+        };
+        let leader = leader_of(landed).await;
+        let send_leader = match row["send_slot"].as_u64() {
+            Some(s) => leader_of(s).await,
+            None => None,
+        };
+        let addr = leader.as_ref().and_then(|l| tpu.get(l).cloned());
+        let rtt = match (&addr, &conns) {
+            (Some(a), Some(c)) => match rtt_cache.get(a) {
+                Some(v) => *v,
+                None => {
+                    let mut best: Option<f64> = None;
+                    if let Ok(sa) = a.parse::<std::net::SocketAddr>() {
+                        for _ in 0..2 {
+                            if let Ok(d) = c.handshake_time(sa).await {
+                                let ms = d.as_secs_f64() * 1e3;
+                                best = Some(best.map_or(ms, |b: f64| b.min(ms)));
+                            }
+                        }
+                    }
+                    rtt_cache.insert(a.clone(), best);
+                    best
+                }
+            },
+            _ => None,
+        };
+        let (idx, count) = match (
+            row["signature"].as_str(),
+            rpc.call::<serde_json::Value>(
+                "getBlock",
+                json!([landed, {"transactionDetails": "signatures", "rewards": false,
+                                "maxSupportedTransactionVersion": 1, "commitment": "confirmed"}]),
+            )
+            .await,
+        ) {
+            (Some(sig), Ok(b)) => {
+                let sigs = b["signatures"].as_array().cloned().unwrap_or_default();
+                (
+                    sigs.iter().position(|s| s.as_str() == Some(sig)),
+                    Some(sigs.len()),
+                )
+            }
+            _ => (None, None),
+        };
+        row["leader"] = json!(leader);
+        row["send_slot_leader"] = json!(send_leader);
+        row["leader_tpu"] = json!(addr);
+        row["leader_rtt_ms"] = json!(rtt);
+        row["leader_region"] = json!(rtt_region(rtt));
+        row["block_index"] = json!(idx);
+        row["block_tx_count"] = json!(count);
+        row["block_position_pct"] = json!(match (idx, count) {
+            (Some(i), Some(n)) if n > 0 => Some(100.0 * i as f64 / n as f64),
+            _ => None,
+        });
+    }
+}
+
+/// One delivery route: a set of senders that get the same signed bytes.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RouteSpec {
+    pub name: String,
+    pub kinds: Vec<SenderKind>,
+    /// Jito block engines for this route (empty unless it contains jito).
+    pub jito_urls: Vec<String>,
+    /// Tip embedded in this route's transactions (lamports).
+    pub tip: u64,
+    /// Jito tip chosen per order from the tip-floor API (capped by `tip`).
+    pub tip_auto: bool,
+}
+
+pub fn jito_region_url(region: &str) -> String {
+    format!("https://{region}.mainnet.block-engine.jito.wtf")
+}
+
+/// `"tpu,jito;tpu,helius;tpu,jito@frankfurt+ny"` -> routes. Tip per route:
+/// helius >= its SWQoS minimum, jito >= its minimum (default 1,000, or `auto`),
+/// none otherwise. Jito and Helius in one route are refused (one tip account set).
+pub fn parse_routes(
+    text: &str,
+    default_jito_urls: &[String],
+    tip_arg: Option<u64>,
+    tip_auto: bool,
+) -> anyhow::Result<Vec<RouteSpec>> {
+    let mut out = vec![];
+    for raw in text.split(';').map(str::trim).filter(|r| !r.is_empty()) {
+        let mut kinds = vec![];
+        let mut jito_urls = vec![];
+        for tok in raw.split(',').map(|t| t.trim().to_lowercase()) {
+            let (name, regions) = match tok.split_once('@') {
+                Some((n, r)) => (n.to_string(), Some(r.to_string())),
+                None => (tok.clone(), None),
+            };
+            let k = match name.as_str() {
+                "rpc" => SenderKind::Rpc,
+                "tpu" => SenderKind::Tpu,
+                "jito" => SenderKind::Jito,
+                "helius" => SenderKind::Helius,
+                "" => continue,
+                other => bail!("unknown sender {other} in route `{raw}` (use rpc,tpu,jito,helius)"),
+            };
+            if regions.is_some() && k != SenderKind::Jito {
+                bail!("only jito takes @regions (route `{raw}`)");
+            }
+            if k == SenderKind::Jito {
+                jito_urls = match regions {
+                    Some(r) => r
+                        .split('+')
+                        .map(str::trim)
+                        .filter(|x| !x.is_empty())
+                        .map(jito_region_url)
+                        .collect(),
+                    None => default_jito_urls.to_vec(),
+                };
+                if jito_urls.is_empty() {
+                    bail!("route `{raw}`: jito needs at least one region");
+                }
+            }
+            if !kinds.contains(&k) {
+                kinds.push(k);
+            }
+        }
+        if kinds.is_empty() {
+            bail!("empty route `{raw}`");
+        }
+        let jito = kinds.contains(&SenderKind::Jito);
+        let helius = kinds.contains(&SenderKind::Helius);
+        if jito && helius {
+            bail!("route `{raw}`: jito and helius use different tip accounts; put them in separate routes");
+        }
+        let tip = if helius {
+            let t = tip_arg.unwrap_or(trader_sender_rpc::HELIUS_SWQOS_MIN_TIP);
+            if t < trader_sender_rpc::HELIUS_SWQOS_MIN_TIP {
+                bail!(
+                    "route `{raw}`: helius (SWQoS-only) needs --tip-lamports >= {}",
+                    trader_sender_rpc::HELIUS_SWQOS_MIN_TIP
+                );
+            }
+            t
+        } else if jito {
+            let t = if tip_auto {
+                MAX_TIP_LAMPORTS
+            } else {
+                tip_arg.unwrap_or(1_000)
+            };
+            if t < trader_sender_jito::JITO_MIN_TIP_LAMPORTS {
+                bail!(
+                    "route `{raw}`: jito needs --tip-lamports >= {}",
+                    trader_sender_jito::JITO_MIN_TIP_LAMPORTS
+                );
+            }
+            t
+        } else {
+            0
+        };
+        if tip > MAX_TIP_LAMPORTS {
+            bail!("--tip-lamports must be <= {MAX_TIP_LAMPORTS}");
+        }
+        out.push(RouteSpec {
+            name: raw.to_string(),
+            kinds,
+            jito_urls,
+            tip,
+            tip_auto: tip_auto && jito,
+        });
+    }
+    if out.is_empty() {
+        bail!("no route given");
+    }
+    if out.len() > 4 {
+        bail!("at most 4 routes per run");
+    }
+    Ok(out)
 }
 
 /// p75 of recent prioritization fees (micro-lamports/CU) for `keys`, clamped
@@ -1187,14 +1431,59 @@ fn summarize(rows: &[serde_json::Value]) -> serde_json::Value {
     json!({
         "trades": rows.len(),
         "order_to_signed_ms": stat(rows, ms("intent_to_signed_us")),
-        "signed_to_all_senders_returned_ms": stat(rows, ms("signed_to_sender_ack_us")),
+        "signed_to_first_sender_ack_ms": stat(rows, ms("signed_to_sender_ack_us")),
         "signed_to_first_landed_notification_ms": stat(rows, ms("signed_to_processed_us")),
         "signed_to_bot_final_ms": stat(rows, ms("signed_to_finalized_us")),
         "slots_to_land": stat(rows, |r| r["slots_to_land"].as_f64()),
+        "same_slot_share": same_slot_share(rows),
+        "block_position_pct": stat(rows, |r| r["block_position_pct"].as_f64()),
         "fee_lamports": stat(rows, |r| r["fee_lamports"].as_f64()),
         "tip_lamports": stat(rows, |r| r["tip_lamports"].as_f64()),
         "by_provider": by_provider,
+        "by_route": group_stats(rows, "route"),
+        "by_leader_region": group_stats(rows, "leader_region"),
     })
+}
+
+/// Share of landed trades whose landing slot equals the slot we saw at submit.
+fn same_slot_share(rows: &[serde_json::Value]) -> serde_json::Value {
+    let v: Vec<u64> = rows
+        .iter()
+        .filter_map(|r| r["slots_to_land"].as_u64())
+        .collect();
+    if v.is_empty() {
+        return json!(null);
+    }
+    json!((v.iter().filter(|x| **x == 0).count() as f64 / v.len() as f64 * 1000.0).round() / 1000.0)
+}
+
+/// The landing metrics, split by the string value of `key` in each row.
+fn group_stats(rows: &[serde_json::Value], key: &str) -> serde_json::Value {
+    let groups: std::collections::BTreeSet<String> = rows
+        .iter()
+        .filter_map(|r| r[key].as_str().map(str::to_string))
+        .collect();
+    let mut out = serde_json::Map::new();
+    for g in groups {
+        let sub: Vec<serde_json::Value> = rows
+            .iter()
+            .filter(|r| r[key].as_str() == Some(g.as_str()))
+            .cloned()
+            .collect();
+        out.insert(
+            g,
+            json!({
+                "trades": sub.len(),
+                "not_finalized": sub.iter().filter(|r| r["state"].as_str() != Some("FINALIZED")).count(),
+                "signed_to_first_sender_ack_ms": stat(&sub, |r| r["signed_to_sender_ack_us"].as_f64().map(|u| u / 1e3)),
+                "signed_to_first_landed_notification_ms": stat(&sub, |r| r["signed_to_processed_us"].as_f64().map(|u| u / 1e3)),
+                "slots_to_land": stat(&sub, |r| r["slots_to_land"].as_f64()),
+                "same_slot_share": same_slot_share(&sub),
+                "block_position_pct": stat(&sub, |r| r["block_position_pct"].as_f64()),
+            }),
+        );
+    }
+    json!(out)
 }
 
 #[cfg(test)]
@@ -1213,6 +1502,39 @@ mod tests {
     }
 
     #[test]
+    fn routes_parse_tips_and_regions() {
+        let fra = vec![jito_region_url("frankfurt")];
+        let r = parse_routes(
+            "tpu,jito; tpu,helius ;tpu,jito@frankfurt+ny",
+            &fra,
+            None,
+            false,
+        )
+        .unwrap();
+        assert_eq!(r.len(), 3);
+        assert_eq!(r[0].kinds, vec![SenderKind::Tpu, SenderKind::Jito]);
+        assert_eq!(r[0].tip, 1_000);
+        assert_eq!(r[0].jito_urls, fra);
+        assert_eq!(r[1].tip, trader_sender_rpc::HELIUS_SWQOS_MIN_TIP);
+        assert!(r[1].jito_urls.is_empty());
+        assert_eq!(
+            r[2].jito_urls,
+            vec![jito_region_url("frankfurt"), jito_region_url("ny")]
+        );
+        assert_eq!(
+            parse_routes("tpu", &fra, Some(5_000), false).unwrap()[0].tip,
+            0
+        );
+        assert!(parse_routes("tpu,jito,helius", &fra, None, false).is_err());
+        assert!(parse_routes("tpu,helius", &fra, Some(1_000), false).is_err());
+        assert!(parse_routes("tpu@ny", &fra, None, false).is_err());
+        assert!(parse_routes("foo", &fra, None, false).is_err());
+        assert!(parse_routes("tpu;tpu;tpu;tpu;tpu", &fra, None, false).is_err());
+        let auto = parse_routes("tpu,jito;tpu", &fra, None, true).unwrap();
+        assert!(auto[0].tip_auto && !auto[1].tip_auto);
+    }
+
+    #[test]
     fn summary_percentiles_nearest_rank() {
         let rows: Vec<serde_json::Value> = (1..=20)
             .map(|i| json!({"intent_to_signed_us": i * 1000, "providers": [{"provider": "p0:a", "signature_processed_ms_after_signed": i as f64}]}))
@@ -1226,6 +1548,26 @@ mod tests {
             s["by_provider"]["p0:a"]["signature_processed_ms"]["max"],
             20.0
         );
+    }
+
+    #[test]
+    fn route_groups_and_same_slot_share() {
+        let rows = vec![
+            json!({"route": "tpu,jito", "state": "FINALIZED", "slots_to_land": 0, "signed_to_processed_us": 150_000, "leader_region": "near(<20ms)"}),
+            json!({"route": "tpu,jito", "state": "FINALIZED", "slots_to_land": 1, "signed_to_processed_us": 250_000, "leader_region": "far(>=60ms)"}),
+            json!({"route": "tpu,helius", "state": "EXPIRED", "leader_region": "near(<20ms)"}),
+        ];
+        let s = summarize(&rows);
+        assert_eq!(s["same_slot_share"], 0.5);
+        let j = &s["by_route"]["tpu,jito"];
+        assert_eq!(j["trades"], 2);
+        assert_eq!(j["not_finalized"], 0);
+        assert_eq!(j["signed_to_first_landed_notification_ms"]["p50"], 150.0);
+        assert_eq!(s["by_route"]["tpu,helius"]["not_finalized"], 1);
+        assert_eq!(s["by_leader_region"]["near(<20ms)"]["trades"], 2);
+        assert_eq!(rtt_region(Some(5.0)), "near(<20ms)");
+        assert_eq!(rtt_region(Some(90.0)), "far(>=60ms)");
+        assert_eq!(rtt_region(None), "unknown");
     }
 
     #[test]

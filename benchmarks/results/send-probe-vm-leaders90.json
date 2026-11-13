@@ -1,0 +1,383 @@
+{
+  "generated_at": "2026-11-13T08:47:13.477687754+00:00",
+  "helius_sender_ping": {
+    "ams": {
+      "error": null,
+      "first_ms": 19.170745,
+      "reused": {
+        "max_ms": 7.4436279999999995,
+        "min_ms": 7.3221739999999995,
+        "n": 5,
+        "p50_ms": 7.358022
+      }
+    },
+    "fra": {
+      "error": null,
+      "first_ms": 5.090697,
+      "reused": {
+        "max_ms": 1.35081,
+        "min_ms": 1.3128,
+        "n": 5,
+        "p50_ms": 1.335583
+      }
+    }
+  },
+  "host": "",
+  "jito_get_tip_accounts": {
+    "amsterdam": {
+      "error": null,
+      "first_ms": 28.119059,
+      "reused": {
+        "max_ms": 7.563606,
+        "min_ms": 7.34764,
+        "n": 4,
+        "p50_ms": 7.486192
+      }
+    },
+    "frankfurt": {
+      "error": null,
+      "first_ms": 9.279951,
+      "reused": {
+        "max_ms": 2.458108,
+        "min_ms": 2.246378,
+        "n": 4,
+        "p50_ms": 2.4273730000000002
+      }
+    },
+    "ny": {
+      "error": null,
+      "first_ms": 266.583195,
+      "reused": {
+        "max_ms": 85.304213,
+        "min_ms": 85.166648,
+        "n": 4,
+        "p50_ms": 85.274653
+      }
+    },
+    "tokyo": {
+      "error": null,
+      "first_ms": 698.577542,
+      "reused": {
+        "max_ms": 243.676249,
+        "min_ms": 230.545425,
+        "n": 4,
+        "p50_ms": 230.731133
+      }
+    }
+  },
+  "kind": "send_probe",
+  "note": "read-only: no transaction sent; QUIC connections opened with a throwaway identity, nothing written",
+  "rpc_getslot": {
+    "first_ms": 13.545478,
+    "reused": {
+      "max_ms": 15.82382,
+      "min_ms": 11.157772999999999,
+      "n": 9,
+      "p50_ms": 13.326118
+    }
+  },
+  "rpc_host": "mainnet.helius-rpc.com",
+  "tpu_known_nodes": 3252,
+  "tpu_leaders": [
+    {
+      "error": null,
+      "handshake_ms": 30.814779,
+      "leader": "HaLanfo94ezLc3JZ55qqxr7W3qbe1PprJyv2uEtriEqN",
+      "tpu_quic": "88.216.192.50:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 2.206343,
+      "leader": "HEL1USMZKAL2odpNBj2oCjffnFGaYwmbGmyewGv1e2TU",
+      "tpu_quic": "64.130.57.134:8002"
+    },
+    {
+      "error": null,
+      "handshake_ms": 2.408557,
+      "leader": "23SUe5fzmLws1M58AnGnvnUBRUKJmzCpnFQwv4M4b9Er",
+      "tpu_quic": "198.13.140.227:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 4.249359999999999,
+      "leader": "6xWLi1TDSh65fWsSqE1zdvANTSuVDRMx4ghsGJwgunS8",
+      "tpu_quic": "164.152.161.197:11228"
+    },
+    {
+      "error": null,
+      "handshake_ms": 7.7924869999999995,
+      "leader": "FNKgX9dYUhYQFRTM9bkeKoRpsyEtZGNMxbdQLDzfqB8a",
+      "tpu_quic": "64.130.42.137:8002"
+    },
+    {
+      "error": null,
+      "handshake_ms": 7.383056,
+      "leader": "HbidP4hpQdwhkzrxder3x3VNPt6DQnE25gFG46napD2p",
+      "tpu_quic": "63.254.167.197:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 459.44201699999996,
+      "leader": "GYx8kpp7SsRwtQEEsGQjAxb4hFMMmT91kFJuDeky3YGQ",
+      "tpu_quic": "198.13.133.200:12495"
+    },
+    {
+      "error": null,
+      "handshake_ms": 86.058652,
+      "leader": "DRpbCBMxVnDK7maPM5tGv6MvB3v1sRMC86PZ8okm21hy",
+      "tpu_quic": "208.91.105.53:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 20.163012000000002,
+      "leader": "PKdLMugp1Mf88Ji1GkdqRDBewaUh2cqg79CBEo6eJoQ",
+      "tpu_quic": "92.42.110.111:9007"
+    },
+    {
+      "error": null,
+      "handshake_ms": 13.029596,
+      "leader": "ana2y2YvQ3ZPMwm6qhnN3nJoUSiT3qx5Pvetkq9xcfY",
+      "tpu_quic": "45.32.145.112:8002"
+    },
+    {
+      "error": null,
+      "handshake_ms": 7.288450999999999,
+      "leader": "GBQ2GvTzmjXMu97dr7WUnLKYTNim1aoZsYS53KYXAAAA",
+      "tpu_quic": "63.254.167.197:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 1.950454,
+      "leader": "CMPSSdrTnRQBiBGTyFpdCc3VMNuLWYWaSkE8Zh5z6gbd",
+      "tpu_quic": "198.13.140.227:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 7.439165999999999,
+      "leader": "5pPRHniefFjkiaArbGX3Y8NUysJmQ9tMZg3FrFGwHzSm",
+      "tpu_quic": "188.42.129.244:11228"
+    },
+    {
+      "error": null,
+      "handshake_ms": 13.66567,
+      "leader": "2m1A2WM1vte7RWz5xTTw4i1SiXmngVtXhqFERaUjoAAb",
+      "tpu_quic": "63.254.166.232:12350"
+    },
+    {
+      "error": null,
+      "handshake_ms": 229.60262,
+      "leader": "G9vCpJUUSpEm4zPwzSNpDmZ8MGwLEbiSLV59EBzCGvzM",
+      "tpu_quic": "63.254.163.37:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 1.890045,
+      "leader": "qZMH9GWnnBkx7aM1h98iKSv2Lz5N78nwNSocAxDQrbP",
+      "tpu_quic": "198.13.140.227:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 7.031185,
+      "leader": "76rcGHdPvgs8G1XrzCXUTWtwgT59AFDvpB4VbTS2TBBJ",
+      "tpu_quic": "63.254.167.197:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 30.010375999999997,
+      "leader": "CwyVpfmfSiMeCexi3JgUNvaiDfYN14cLDjzT99zcBuD2",
+      "tpu_quic": "88.216.192.50:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 12.938084,
+      "leader": "GoeW4aFK4dGoekJySgUynWDxBZiQJqm8GDAF4H53tDK9",
+      "tpu_quic": "63.254.166.232:12493"
+    },
+    {
+      "error": null,
+      "handshake_ms": 23.574679,
+      "leader": "8gDfqHXZ5ektqQQrLrCGtSzYRwkWQrm3ANnAvQCt2LoM",
+      "tpu_quic": "64.130.46.242:12590"
+    },
+    {
+      "error": null,
+      "handshake_ms": 2.283219,
+      "leader": "Awes4Tr6TX8JDzEhCZY2QVNimT6iD1zWHzf1vNyGvpLM",
+      "tpu_quic": "198.13.140.105:12351"
+    },
+    {
+      "error": null,
+      "handshake_ms": 29.964119,
+      "leader": "HpcB5Qg8Y9E73dUkot5e8HkgAJbExsYeUzniY4bCuKac",
+      "tpu_quic": "88.216.192.50:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 6.824464,
+      "leader": "GSTampk6BJRKSDkzhaMM49R7qRx98MTPYYWvKbp83XKc",
+      "tpu_quic": "63.254.167.197:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 175.101839,
+      "leader": "JD549HsbJHeEKKUrKgg4Fj2iyv2RGjsV7NTZjZUrHybB",
+      "tpu_quic": "86.54.153.246:9007"
+    },
+    {
+      "error": null,
+      "handshake_ms": 6.889775,
+      "leader": "6TkKqq15wXjqEjNg9zqTKADwuVATR9dW3rkNnsYme1ea",
+      "tpu_quic": "63.254.167.197:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 24.358951,
+      "leader": "9eGrDohdNTAo61DRHyfMuqKWXqYnA3i254Wiszxe8FoY",
+      "tpu_quic": "86.54.152.246:9007"
+    },
+    {
+      "error": null,
+      "handshake_ms": 169.54214100000002,
+      "leader": "EATpCzQNs8BzZh1mx1hXMAJm3o1MLXakTXr4UEmcsY7f",
+      "tpu_quic": "64.130.45.196:12471"
+    },
+    {
+      "error": null,
+      "handshake_ms": 2.7995,
+      "leader": "bay3wXfJsu9ds1zQBoQQ4DUwFGs3NP6q4gca9WM5G1z",
+      "tpu_quic": "198.13.140.227:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 24.622897000000002,
+      "leader": "FBKFWadXZJahGtFitAsBvbqh5968gLY7dMBBJUoUjeNi",
+      "tpu_quic": "64.130.46.242:12326"
+    },
+    {
+      "error": null,
+      "handshake_ms": 24.25626,
+      "leader": "CW9C7HBwAMgqNdXkNgFg9Ujr3edR2Ab9ymEuQnVacd1A",
+      "tpu_quic": "64.130.46.242:12317"
+    },
+    {
+      "error": null,
+      "handshake_ms": 23.634623,
+      "leader": "FbYX2uN573G5WsgiPdHU6fS5PNUyjdXfGfpZNkYUuT4k",
+      "tpu_quic": "185.189.44.171:12002"
+    },
+    {
+      "error": null,
+      "handshake_ms": 13.392646,
+      "leader": "AMukCLCr52XxsEjXoDxKKxjNg4FpnsReXNaQx8aR6DJF",
+      "tpu_quic": "63.254.166.232:12425"
+    },
+    {
+      "error": null,
+      "handshake_ms": 2.11151,
+      "leader": "JUPiTERkf97eKN222JwY7bkpWuJnwqKtT44fsbJfhkr",
+      "tpu_quic": "198.13.140.105:12579"
+    },
+    {
+      "error": null,
+      "handshake_ms": 25.898334,
+      "leader": "3KNGMiXwhy2CAWVNpLoUt25sNngFnX1mZpaiEeVccBA6",
+      "tpu_quic": "195.14.6.38:8003"
+    },
+    {
+      "error": null,
+      "handshake_ms": 229.462667,
+      "leader": "6xFDLX751L7H9d5fQT9sf2SM5RWWE9LDgqz25pPDbWoJ",
+      "tpu_quic": "63.254.163.37:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 7.1283129999999995,
+      "leader": "22rU5yUmdVThrkoPieVNphqEyAtMQKmZxjwcD8v4bJDU",
+      "tpu_quic": "63.254.167.197:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 8.281992,
+      "leader": "ChorusmmK7i1AxXeiTtQgQZhQNiXYU84ULeaYF1EH15n",
+      "tpu_quic": "185.229.190.123:11228"
+    },
+    {
+      "error": null,
+      "handshake_ms": 2.339423,
+      "leader": "C8Bey3LKVJHVqN6xPTeW8WJfUgFQAeGNBpT4Rp99JP1k",
+      "tpu_quic": "162.19.222.40:8022"
+    },
+    {
+      "error": null,
+      "handshake_ms": 6.923847,
+      "leader": "ACvL73V4GNnxPVfZ7K89jCrYurLyzpEuE9qirjvh2Xmi",
+      "tpu_quic": "188.42.130.84:11228"
+    },
+    {
+      "error": null,
+      "handshake_ms": 1.5723930000000002,
+      "leader": "9jxgosAfHgHzwnxsHw4RAZYaLVokMbnYtmiZBreynGFP",
+      "tpu_quic": "198.13.140.227:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 2.790751,
+      "leader": "Fd7btgySsrjuo25CJCj7oE7VPMyezDhnx7pZkj2v69Nk",
+      "tpu_quic": "198.13.140.105:12341"
+    },
+    {
+      "error": null,
+      "handshake_ms": 302.539633,
+      "leader": "EUDis6LJeJzDHTEBgfHGQyjHp63XZkGkx4E69xunC2Ej",
+      "tpu_quic": "198.13.130.10:12472"
+    },
+    {
+      "error": null,
+      "handshake_ms": 1.9548030000000003,
+      "leader": "AX1PTWsdzFiPcJoXGs4G2bvbWBidKqv5xzGvCPV9xjg9",
+      "tpu_quic": "70.40.185.197:8002"
+    },
+    {
+      "error": null,
+      "handshake_ms": 7.496672,
+      "leader": "ALp2GdA1eJV8vZHMHazCtTxNXe3BLUSco9LDASgjDs8R",
+      "tpu_quic": "84.32.103.226:9007"
+    },
+    {
+      "error": null,
+      "handshake_ms": 12.891007,
+      "leader": "5VrW7YNBccVnhnZVmooCePdLFcs2UjfxRT3hoY9mN8Ec",
+      "tpu_quic": "64.130.46.11:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 24.903964000000002,
+      "leader": "7jtWrBuj9k2E5RnoHGWSBosBwqwjZMvEnhe9qGLJdhT4",
+      "tpu_quic": "64.130.46.242:12581"
+    },
+    {
+      "error": null,
+      "handshake_ms": 154.274727,
+      "leader": "5zuNci3TV79w6zLoJZzbZujMvkVZb2FcSPhgv9aT24AK",
+      "tpu_quic": "198.13.131.139:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 6.898333,
+      "leader": "5essVpBYvocZkQnkrWsMDfRPwtp4BeihJRaweKLR4dRn",
+      "tpu_quic": "63.254.167.197:5010"
+    },
+    {
+      "error": null,
+      "handshake_ms": 2.5760829999999997,
+      "leader": "C7NL6J5xomARQB2D6msN9ntLy91ykCLpjvPHmzTUJLbY",
+      "tpu_quic": "162.19.222.170:8022"
+    }
+  ],
+  "tpu_quic_handshake": {
+    "max_ms": 459.44201699999996,
+    "min_ms": 1.5723930000000002,
+    "n": 49,
+    "p50_ms": 8.281992
+  }
+}

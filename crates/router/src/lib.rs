@@ -263,6 +263,44 @@ impl Router {
         Ok(RoutePlan { senders, tip })
     }
 
+    /// Send the same bytes to every sender concurrently, but return as soon as
+    /// one attempt may have forwarded the transaction (or every attempt has
+    /// finished). Slower senders keep running; their attempts arrive on the
+    /// returned [`FanOutRest`]. A slow or unreachable route (cold QUIC handshake
+    /// to a far leader, a stalled HTTP endpoint) therefore never delays tracking
+    /// of a transaction that another route already delivered.
+    ///
+    /// Safety is the same as [`Router::fan_out`]: `NothingForwarded` can only be
+    /// concluded when the returned set holds every attempt (rest is empty).
+    pub async fn fan_out_first(
+        plan: &RoutePlan,
+        wire: &[u8],
+        ctx: &SendContext,
+    ) -> (Vec<SendAttempt>, FanOutRest) {
+        let origin = Instant::now();
+        let wire: Arc<[u8]> = Arc::from(wire);
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        for s in &plan.senders {
+            let (s, w, c, tx) = (s.clone(), wire.clone(), ctx.clone(), tx.clone());
+            tokio::spawn(async move {
+                let a = s.submit_tracked(&w, &c, origin).await;
+                let _ = tx.send(a);
+            });
+        }
+        drop(tx);
+        let total = plan.senders.len();
+        let mut got = vec![];
+        while let Some(a) = rx.recv().await {
+            let forwarded = a.outcome.possibly_forwarded();
+            got.push(a);
+            if forwarded {
+                break;
+            }
+        }
+        let remaining = total - got.len();
+        (got, FanOutRest { rx, remaining })
+    }
+
     /// Send the same bytes to every sender in the plan concurrently.
     pub async fn fan_out(plan: &RoutePlan, wire: &[u8], ctx: &SendContext) -> Vec<SendAttempt> {
         let origin = Instant::now();
@@ -272,6 +310,26 @@ impl Router {
                 .map(|s| s.submit_tracked(wire, ctx, origin)),
         )
         .await
+    }
+}
+
+/// Attempts still running after [`Router::fan_out_first`] returned.
+pub struct FanOutRest {
+    rx: tokio::sync::mpsc::UnboundedReceiver<SendAttempt>,
+    remaining: usize,
+}
+
+impl FanOutRest {
+    pub fn remaining(&self) -> usize {
+        self.remaining
+    }
+    /// Wait for the remaining attempts (each is bounded by its sender timeout).
+    pub async fn collect(mut self) -> Vec<SendAttempt> {
+        let mut v = Vec::with_capacity(self.remaining);
+        while let Some(a) = self.rx.recv().await {
+            v.push(a);
+        }
+        v
     }
 }
 
@@ -339,6 +397,84 @@ mod tests {
         let jito = at.iter().find(|x| x.sender == SenderKind::Jito).unwrap();
         assert!(matches!(jito.outcome, SendOutcome::Ambiguous { .. }));
         assert_eq!(verdict(&at), FanOutVerdict::PossiblyInFlight);
+    }
+
+    fn router_of(senders: Vec<(Arc<MockSender>, Duration)>) -> Router {
+        let mut r = Router::new();
+        for (s, t) in senders {
+            r.add(ManagedSender::new(s, t, None));
+        }
+        r
+    }
+
+    #[tokio::test]
+    async fn fan_out_first_returns_on_first_forward_and_keeps_the_rest() {
+        let fast = Arc::new(MockSender::new(SenderKind::Rpc, MockBehavior::Accept));
+        let slow = Arc::new(MockSender::new(
+            SenderKind::Tpu,
+            MockBehavior::Delay(Duration::from_millis(400)),
+        ));
+        let r = router_of(vec![
+            (fast.clone(), Duration::from_secs(2)),
+            (slow.clone(), Duration::from_secs(2)),
+        ]);
+        let plan = r.plan(&[SenderKind::Rpc, SenderKind::Tpu], 0, 0).unwrap();
+        let t = Instant::now();
+        let (first, rest) = Router::fan_out_first(&plan, &[7], &ctx()).await;
+        assert!(
+            t.elapsed() < Duration::from_millis(300),
+            "did not wait for the slow sender"
+        );
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].sender, SenderKind::Rpc);
+        assert_eq!(verdict(&first), FanOutVerdict::PossiblyInFlight);
+        assert_eq!(rest.remaining(), 1);
+        let late = rest.collect().await;
+        assert_eq!(late.len(), 1);
+        assert_eq!(late[0].sender, SenderKind::Tpu);
+        assert!(late[0].outcome.is_success());
+        assert_eq!(
+            slow.received(),
+            vec![vec![7u8]],
+            "same bytes still delivered"
+        );
+    }
+
+    #[tokio::test]
+    async fn fan_out_first_waits_past_a_refusal_and_for_all_refusals() {
+        // A refusal does not end the wait: the slower sender forwards.
+        let no = Arc::new(MockSender::new(
+            SenderKind::Rpc,
+            MockBehavior::Reject("x".into()),
+        ));
+        let slow = Arc::new(MockSender::new(
+            SenderKind::Tpu,
+            MockBehavior::Delay(Duration::from_millis(100)),
+        ));
+        let r = router_of(vec![
+            (no.clone(), Duration::from_secs(2)),
+            (slow.clone(), Duration::from_secs(2)),
+        ]);
+        let plan = r.plan(&[SenderKind::Rpc, SenderKind::Tpu], 0, 0).unwrap();
+        let (got, rest) = Router::fan_out_first(&plan, &[1], &ctx()).await;
+        assert_eq!(got.len(), 2);
+        assert_eq!(rest.remaining(), 0);
+        assert_eq!(verdict(&got), FanOutVerdict::PossiblyInFlight);
+        // Every sender refused: all attempts are in hand before NothingForwarded.
+        let a = Arc::new(MockSender::new(
+            SenderKind::Rpc,
+            MockBehavior::Reject("a".into()),
+        ));
+        let b = Arc::new(MockSender::new(SenderKind::Tpu, MockBehavior::RateLimited));
+        let r = router_of(vec![
+            (a, Duration::from_secs(1)),
+            (b, Duration::from_secs(1)),
+        ]);
+        let plan = r.plan(&[SenderKind::Rpc, SenderKind::Tpu], 0, 0).unwrap();
+        let (got, rest) = Router::fan_out_first(&plan, &[1], &ctx()).await;
+        assert_eq!(got.len(), 2);
+        assert_eq!(rest.remaining(), 0);
+        assert_eq!(verdict(&got), FanOutVerdict::NothingForwarded);
     }
 
     #[tokio::test]

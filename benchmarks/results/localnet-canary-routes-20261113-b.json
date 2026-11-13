@@ -1,0 +1,771 @@
+{
+  "failure": null,
+  "generated_at": "2026-11-13T08:44:15.918228100+00:00",
+  "kind": "mainnet_pump_canary",
+  "mode": "send",
+  "network": "localnet",
+  "plan": {
+    "buy_lamports_per_iteration": 120000,
+    "cu_price_micro_lamports": 1000000,
+    "est_fee_per_tx_lamports": 105000,
+    "est_max_loss_lamports_excl_rent": 868800,
+    "iterations": 4,
+    "jito_regions": [],
+    "min_wallet_balance_needed_lamports": 2189680,
+    "mint": "EemJZWrRaJhRqncfm3vHWRnsthBiDqypbrpnNkmzxCzD",
+    "mode": "SEND (real transactions)",
+    "network": "localnet",
+    "providers": [
+      "127.0.0.1"
+    ],
+    "rent_lamports_per_byte": 6960,
+    "rent_locked_if_new_lamports": 0,
+    "rent_note": "token account + Pump user_volume_accumulator rent stays in those accounts (recoverable by closing them; not automated yet)",
+    "route_assignment": "round trip i uses route i % routes",
+    "routes": [
+      {
+        "jito_hosts": [],
+        "route": "rpc",
+        "tip_lamports": 0
+      },
+      {
+        "jito_hosts": [],
+        "route": "rpc,tpu",
+        "tip_lamports": 0
+      }
+    ],
+    "rpc_host": "127.0.0.1",
+    "senders": [
+      "rpc",
+      "rpc,tpu"
+    ],
+    "tip_lamports_per_tx": 0,
+    "tip_mode": "fixed",
+    "token_program": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "tpu_leaders": 3,
+    "wallet": "8gatPQf3d9F5H4NEoMhq7kqj4i7AkezgETYjUE2vMHRM",
+    "wallet_sol_lamports": 1995229660,
+    "websocket": true
+  },
+  "rows": [
+    {
+      "block_index": null,
+      "block_position_pct": null,
+      "block_tx_count": null,
+      "compute_units_consumed": 58325,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 1000000,
+      "explorer": null,
+      "fee_lamports": 105000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 758,
+      "iteration": 0,
+      "landed_slot": 826,
+      "leader": "2TPe86ppA3MSsWZiLCCRk6CGCAyQZsk4awZ3UuNF4KDR",
+      "leader_region": "unknown",
+      "leader_rtt_ms": null,
+      "leader_tpu": "127.0.0.1:8002",
+      "order_id": "354f4962-f7e0-45af-9abd-d44d7826cd8e",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 277.92879999999997,
+            "createdBank": -131.1265,
+            "frozen": 277.22180000000003,
+            "optimisticConfirmation": 301.90630000000004,
+            "root": 13763.3257
+          },
+          "landed_slot_first_seen_ms_after_signed": -131.1405,
+          "provider": "p0:127.0.0.1",
+          "signature_processed_ms_after_signed": 277.4277,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "423728400953",
+      "quote_min_out": "402541980905",
+      "reject_reason": null,
+      "route": "rpc",
+      "send_slot": 826,
+      "send_slot_leader": "2TPe86ppA3MSsWZiLCCRk6CGCAyQZsk4awZ3UuNF4KDR",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "rpc:127.0.0.1",
+          "latency_us": 2922,
+          "outcome": "accepted",
+          "sender": "rpc"
+        }
+      ],
+      "side": "buy",
+      "signature": "3MeTtsGyPLmv6H33zxA5tbJdkWi9LaCMCRQk8UHdjTyHaghMn8fWyHqitq5gpi5X63YGZu7nUyorT4uTgZ8ACKdp",
+      "signed_to_finalized_us": 13929017,
+      "signed_to_processed_us": 277427,
+      "signed_to_sender_ack_us": 3005,
+      "slots_to_land": 0,
+      "sol_delta": "-225000",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 0,
+      "token_delta": "423728400953"
+    },
+    {
+      "block_index": null,
+      "block_position_pct": null,
+      "block_tx_count": null,
+      "compute_units_consumed": 45743,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 1000000,
+      "explorer": null,
+      "fee_lamports": 105000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 348,
+      "iteration": 0,
+      "landed_slot": 861,
+      "leader": "2TPe86ppA3MSsWZiLCCRk6CGCAyQZsk4awZ3UuNF4KDR",
+      "leader_region": "unknown",
+      "leader_rtt_ms": null,
+      "leader_tpu": "127.0.0.1:8002",
+      "order_id": "6813f978-46b7-4d69-ab2e-0b89fa4fdb3d",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 286.2693,
+            "createdBank": -122.7998,
+            "frozen": 284.1242,
+            "optimisticConfirmation": 308.9846,
+            "root": 13757.0308
+          },
+          "landed_slot_first_seen_ms_after_signed": -122.8109,
+          "provider": "p0:127.0.0.1",
+          "signature_processed_ms_after_signed": 284.5062,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "117035",
+      "quote_min_out": "111183",
+      "reject_reason": null,
+      "route": "rpc",
+      "send_slot": 861,
+      "send_slot_leader": "2TPe86ppA3MSsWZiLCCRk6CGCAyQZsk4awZ3UuNF4KDR",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "rpc:127.0.0.1",
+          "latency_us": 1027,
+          "outcome": "accepted",
+          "sender": "rpc"
+        }
+      ],
+      "side": "sell",
+      "signature": "2dgFFoB2eTxK11so8kgGNotC53nB2ce5JRsAqEEkrKdTyN6nBmmJFW6wudtgHNVMeDatxraHpgWMNeCJMnk15kQ7",
+      "signed_to_finalized_us": 13973191,
+      "signed_to_processed_us": 284506,
+      "signed_to_sender_ack_us": 1079,
+      "slots_to_land": 0,
+      "sol_delta": "12035",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 0,
+      "token_delta": "-423728400953"
+    },
+    {
+      "block_index": null,
+      "block_position_pct": null,
+      "block_tx_count": null,
+      "compute_units_consumed": 58325,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 1000000,
+      "explorer": null,
+      "fee_lamports": 105000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 464,
+      "iteration": 1,
+      "landed_slot": 896,
+      "leader": "2TPe86ppA3MSsWZiLCCRk6CGCAyQZsk4awZ3UuNF4KDR",
+      "leader_region": "unknown",
+      "leader_rtt_ms": null,
+      "leader_tpu": "127.0.0.1:8002",
+      "order_id": "f378bb02-0d9c-44c7-b201-ccc63b14c9e0",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 144.9627,
+            "createdBank": -264.6792,
+            "frozen": 143.4759,
+            "optimisticConfirmation": 168.0484,
+            "root": 13577.7855
+          },
+          "landed_slot_first_seen_ms_after_signed": -264.6998,
+          "provider": "p0:127.0.0.1",
+          "signature_processed_ms_after_signed": 143.6418,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "423728399542",
+      "quote_min_out": "402541979564",
+      "reject_reason": null,
+      "route": "rpc,tpu",
+      "send_slot": 896,
+      "send_slot_leader": "2TPe86ppA3MSsWZiLCCRk6CGCAyQZsk4awZ3UuNF4KDR",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "rpc:127.0.0.1",
+          "latency_us": 1164,
+          "outcome": "accepted",
+          "sender": "rpc"
+        },
+        {
+          "endpoint": "tpu-quic:leaders3",
+          "latency_us": 1514398,
+          "outcome": "not_sent",
+          "sender": "tpu"
+        }
+      ],
+      "side": "buy",
+      "signature": "4QWizaqtrBpZFfmNUX3DBCy3LbwqUWeWYseWqkE1viyNLUvDVFCFH7SNJqeCnJ9kSdVVbBSjkHD4PhP14kdjiZpY",
+      "signed_to_finalized_us": 13911608,
+      "signed_to_processed_us": 143642,
+      "signed_to_sender_ack_us": 1220,
+      "slots_to_land": 0,
+      "sol_delta": "-225000",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 0,
+      "token_delta": "423728399542"
+    },
+    {
+      "block_index": null,
+      "block_position_pct": null,
+      "block_tx_count": null,
+      "compute_units_consumed": 45743,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 1000000,
+      "explorer": null,
+      "fee_lamports": 105000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 432,
+      "iteration": 1,
+      "landed_slot": 932,
+      "leader": "2TPe86ppA3MSsWZiLCCRk6CGCAyQZsk4awZ3UuNF4KDR",
+      "leader_region": "unknown",
+      "leader_rtt_ms": null,
+      "leader_tpu": "127.0.0.1:8002",
+      "order_id": "6eb72608-562f-4eb8-83ba-863f29f06ee7",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 427.0335,
+            "createdBank": 16.1038,
+            "frozen": 424.2918,
+            "optimisticConfirmation": 449.2583,
+            "root": 13861.6308
+          },
+          "landed_slot_first_seen_ms_after_signed": 16.0797,
+          "provider": "p0:127.0.0.1",
+          "signature_processed_ms_after_signed": 424.5475,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "117035",
+      "quote_min_out": "111183",
+      "reject_reason": null,
+      "route": "rpc,tpu",
+      "send_slot": 931,
+      "send_slot_leader": "2TPe86ppA3MSsWZiLCCRk6CGCAyQZsk4awZ3UuNF4KDR",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "rpc:127.0.0.1",
+          "latency_us": 1155,
+          "outcome": "accepted",
+          "sender": "rpc"
+        },
+        {
+          "endpoint": "tpu-quic:leaders3",
+          "latency_us": 1501928,
+          "outcome": "not_sent",
+          "sender": "tpu"
+        }
+      ],
+      "side": "sell",
+      "signature": "5WPW69tvDhVuHRWdmsmAEuHJj5SRW8NBQ8vqRVGYfBtLzgUJqfHzm28WhhPgjXg4NCHUyEmek9vtA8T8Pf1FWkqv",
+      "signed_to_finalized_us": 14112192,
+      "signed_to_processed_us": 424548,
+      "signed_to_sender_ack_us": 1222,
+      "slots_to_land": 1,
+      "sol_delta": "12035",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 0,
+      "token_delta": "-423728399542"
+    },
+    {
+      "block_index": null,
+      "block_position_pct": null,
+      "block_tx_count": null,
+      "compute_units_consumed": 58325,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 1000000,
+      "explorer": null,
+      "fee_lamports": 105000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 402,
+      "iteration": 2,
+      "landed_slot": 967,
+      "leader": "2TPe86ppA3MSsWZiLCCRk6CGCAyQZsk4awZ3UuNF4KDR",
+      "leader_region": "unknown",
+      "leader_rtt_ms": null,
+      "leader_tpu": "127.0.0.1:8002",
+      "order_id": "a98a2aa6-454d-4791-a284-290f00f7991f",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 104.1044,
+            "createdBank": -304.2045,
+            "frozen": 103.5034,
+            "optimisticConfirmation": 128.1062,
+            "root": 13548.0961
+          },
+          "landed_slot_first_seen_ms_after_signed": -304.2158,
+          "provider": "p0:127.0.0.1",
+          "signature_processed_ms_after_signed": 103.5262,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "423728398130",
+      "quote_min_out": "402541978223",
+      "reject_reason": null,
+      "route": "rpc",
+      "send_slot": 967,
+      "send_slot_leader": "2TPe86ppA3MSsWZiLCCRk6CGCAyQZsk4awZ3UuNF4KDR",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "rpc:127.0.0.1",
+          "latency_us": 1209,
+          "outcome": "accepted",
+          "sender": "rpc"
+        }
+      ],
+      "side": "buy",
+      "signature": "31fAJGcPpfqvLDs5CHfPnoGa36vTtJs9dGeqk3c2Dsh9MJhr2ocE6k7QS4knfwN8bF8oKmN8EyEfJj75KTK3s3PL",
+      "signed_to_finalized_us": 13825532,
+      "signed_to_processed_us": 103526,
+      "signed_to_sender_ack_us": 1316,
+      "slots_to_land": 0,
+      "sol_delta": "-225000",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 0,
+      "token_delta": "423728398130"
+    },
+    {
+      "block_index": null,
+      "block_position_pct": null,
+      "block_tx_count": null,
+      "compute_units_consumed": 45743,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 1000000,
+      "explorer": null,
+      "fee_lamports": 105000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 904,
+      "iteration": 2,
+      "landed_slot": 1002,
+      "leader": "2TPe86ppA3MSsWZiLCCRk6CGCAyQZsk4awZ3UuNF4KDR",
+      "leader_region": "unknown",
+      "leader_rtt_ms": null,
+      "leader_tpu": "127.0.0.1:8002",
+      "order_id": "3ffba1fb-074e-470a-8b22-a6cd204fd609",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 159.8104,
+            "createdBank": -250.33100000000002,
+            "frozen": 157.9076,
+            "optimisticConfirmation": 160.7406,
+            "root": 13604.428199999998
+          },
+          "landed_slot_first_seen_ms_after_signed": -250.3458,
+          "provider": "p0:127.0.0.1",
+          "signature_processed_ms_after_signed": 158.26770000000002,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "117035",
+      "quote_min_out": "111183",
+      "reject_reason": null,
+      "route": "rpc",
+      "send_slot": 1002,
+      "send_slot_leader": "2TPe86ppA3MSsWZiLCCRk6CGCAyQZsk4awZ3UuNF4KDR",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "rpc:127.0.0.1",
+          "latency_us": 1400,
+          "outcome": "accepted",
+          "sender": "rpc"
+        }
+      ],
+      "side": "sell",
+      "signature": "QrZ1WcmEH1MBcSZwsMzVCyszKixkezDrDWL7c5ncFuVNZCgfVBAsH7fS7GeusvN4E7wumWEAHhyAoW6yeMKHxJR",
+      "signed_to_finalized_us": 13829265,
+      "signed_to_processed_us": 158267,
+      "signed_to_sender_ack_us": 1495,
+      "slots_to_land": 0,
+      "sol_delta": "12035",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 0,
+      "token_delta": "-423728398130"
+    },
+    {
+      "block_index": 1,
+      "block_position_pct": 50.0,
+      "block_tx_count": 2,
+      "compute_units_consumed": 58325,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 1000000,
+      "explorer": null,
+      "fee_lamports": 105000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 513,
+      "iteration": 3,
+      "landed_slot": 1037,
+      "leader": "2TPe86ppA3MSsWZiLCCRk6CGCAyQZsk4awZ3UuNF4KDR",
+      "leader_region": "unknown",
+      "leader_rtt_ms": null,
+      "leader_tpu": "127.0.0.1:8002",
+      "order_id": "1be6c636-d4c3-4dce-bbbf-cb885a3b2cb1",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 201.39280000000002,
+            "createdBank": -208.5216,
+            "frozen": 201.30190000000002,
+            "optimisticConfirmation": 217.8963,
+            "root": 13647.5393
+          },
+          "landed_slot_first_seen_ms_after_signed": -208.534,
+          "provider": "p0:127.0.0.1",
+          "signature_processed_ms_after_signed": 201.3613,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "423728396718",
+      "quote_min_out": "402541976882",
+      "reject_reason": null,
+      "route": "rpc,tpu",
+      "send_slot": 1037,
+      "send_slot_leader": "2TPe86ppA3MSsWZiLCCRk6CGCAyQZsk4awZ3UuNF4KDR",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "rpc:127.0.0.1",
+          "latency_us": 1202,
+          "outcome": "accepted",
+          "sender": "rpc"
+        },
+        {
+          "endpoint": "tpu-quic:leaders3",
+          "latency_us": 1509547,
+          "outcome": "not_sent",
+          "sender": "tpu"
+        }
+      ],
+      "side": "buy",
+      "signature": "4bYnCkPTzLCf4DC4eqzVozRNgEtuMvgH92wBYRSCLeosSMG2gXBJnzjhXC7Ym3gJ2rN1pPYvd9XTTFrajq8x1uJF",
+      "signed_to_finalized_us": 13892074,
+      "signed_to_processed_us": 201361,
+      "signed_to_sender_ack_us": 1273,
+      "slots_to_land": 0,
+      "sol_delta": "-225000",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 0,
+      "token_delta": "423728396718"
+    },
+    {
+      "block_index": 1,
+      "block_position_pct": 50.0,
+      "block_tx_count": 2,
+      "compute_units_consumed": 45743,
+      "cu_price_auto": null,
+      "cu_price_micro_lamports": 1000000,
+      "explorer": null,
+      "fee_lamports": 105000,
+      "independently_verified_balances": true,
+      "intent_to_signed_us": 324,
+      "iteration": 3,
+      "landed_slot": 1072,
+      "leader": "2TPe86ppA3MSsWZiLCCRk6CGCAyQZsk4awZ3UuNF4KDR",
+      "leader_region": "unknown",
+      "leader_rtt_ms": null,
+      "leader_tpu": "127.0.0.1:8002",
+      "order_id": "f2dde21d-f9a0-460c-91d1-668bc11dc4dd",
+      "providers": [
+        {
+          "landed_slot_events_ms_after_signed": {
+            "completed": 126.2477,
+            "createdBank": -282.00530000000003,
+            "frozen": 126.1546,
+            "optimisticConfirmation": 150.13979999999998,
+            "root": 13570.516
+          },
+          "landed_slot_first_seen_ms_after_signed": -282.0217,
+          "provider": "p0:127.0.0.1",
+          "signature_processed_ms_after_signed": 126.1624,
+          "slot_updates_supported": true
+        }
+      ],
+      "quote_expected_out": "117035",
+      "quote_min_out": "111183",
+      "reject_reason": null,
+      "route": "rpc,tpu",
+      "send_slot": 1072,
+      "send_slot_leader": "2TPe86ppA3MSsWZiLCCRk6CGCAyQZsk4awZ3UuNF4KDR",
+      "send_slot_source": "ws",
+      "senders": [
+        {
+          "endpoint": "rpc:127.0.0.1",
+          "latency_us": 1159,
+          "outcome": "accepted",
+          "sender": "rpc"
+        },
+        {
+          "endpoint": "tpu-quic:leaders3",
+          "latency_us": 1502064,
+          "outcome": "not_sent",
+          "sender": "tpu"
+        }
+      ],
+      "side": "sell",
+      "signature": "48VRBj5GNyNHGJWrmLjN4bGQsYzJRah76hZVgK6ou9aGkQuRiohqYtn8TnadzoVBbMFxfTyDDPxvc7xZU9jpc52N",
+      "signed_to_finalized_us": 13813216,
+      "signed_to_processed_us": 126163,
+      "signed_to_sender_ack_us": 1276,
+      "slots_to_land": 0,
+      "sol_delta": "12035",
+      "state": "FINALIZED",
+      "tip_auto": null,
+      "tip_lamports": 0,
+      "token_delta": "-423728396718"
+    }
+  ],
+  "rpc_providers": [
+    {
+      "errors": 6,
+      "host": "127.0.0.1",
+      "ok": 708,
+      "rate_limited": 0
+    }
+  ],
+  "simulations": [],
+  "summary": {
+    "block_position_pct": {
+      "max": 50.0,
+      "min": 50.0,
+      "n": 2,
+      "p50": 50.0,
+      "p95": 50.0,
+      "p99": 50.0
+    },
+    "by_leader_region": {
+      "unknown": {
+        "block_position_pct": {
+          "max": 50.0,
+          "min": 50.0,
+          "n": 2,
+          "p50": 50.0,
+          "p95": 50.0,
+          "p99": 50.0
+        },
+        "not_finalized": 0,
+        "same_slot_share": 0.875,
+        "signed_to_first_landed_notification_ms": {
+          "max": 424.548,
+          "min": 103.526,
+          "n": 8,
+          "p50": 158.267,
+          "p95": 424.548,
+          "p99": 424.548
+        },
+        "signed_to_first_sender_ack_ms": {
+          "max": 3.005,
+          "min": 1.079,
+          "n": 8,
+          "p50": 1.273,
+          "p95": 3.005,
+          "p99": 3.005
+        },
+        "slots_to_land": {
+          "max": 1.0,
+          "min": 0.0,
+          "n": 8,
+          "p50": 0.0,
+          "p95": 1.0,
+          "p99": 1.0
+        },
+        "trades": 8
+      }
+    },
+    "by_provider": {
+      "p0:127.0.0.1": {
+        "landed_slot_first_seen_ms": {
+          "max": 16.0797,
+          "min": -304.2158,
+          "n": 8,
+          "p50": -250.3458,
+          "p95": 16.0797,
+          "p99": 16.0797
+        },
+        "signature_processed_ms": {
+          "max": 424.5475,
+          "min": 103.5262,
+          "n": 8,
+          "p50": 158.26770000000002,
+          "p95": 424.5475,
+          "p99": 424.5475
+        }
+      }
+    },
+    "by_route": {
+      "rpc": {
+        "block_position_pct": {
+          "n": 0
+        },
+        "not_finalized": 0,
+        "same_slot_share": 1.0,
+        "signed_to_first_landed_notification_ms": {
+          "max": 284.506,
+          "min": 103.526,
+          "n": 4,
+          "p50": 158.267,
+          "p95": 284.506,
+          "p99": 284.506
+        },
+        "signed_to_first_sender_ack_ms": {
+          "max": 3.005,
+          "min": 1.079,
+          "n": 4,
+          "p50": 1.316,
+          "p95": 3.005,
+          "p99": 3.005
+        },
+        "slots_to_land": {
+          "max": 0.0,
+          "min": 0.0,
+          "n": 4,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "trades": 4
+      },
+      "rpc,tpu": {
+        "block_position_pct": {
+          "max": 50.0,
+          "min": 50.0,
+          "n": 2,
+          "p50": 50.0,
+          "p95": 50.0,
+          "p99": 50.0
+        },
+        "not_finalized": 0,
+        "same_slot_share": 0.75,
+        "signed_to_first_landed_notification_ms": {
+          "max": 424.548,
+          "min": 126.163,
+          "n": 4,
+          "p50": 143.642,
+          "p95": 424.548,
+          "p99": 424.548
+        },
+        "signed_to_first_sender_ack_ms": {
+          "max": 1.276,
+          "min": 1.22,
+          "n": 4,
+          "p50": 1.222,
+          "p95": 1.276,
+          "p99": 1.276
+        },
+        "slots_to_land": {
+          "max": 1.0,
+          "min": 0.0,
+          "n": 4,
+          "p50": 0.0,
+          "p95": 1.0,
+          "p99": 1.0
+        },
+        "trades": 4
+      }
+    },
+    "fee_lamports": {
+      "max": 105000.0,
+      "min": 105000.0,
+      "n": 8,
+      "p50": 105000.0,
+      "p95": 105000.0,
+      "p99": 105000.0
+    },
+    "order_to_signed_ms": {
+      "max": 0.904,
+      "min": 0.324,
+      "n": 8,
+      "p50": 0.432,
+      "p95": 0.904,
+      "p99": 0.904
+    },
+    "same_slot_share": 0.875,
+    "signed_to_bot_final_ms": {
+      "max": 14112.192,
+      "min": 13813.216,
+      "n": 8,
+      "p50": 13892.074,
+      "p95": 14112.192,
+      "p99": 14112.192
+    },
+    "signed_to_first_landed_notification_ms": {
+      "max": 424.548,
+      "min": 103.526,
+      "n": 8,
+      "p50": 158.267,
+      "p95": 424.548,
+      "p99": 424.548
+    },
+    "signed_to_first_sender_ack_ms": {
+      "max": 3.005,
+      "min": 1.079,
+      "n": 8,
+      "p50": 1.273,
+      "p95": 3.005,
+      "p99": 3.005
+    },
+    "slots_to_land": {
+      "max": 1.0,
+      "min": 0.0,
+      "n": 8,
+      "p50": 0.0,
+      "p95": 1.0,
+      "p99": 1.0
+    },
+    "tip_lamports": {
+      "max": 0.0,
+      "min": 0.0,
+      "n": 8,
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "trades": 8
+  },
+  "websocket": {
+    "balances_warm": true,
+    "coin_warm": true,
+    "host": "127.0.0.1",
+    "live": true,
+    "note": "if not warm the engine falls back to RPC reads",
+    "warmup_ms": 338
+  }
+}
