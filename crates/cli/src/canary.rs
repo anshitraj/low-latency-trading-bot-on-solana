@@ -62,7 +62,7 @@ pub const MAX_CU_PRICE: u64 = 2_500_000;
 /// Photon trades on 2026-11-12 (BENCHMARKS 2j), ~US$0.008.
 pub const DEFAULT_PRIORITY_LAMPORTS: u64 = 100_000;
 /// Priority fee ceiling per transaction (0.00025 SOL, ~US$0.02).
-pub const MAX_PRIORITY_LAMPORTS: u64 = 250_000;
+pub const MAX_PRIORITY_LAMPORTS: u64 = 400_000;
 /// Tip ceiling per transaction (0.00005 SOL).
 pub const MAX_TIP_LAMPORTS: u64 = 50_000;
 /// Tip ceiling for the Helius Sender Max route only (its minimum is 0.001 SOL,
@@ -380,6 +380,23 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
     // MAX_PRIORITY_LAMPORTS per transaction.
     let cu_auto = a.get("cu-price").map(String::as_str) == Some("auto");
     let cu_limit = trader_protocol_pump::DEFAULT_COMPUTE_UNITS as u64;
+    // `--fee-ab 10000,100000,300000`: priority-fee levels (lamports at the buy
+    // CU limit, i.e. a per-CU price) rotated per round trip with the route
+    // fixed, to see whether a higher fee gets the trade into the block sooner.
+    let fee_ab: Vec<u64> = match a.get("fee-ab") {
+        Some(v) => v
+            .split(',')
+            .map(|x| x.trim().parse::<u64>())
+            .collect::<Result<_, _>>()
+            .map_err(|e| anyhow!("--fee-ab: {e}"))?,
+        None => vec![],
+    };
+    if fee_ab.iter().any(|f| *f > MAX_PRIORITY_LAMPORTS) {
+        bail!("--fee-ab levels must be <= {MAX_PRIORITY_LAMPORTS}");
+    }
+    if !fee_ab.is_empty() && cu_auto {
+        bail!("use --fee-ab or --cu-price auto, not both");
+    }
     let priority_lamports: u64 = parse(a, "priority-lamports", DEFAULT_PRIORITY_LAMPORTS)?;
     if priority_lamports > MAX_PRIORITY_LAMPORTS {
         bail!("--priority-lamports must be <= {MAX_PRIORITY_LAMPORTS}");
@@ -526,6 +543,7 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
         })).collect::<Vec<_>>(),
         "route_assignment": "round trip i uses route i % routes",
         "shred_feed": a.get("shred-feed"),
+        "fee_ab": fee_ab,
         "shred_watch": a.get("shred-watch"),
         "received_notifications_from": a.get("received-from"),
         "senders": sender_names,
@@ -955,7 +973,13 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
                 },
                 Side::Sell => AmountSpec::SellPercent { bps: Bps::MAX },
             };
-            let (cu_now, cu_info) = if cu_auto {
+            let fee_level = (!fee_ab.is_empty()).then(|| fee_ab[it % fee_ab.len()]);
+            let (cu_now, cu_info) = if let Some(lvl) = fee_level {
+                (
+                    (lvl * 1_000_000).div_ceil(cu_limit),
+                    json!({"fee_level": lvl}),
+                )
+            } else if cu_auto {
                 auto_cu_price(&rpc, &fee_keys, MAX_CU_PRICE).await
             } else {
                 (cu_price, json!(null))
@@ -1083,6 +1107,8 @@ pub async fn mainnet_canary(a: &HashMap<String, String>) -> anyhow::Result<()> {
             let row = json!({
                 "iteration": it,
                 "route": route.name,
+                "fee_level": fee_level.map(|l| format!("{l:>7} lamports")),
+                "compute_unit_limit": o.signed.as_ref().map(|s| s.compute_unit_limit),
                 "side": side.as_str(),
                 "order_id": o.id,
                 "state": o.state.as_str(),
@@ -1550,6 +1576,7 @@ fn summarize(rows: &[serde_json::Value]) -> serde_json::Value {
         "tip_lamports": stat(rows, |r| r["tip_lamports"].as_f64()),
         "by_provider": by_provider,
         "by_route": group_stats(rows, "route"),
+        "by_fee_level": group_stats(rows, "fee_level"),
         "by_leader_region": group_stats(rows, "leader_region"),
     })
 }

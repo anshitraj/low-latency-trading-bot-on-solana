@@ -85,6 +85,16 @@ fn localnet_curve_quotes_are_sane() {
         back.expected_out
     );
     assert!(small.protocol_fee_lamports.unwrap().0 > 0);
+    // Compute-unit limit per side: sells never create accounts, so they ask for less.
+    assert_eq!(
+        small.compute_units,
+        trader_protocol_pump::DEFAULT_COMPUTE_UNITS
+    );
+    assert_eq!(back.compute_units, trader_protocol_pump::SELL_COMPUTE_UNITS);
+    assert!(
+        trader_protocol_pump::SELL_COMPUTE_UNITS >= 50_382 * 125 / 100,
+        "keep >=25% headroom over the measured max sell"
+    );
     // builder: v3 buy with user at the IDL position
     let user = Pubkey::new_unique();
     let b = a.build_swap(&small, &user).unwrap();

@@ -53,6 +53,10 @@ pub const V3_USER_INDEX: usize = 8;
 /// priority per lamport than the old 150k (exceeding it fails the trade
 /// on-chain, fee paid, so keep the margin).
 pub const DEFAULT_COMPUTE_UNITS: u32 = 100_000;
+/// Compute-unit limit for sells. Measured sells: 44,373-50,382 CU (localnet and
+/// mainnet; no accounts are created on a sell). 65k leaves ~29% headroom and
+/// raises the fee per requested CU by ~1.5x at the same per-CU price paid.
+pub const SELL_COMPUTE_UNITS: u32 = 65_000;
 /// Data length of the pump `UserVolumeAccumulator` account (observed on localnet).
 pub const USER_VOLUME_ACCUMULATOR_LEN: u64 = 137;
 /// A stream counts as live if a slot notification arrived within this window.
@@ -594,7 +598,12 @@ impl ProtocolAdapter for PumpAdapter {
             context_slot: s.slot,
             state_age_ms: s.fetched_at.elapsed().as_millis() as u64,
             rent_lamports: Lamports(0),
-            compute_units: self.compute_units,
+            // Buys may create the token account + volume accumulator (up to
+            // ~75k CU); sells never do, so they request less.
+            compute_units: match req.side {
+                Side::Buy => self.compute_units,
+                Side::Sell => self.compute_units.min(SELL_COMPUTE_UNITS),
+            },
             warnings,
         })
     }
