@@ -366,6 +366,35 @@ What this can and cannot say:
   in 2026; not verified).
 - Our sample is 10 trades; theirs are a ~20-minute window each. Rerun before relying on it.
 
+### 2s. Priority-fee A/B (10k / 100k / 300k lamports) + tighter sell compute limit (owner-run, 2026-11-13)
+`--routes "tpu,helius" --fee-ab 10000,100000,300000 --shred-feed 0.0.0.0:9900 --shred-watch
+10.30.0.3:9901 --iterations 12 --send` (`mainnet-canary-send-20261113T193227Z.json`). The fee level
+rotates per trade (8 trades per level, buys and sells mixed). Compute-unit limits: buy 100,000,
+sell **65,000** (was 100,000; measured sells use 44,373–50,382 CU, max in this run 45,020). Seen
+through **our own node's Turbine shreds** (GetBlock trial over), so absolute times are higher than 2r.
+24/24 FINALIZED, verified, shred slot = landing slot on all; wallet spent 2,981,591 lamports
+(~US$0.25, fees + Pump fees + spread).
+
+| total priority fee | n | send → seen, median | min | ≤ 40 ms | ≤ 100 ms | position in block, median | near leaders, median |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 10,000 lamports | 8 | 228.6 ms | 28.4 | 1 | 2 | 63.9% | 99.0 ms |
+| **100,000** | 8 | **72.2 ms** | **20.5** | **2** | **5** | 55.1% | **59.7 ms** |
+| 300,000 | 8 | 145.0 ms | 51.9 | 0 | 2 | **38.1%** | 155.0 ms |
+
+| side | CU limit | n | send → seen, median | min | ≤ 40 ms | ≤ 100 ms |
+|---|---:|---:|---:|---:|---:|---:|
+| sells | 65,000 | 12 | 77.3 ms | 20.5 | 3 | 7 |
+| buys | 100,000 | 12 | 178.7 ms | 41.6 | 0 | 2 |
+
+Reading it honestly:
+- A higher fee **does** move the trade earlier inside the block (64% → 55% → 38% of the way in).
+- Time-to-seen is **not** monotonic in fee: 300k was slower than 100k. With 8 trades per level the
+  leader mix (which validator, where, how its block streams) dominates; position in the block is
+  worth a few ms, the leader is worth ~100 ms.
+- 100,000 lamports (our default) was the best level here; 300k buys nothing measurable.
+- The 65k sell limit caused no failures. The sell-vs-buy gap is confounded by the leader mix
+  (and by buys creating accounts); it is not proof that the lower limit made sells faster.
+
 ### 2r. GetBlock shred stream (2-hour free trial) vs our own node (2026-11-13)
 GetBlock Solana Shred Streaming, Frankfurt, raw UDP to our node (static IP, UDP 20000, firewall
 limited to GetBlock's 4 source IPs); decoded by a second `trader-shred-observer`
