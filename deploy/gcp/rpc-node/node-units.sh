@@ -64,6 +64,26 @@ UNIT
   FEED_UNIT=shred-observer-feed.service
 fi
 
+# Optional third observer for Everstake ShredStream on UDP 20001.
+if [ -f "$(dirname "$0")/run-observer-everstake.sh" ]; then
+  install -m 755 "$(dirname "$0")/run-observer-everstake.sh" /usr/local/bin/run-observer-everstake.sh
+  cat >/etc/systemd/system/shred-observer-everstake.service <<'UNIT'
+[Unit]
+Description=trader shred observer for Everstake ShredStream (UDP 20001 -> 9904)
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/run-observer-everstake.sh
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  FEED2_UNIT=shred-observer-everstake.service
+fi
+
 install -m 755 "$(dirname "$0")/snapsync.sh" /usr/local/bin/snapsync.sh
 cat >/etc/systemd/system/snapsync.service <<'UNIT'
 [Unit]
@@ -86,6 +106,6 @@ WantedBy=timers.target
 UNIT
 
 systemctl daemon-reload
-systemctl enable node-prep.service sol.service shred-observer.service ${FEED_UNIT:-}
+systemctl enable node-prep.service sol.service shred-observer.service ${FEED_UNIT:-} ${FEED2_UNIT:-}
 systemctl enable --now snapsync.timer
 echo "units installed"
